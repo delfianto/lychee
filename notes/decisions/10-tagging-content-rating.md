@@ -7,7 +7,7 @@
 We want to **replicate MangaDex's content-rating + tag taxonomy**: a curated, grouped tag vocabulary and a per-work content rating — both shipped as **default fixtures** and **manageable from a settings page**. This refines the loose namespaced-tag sketch in [05](05-domain-model.md): the curated taxonomy is a **managed, id-based** system, not free-form strings. Tags/rating apply at the **Series** level (MangaDex tags a *title*, not a chapter); books are filtered through their series. The hard requirement is **good filter/browse performance at thousands–tens-of-thousands of series/books** in SQLite.
 
 MangaDex's model we mirror:
-- **Content rating** (one per work): `safe · suggestive · erotica · pornographic`.
+- **Content rating** (one per work): MangaDex uses `safe · suggestive · erotica · pornographic`; **lychee renames the top tier to `mature`** (a broader, clearer label for mature content) → `safe · suggestive · erotica · mature`.
 - **Tag groups**: `content · format · genre · theme`; each tag belongs to one group.
 - **Publication demographic** (separate field, not a tag): `shounen · shoujo · seinen · josei · none`.
 
@@ -29,7 +29,7 @@ series_tag(series_id → series, tag_id → tag,
            PRIMARY KEY (series_id, tag_id))
 
 content_rating(id, key UNIQUE, name, level INT, is_default, enabled)
-     -- seed: safe=0, suggestive=1, erotica=2, pornographic=3  (level = explicitness)
+     -- seed: safe=0, suggestive=1, erotica=2, mature=3  (level = explicitness; MangaDex "pornographic" maps to "mature")
 
 demographic(id, key UNIQUE, name, is_default)
      -- seed: shounen, shoujo, seinen, josei, none

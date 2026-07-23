@@ -4,7 +4,7 @@ import type { BrowseFilters, ContentRating, Demographic, PublicationStatus } fro
 
 const props = defineProps<{ filters: BrowseFilters }>();
 
-const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "pornographic"];
+const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "mature"];
 const demographicOptions: Demographic[] = ["shonen", "shojo", "seinen", "josei"];
 const statusOptions: PublicationStatus[] = ["ongoing", "completed", "hiatus", "cancelled"];
 const readStateOptions: { value: string; label: string }[] = [

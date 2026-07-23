@@ -9,7 +9,7 @@ const primary = [
   { label: "Search", icon: "⌕" },
   { label: "Reading", icon: "📖" },
   { label: "Random", icon: "🎲" },
-  { label: "Settings", icon: "⚙" },
+  { label: "Settings", icon: "⚙", to: "/settings" },
 ];
 
 const libraries = [
