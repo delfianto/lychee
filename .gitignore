@@ -230,3 +230,4 @@ dist/
 *.db-wal
 *.db-shm
 /backend/storage/
+.superdesign

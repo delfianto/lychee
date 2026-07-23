@@ -1,2 +1,11 @@
 @import "tailwindcss";
-@plugin "daisyui";
+
+@plugin "daisyui" {
+  themes: dark --default, light;
+}
+
+/* Portrait 2:3 cover ratio, as a reusable utility so we never sprinkle
+   `aspect-[2/3]` (the one arbitrary value the mockups kept reaching for). */
+@utility cover {
+  aspect-ratio: 2 / 3;
+}
