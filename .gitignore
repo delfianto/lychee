@@ -219,3 +219,14 @@ __marimo__/
 
 # Cloned reference projects for research (see notes/)
 /temp/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Local runtime artifacts
+*.db
+*.db-wal
+*.db-shm
+/backend/storage/

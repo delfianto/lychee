@@ -1,0 +1,59 @@
+"""lychee backend — FastAPI application entrypoint."""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from src.core.config import settings
+from src.core.exceptions import LycheeError
+from src.core.logging import configure_logging, get_logger
+from src.health.router import router as health_router
+
+configure_logging()
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+    logger.info("application_startup", environment=settings.environment)
+    yield
+    logger.info("application_shutdown")
+
+
+app = FastAPI(
+    title="lychee",
+    description="Self-hosted manga/comic/ebook media server",
+    version="0.0.1",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(LycheeError)
+async def _domain_exception_handler(_request: Request, exc: LycheeError) -> JSONResponse:
+    """Translate domain exceptions to their HTTP status (services stay HTTP-agnostic)."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+
+app.include_router(health_router)
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"name": "lychee", "version": app.version, "docs": "/docs"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("src.main:app", host=settings.api_host, port=settings.api_port, reload=True)

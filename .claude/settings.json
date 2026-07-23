@@ -1,0 +1,90 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv run:*)",
+      "Bash(uv add:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv remove:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(basedpyright:*)",
+      "Bash(pytest:*)",
+      "Bash(alembic:*)",
+      "Bash(bun install:*)",
+      "Bash(bun run:*)",
+      "Bash(bun add:*)",
+      "Bash(bun remove:*)",
+      "Bash(bunx:*)",
+      "Bash(vue-tsc:*)",
+      "Bash(just:*)",
+      "Bash(cat:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(echo:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git stash list:*)",
+      "WebSearch"
+    ],
+    "ask": [
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git clean:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/git-push-guard.sh", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/be-linter.sh", "timeout": 30 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/fe-linter.sh", "timeout": 30 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/be-typecheck.sh", "timeout": 120 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/fe-typecheck.sh", "timeout": 180 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context.sh", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}
