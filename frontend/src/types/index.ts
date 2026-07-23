@@ -28,6 +28,7 @@ export interface Series {
   title: string;
   coverUrl: string;
   authors: string[];
+  artists: string[];
   status: PublicationStatus;
   contentRating: ContentRating;
   demographic: Demographic;
@@ -45,4 +46,21 @@ export interface RecentUpdate {
   series: Series;
   chapterLabel: string; // e.g. "Ch. 120"
   updatedAt: string; // relative label, e.g. "2h ago"
+}
+
+export interface Chapter {
+  id: string;
+  volume: number | null;
+  number: string; // display value, e.g. "45" or "45.5"
+  title?: string;
+  group?: string; // scanlation / translation group
+  language: string; // e.g. "en"
+  uploadedAt: string; // relative label
+  read: boolean;
+  comments: number;
+}
+
+export interface VolumeGroup {
+  volume: number | null; // null = no volume
+  chapters: Chapter[];
 }
