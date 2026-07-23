@@ -39,18 +39,23 @@ const levelWidth = (level: number): string => levelWidths[level] ?? "w-full";
 </script>
 
 <template>
-  <div class="flex flex-col gap-6 p-4 sm:p-6 lg:flex-row">
-    <!-- Section nav -->
-    <aside class="shrink-0 lg:w-56">
-      <ul class="menu w-full gap-0.5 rounded-box bg-base-100 p-2">
-        <li v-for="s in sections" :key="s.key">
-          <a :class="{ 'menu-active': active === s.key }" @click="active = s.key">{{ s.label }}</a>
-        </li>
-      </ul>
-    </aside>
+  <div class="flex flex-col gap-6 p-4 sm:p-6">
+    <!-- Section tabs (horizontal) -->
+    <div role="tablist" class="tabs tabs-border overflow-x-auto">
+      <a
+        v-for="s in sections"
+        :key="s.key"
+        role="tab"
+        class="tab whitespace-nowrap"
+        :class="{ 'tab-active': active === s.key }"
+        @click="active = s.key"
+      >
+        {{ s.label }}
+      </a>
+    </div>
 
     <!-- Panel -->
-    <div class="min-w-0 grow">
+    <div class="min-w-0">
       <!-- Tags -->
       <div v-if="active === 'tags'" class="flex flex-col gap-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
