@@ -1,0 +1,72 @@
+[project]
+name = "lychee-backend"
+version = "0.0.1"
+description = "lychee — self-hosted manga/comic/ebook media server (backend)"
+requires-python = ">=3.14"
+
+dependencies = [
+    # Web framework
+    "fastapi==0.139.2",
+    "uvicorn[standard]==0.51.0",
+    # Persistence
+    "sqlalchemy==2.0.51",
+    "alembic==1.18.5",
+    # Validation / settings
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "python-dotenv==1.2.2",
+    # Logging
+    "structlog==26.1.0",
+    # ID generation
+    "nanoid==2.0.0",
+    # NOTE: domain/media dependencies (pyvips/Pillow, rarfile/libarchive-c, pymupdf,
+    # ebooklib, python-magic, xxhash, natsort, APScheduler, httpx, …) are added per
+    # the relevant ADR as those features land — see ../notes/decisions/.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "httpx==0.28.1",          # FastAPI TestClient
+    "ruff==0.15.22",
+    "basedpyright==1.39.9",
+]
+
+# This is an application, not a distributable package — uv manages the env + deps,
+# and `src` is imported by running from backend/ (uvicorn / pytest / uv run).
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py314"
+# Auto-generated Alembic migrations are never linted/formatted.
+extend-exclude = ["alembic/versions"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+]
+ignore = [
+    "E501", # line too long (formatter handles wrapping)
+    "B008", # do not perform function call in argument defaults (FastAPI Depends)
+]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+exclude = ["**/.venv/**", "**/__pycache__/**", "alembic/versions/**"]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportImportCycles = true
+pythonVersion = "3.14"
+pythonPlatform = "Linux"
