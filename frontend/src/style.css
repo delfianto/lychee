@@ -9,3 +9,10 @@
 @utility cover {
   aspect-ratio: 2 / 3;
 }
+
+/* Reader "sepia" reading tone — a deliberate comfort color, defined once here
+   rather than as scattered arbitrary utilities in markup. */
+.reader-sepia {
+  background-color: #f4ecd8;
+  color: #4b3b2f;
+}
