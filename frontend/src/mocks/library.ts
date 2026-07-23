@@ -90,3 +90,22 @@ export const mockVolumes: VolumeGroup[] = [3, 2, 1].map((vol) => ({
   volume: vol,
   chapters: Array.from({ length: 4 }, (_, i) => makeChapter(vol, i)),
 }));
+
+const THEMES: Tag[] = [
+  tag("isekai", "Isekai", "theme"),
+  tag("school", "School Life", "theme"),
+  tag("magic", "Magic", "theme"),
+  tag("military", "Military", "theme"),
+];
+const CONTENT: Tag[] = [
+  tag("gore", "Gore", "content"),
+  tag("sexual-violence", "Sexual Violence", "content"),
+];
+
+export const browseTagGroups: { group: string; tags: Tag[] }[] = [
+  { group: "Genre", tags: GENRES },
+  { group: "Theme", tags: THEMES },
+  { group: "Content", tags: CONTENT },
+];
+
+export const allBrowseTags: Tag[] = browseTagGroups.flatMap((g) => g.tags);

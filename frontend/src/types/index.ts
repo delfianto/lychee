@@ -64,3 +64,14 @@ export interface VolumeGroup {
   volume: number | null; // null = no volume
   chapters: Chapter[];
 }
+
+export interface BrowseFilters {
+  query: string;
+  tags: Record<string, "include" | "exclude">;
+  tagMode: "and" | "or";
+  ratings: Set<ContentRating>;
+  demographics: Set<Demographic>;
+  statuses: Set<PublicationStatus>;
+  readStates: Set<string>;
+  sort: string;
+}
