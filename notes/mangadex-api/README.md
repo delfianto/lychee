@@ -53,7 +53,7 @@ JSON:API style: every object has `id`, `type`, `attributes`, and `relationships[
 This is the payoff of mirroring MangaDex in [10](../decisions/10-tagging-content-rating.md):
 
 - **`GET /manga/tag`** returns the **entire tag vocabulary** — each tag = a stable **UUID** + localized `name` + `group` ∈ {`content`, `format`, `genre`, `theme`}. → **seed lychee's `tag` / `tag_group` fixtures directly from this**, using the MangaDex tag id/slug as our stable `tag.key` so provider tags map 1:1 with zero fuzzy matching.
-- **`contentRating`** enum = `safe · suggestive · erotica · pornographic` → **identical** to our `content_rating` fixtures (levels 0–3).
+- **`contentRating`** enum = `safe · suggestive · erotica · pornographic` → lychee's `content_rating` fixtures `safe/suggestive/erotica/`**`mature`** (levels 0–3): the first three map 1:1; lychee **renames the top tier `pornographic` → `mature`** (broader, clearer label).
 - **`publicationDemographic`** = `shounen · shoujo · josei · seinen · none` → our `demographic` fixtures.
 - **`status`** = `ongoing · completed · hiatus · cancelled` → our series status.
 

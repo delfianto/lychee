@@ -56,8 +56,8 @@ Default **embedded > provider** (a file's own ComicInfo is usually intentional),
 **Filename parser ([06](06-filename-parser.md)):** volume, number, number_sort, year, special.
 
 ### Content rating vs age rating (two different axes)
-- **`content_rating`** ([10](10-tagging-content-rating.md), MangaDex enum `safe/suggestive/erotica/pornographic`) is the **canonical explicitness axis**.
-- **ComicInfo `AgeRating`** (`Everyone`, `Teen`, `Mature 17+`, `Adults Only 18+`, …) is mapped into `content_rating` via a **best-effort, configurable table** (e.g. Everyone/Teen→safe/suggestive, Mature→erotica, Adults Only→pornographic); the raw string may also be retained. This keeps one canonical rating while accepting either source.
+- **`content_rating`** ([10](10-tagging-content-rating.md)) — lychee's `safe/suggestive/erotica/mature` — is the **canonical explicitness axis** (MangaDex's top value `pornographic` maps to `mature`).
+- **ComicInfo `AgeRating`** (`Everyone`, `Teen`, `Mature 17+`, `Adults Only 18+`, …) is mapped into `content_rating` via a **best-effort, configurable table** (e.g. Everyone/Teen→safe/suggestive, Mature→erotica, Adults Only→mature); the raw string may also be retained. This keeps one canonical rating while accepting either source.
 
 ### ComicInfo read **and** write
 lychee **reads** ComicInfo on scan and **writes** it on export and on download ([13](13-metadata-providers.md)) — a round-trip serializer — so libraries stay interoperable with Komga/Kavita/Mihon.

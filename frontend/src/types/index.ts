@@ -2,7 +2,7 @@
 // superseded by the generated OpenAPI client (src/api/schema.d.ts) once the
 // backend exposes the endpoints; for now they type the mock data.
 
-export type ContentRating = "safe" | "suggestive" | "erotica" | "pornographic";
+export type ContentRating = "safe" | "suggestive" | "erotica" | "mature";
 export type Demographic = "shonen" | "shojo" | "seinen" | "josei" | "none";
 export type PublicationStatus = "ongoing" | "completed" | "hiatus" | "cancelled";
 
