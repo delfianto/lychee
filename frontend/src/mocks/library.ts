@@ -3,6 +3,7 @@
 
 import type {
   Chapter,
+  Collection,
   ContentRating,
   Demographic,
   LibraryStatus,
@@ -147,6 +148,14 @@ export const recentUpdates: RecentUpdate[] = Array.from({ length: 24 }, (_, i) =
 
 /** Newest series first (reverse of insertion order) — for the Home "Recently added" rail. */
 export const recentlyAdded: Series[] = [...librarySeries].reverse();
+
+/** Seed collections; the store persists user edits over these in localStorage. */
+export const initialCollections: Collection[] = [
+  { id: "l1", name: "Currently reading", seriesIds: ["s1", "s2", "s4", "s9", "s15"] },
+  { id: "l2", name: "All-time favorites", seriesIds: ["s3", "s2", "s14", "s18"] },
+  { id: "l3", name: "To re-read", seriesIds: ["s13", "s6", "s12"] },
+  { id: "l4", name: "Seinen essentials", seriesIds: ["s3", "s6", "s7", "s8", "s12"] },
+];
 
 export function findSeries(id: string): Series {
   return librarySeries.find((s) => s.id === id) ?? librarySeries[0];

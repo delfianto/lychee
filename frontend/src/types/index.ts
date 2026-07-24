@@ -84,3 +84,11 @@ export interface BrowseFilters {
   readStates: Set<string>;
   sort: string;
 }
+
+/** A user-curated collection / reading list. */
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  seriesIds: string[];
+}

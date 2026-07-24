@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bookmark, BookOpen, Heart, ListPlus, RefreshCw, Star } from "lucide-vue-next";
+import { Bookmark, BookOpen, Check, Heart, ListPlus, RefreshCw, Star } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
@@ -8,10 +8,12 @@ import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
 import { findSeries, mockVolumes } from "../mocks/library";
+import { useCollections } from "../stores/collections";
 import type { LibraryStatus } from "../types";
 
 const route = useRoute();
 const series = computed(() => findSeries(String(route.params.id)));
+const collections = useCollections();
 
 const expanded = ref(false);
 const favorite = ref(true);
@@ -105,7 +107,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 </ul>
               </div>
 
-              <!-- Rating · Favorite · Add to list -->
+              <!-- Rating · Favorite -->
               <div class="join">
                 <button class="btn btn-sm join-item gap-1">
                   <Star class="size-4" /><span v-if="rating !== null">{{ rating }}</span>
@@ -118,9 +120,28 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 >
                   <Heart class="size-4" :class="{ 'fill-current': favorite }" />
                 </button>
-                <button class="btn btn-square btn-sm join-item" aria-label="Add to list">
+              </div>
+
+              <!-- Add to list -->
+              <div class="dropdown">
+                <div tabindex="0" role="button" class="btn btn-square btn-sm" aria-label="Add to list">
                   <ListPlus class="size-4" />
-                </button>
+                </div>
+                <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
+                  <li class="menu-title">Add to list</li>
+                  <li v-for="l in collections.lists" :key="l.id">
+                    <a @click="collections.toggleSeries(l.id, series.id)">
+                      <Check
+                        class="size-4"
+                        :class="collections.hasSeries(l.id, series.id) ? 'opacity-100' : 'opacity-0'"
+                      />
+                      {{ l.name }}
+                    </a>
+                  </li>
+                  <li v-if="!collections.lists.length" class="px-2 py-1 text-xs text-base-content/50">
+                    No lists yet
+                  </li>
+                </ul>
               </div>
             </div>
 
