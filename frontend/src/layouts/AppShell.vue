@@ -70,7 +70,7 @@ const nav: NavItem[] = [
     <!-- App column -->
     <div class="drawer-content flex min-h-dvh flex-col bg-base-200">
       <header class="navbar sticky top-0 z-20 border-b border-base-300 bg-base-100/90 px-2 backdrop-blur sm:px-4">
-        <div class="navbar-start gap-1">
+        <div class="navbar-start w-auto gap-1">
           <label for="app-drawer" class="btn btn-square btn-ghost btn-sm lg:hidden" aria-label="Menu">
             <Menu class="size-5" />
           </label>
@@ -88,17 +88,19 @@ const nav: NavItem[] = [
                 class="btn btn-ghost btn-sm gap-1.5"
                 active-class="btn-active"
                 :exact-active-class="item.to === '/' ? 'btn-active' : undefined"
+                :title="item.label"
+                :aria-label="item.label"
               >
-                <component :is="item.icon" class="size-4" />{{ item.label }}
+                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{ item.label }}</span>
               </RouterLink>
               <span v-else class="btn btn-ghost btn-sm gap-1.5 opacity-40">
-                <component :is="item.icon" class="size-4" />{{ item.label }}
+                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{ item.label }}</span>
               </span>
             </template>
           </nav>
         </div>
 
-        <div class="navbar-end gap-1">
+        <div class="navbar-end ml-auto w-auto gap-1">
           <label class="input input-bordered input-sm hidden w-44 items-center gap-2 sm:flex lg:w-56">
             <Search class="size-4 opacity-60" />
             <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" @keyup.enter="goSearch" />
