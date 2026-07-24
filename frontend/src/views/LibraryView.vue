@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 
 import FilterPanel from "../components/FilterPanel.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
+import { sortSeries } from "../lib/sort";
 import { allBrowseTags, libraryFor } from "../mocks/library";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus, Series } from "../types";
 
@@ -165,7 +166,7 @@ const filtered = computed(() => {
   if (filters.demographics.size) list = list.filter((s) => filters.demographics.has(s.demographic));
   if (filters.statuses.size) list = list.filter((s) => filters.statuses.has(s.status));
   if (filters.readStates.size) list = list.filter((s) => filters.readStates.has(readState(s)));
-  return list;
+  return sortSeries(list, sort.value);
 });
 
 // Reset tab + filters when switching libraries.

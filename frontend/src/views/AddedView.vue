@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Grid2x2, LayoutGrid, List } from "lucide-vue-next";
-import { type Component, ref, watch } from "vue";
+import { type Component, computed, ref, watch } from "vue";
 
 import SeriesCollection from "../components/SeriesCollection.vue";
+import { sortSeries } from "../lib/sort";
 import { recentlyAdded } from "../mocks/library";
 
 type Density = "list" | "compact" | "gallery";
@@ -18,6 +19,7 @@ const densities: { value: Density; icon: Component; label: string }[] = [
 
 const sorts = ["Recently Added", "Rating", "Title"];
 const sort = ref("Recently Added");
+const sorted = computed(() => sortSeries(recentlyAdded, sort.value));
 </script>
 
 <template>
@@ -49,6 +51,6 @@ const sort = ref("Recently Added");
       </div>
     </div>
 
-    <SeriesCollection :series="recentlyAdded" :density="density" />
+    <SeriesCollection :series="sorted" :density="density" />
   </div>
 </template>
