@@ -24,8 +24,14 @@ function toggleList(l: Collection): void {
 
 const expanded = ref(false);
 const favorite = ref(true);
-const rating = ref<number | null>(8.4);
 const libraryStatus = ref<LibraryStatus>("reading");
+
+// Your personal rating (1–10, integer). The community score is series.rating (decimal).
+const userRating = ref<number | null>(null);
+const hoverRating = ref(0);
+function setRating(n: number): void {
+  userRating.value = n;
+}
 
 const statuses: { value: LibraryStatus; label: string }[] = [
   { value: "none", label: "None" },
@@ -45,14 +51,17 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 <template>
   <div class="flex flex-col gap-6">
     <!-- HERO -->
-    <section class="relative overflow-hidden">
-      <img
-        :src="series.coverUrl"
-        alt=""
-        aria-hidden="true"
-        class="absolute inset-0 h-full w-full object-cover opacity-30 blur-3xl"
-      />
-      <div class="absolute inset-0 bg-base-200/70"></div>
+    <section class="relative">
+      <!-- Blurred backdrop, clipped here so it can't bleed but the dropdowns above still overflow. -->
+      <div class="absolute inset-0 overflow-hidden">
+        <img
+          :src="series.coverUrl"
+          alt=""
+          aria-hidden="true"
+          class="absolute inset-0 h-full w-full object-cover opacity-30 blur-3xl"
+        />
+        <div class="absolute inset-0 bg-base-200/70"></div>
+      </div>
 
       <div class="relative flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
         <img
@@ -73,6 +82,14 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 {{ cap(series.status) }}
               </span>
               <span v-if="series.year" class="text-base-content/60">· {{ series.year }}</span>
+              <span
+                v-if="series.rating"
+                class="tooltip flex items-center gap-1"
+                data-tip="Community rating (MangaDex)"
+              >
+                <Star class="size-3.5 fill-current text-warning" />
+                <span class="font-medium text-base-content/80">{{ series.rating.toFixed(2) }}</span>
+              </span>
               <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
                 {{ contentRatingLabel[series.contentRating] }}
               </span>
@@ -114,23 +131,47 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 </ul>
               </div>
 
-              <!-- Rating · Favorite -->
-              <div class="join">
-                <button class="btn btn-sm join-item gap-1">
-                  <Star class="size-4" /><span v-if="rating !== null">{{ rating }}</span>
-                </button>
-                <button
-                  class="btn btn-square btn-sm join-item"
-                  :class="{ 'text-error': favorite }"
-                  aria-label="Favorite"
-                  @click="favorite = !favorite"
-                >
-                  <Heart class="size-4" :class="{ 'fill-current': favorite }" />
-                </button>
+              <!-- Your rating (1–10) -->
+              <div class="dropdown">
+                <div tabindex="0" role="button" class="btn btn-sm gap-1">
+                  <Star class="size-4" :class="userRating ? 'fill-current text-warning' : ''" />
+                  {{ userRating ? `${userRating}/10` : "Rate" }}
+                </div>
+                <div tabindex="0" class="dropdown-content z-10 mt-1 rounded-box bg-base-100 p-3 shadow">
+                  <div class="mb-1 text-xs text-base-content/60">Your rating</div>
+                  <div class="flex items-center gap-0.5" @mouseleave="hoverRating = 0">
+                    <button
+                      v-for="n in 10"
+                      :key="n"
+                      class="p-0.5"
+                      :aria-label="`Rate ${n} of 10`"
+                      @mouseenter="hoverRating = n"
+                      @click="setRating(n)"
+                    >
+                      <Star
+                        class="size-4"
+                        :class="(hoverRating || userRating || 0) >= n ? 'fill-current text-warning' : 'text-base-content/30'"
+                      />
+                    </button>
+                  </div>
+                  <button v-if="userRating" class="btn btn-ghost btn-xs mt-2 w-full" @click="userRating = null">
+                    Clear rating
+                  </button>
+                </div>
               </div>
 
+              <!-- Favorite -->
+              <button
+                class="btn btn-square btn-sm"
+                :class="{ 'text-error': favorite }"
+                aria-label="Favorite"
+                @click="favorite = !favorite"
+              >
+                <Heart class="size-4" :class="{ 'fill-current': favorite }" />
+              </button>
+
               <!-- Add to list -->
-              <div class="dropdown">
+              <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-square btn-sm" aria-label="Add to list">
                   <ListPlus class="size-4" />
                 </div>
