@@ -1,5 +1,25 @@
+# dependencies (bun install)
 node_modules/
+
+# build output
 dist/
+dist-ssr/
+*.tgz
+
+# vite / typescript caches
 .vite/
-*.local
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# logs & coverage
 *.log
+logs/
+coverage/
+*.lcov
+
+# local overrides
+*.local
