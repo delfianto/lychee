@@ -47,7 +47,7 @@ const nav: NavItem[] = [
   { label: "Favorites", icon: Heart, to: "/favorites" },
   { label: "Manga", icon: Book, to: "/manga" },
   { label: "Comics", icon: Images, to: "/comics" },
-  { label: "Lists", icon: Layers },
+  { label: "Lists", icon: Layers, to: "/lists" },
 ];
 </script>
 
