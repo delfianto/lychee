@@ -2,8 +2,35 @@
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from src.downloads.provider import RemoteChapter, SeriesMetadata, register_provider
+from src.tasks.queue import queue
 
 from tests.support import make_series
+
+
+class _FakeMetaProvider:
+    """Satisfies both provider protocols; only get_metadata is exercised here."""
+
+    id = "fakemeta"
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        raise NotImplementedError
+
+    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+        raise NotImplementedError
+
+    def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
+        return SeriesMetadata(
+            provider_series_id=provider_series_id,
+            title="Fetched Title",
+            description="Fetched description.",
+            year=2001,
+            tags=[("Action", "genre")],
+            authors=["Fetched Author"],
+        )
+
+
+register_provider(_FakeMetaProvider())
 
 
 def test_list_series_empty(client: TestClient) -> None:
@@ -137,3 +164,27 @@ def test_patch_series_invalid_status_and_missing(client: TestClient, db_session:
     db_session.commit()
     assert client.patch(f"/api/series/{series.id}", json={"libraryStatus": "bogus"}).status_code == 400
     assert client.patch("/api/series/nope", json={"favorite": True}).status_code == 404
+
+
+def test_refresh_fetches_and_applies_metadata(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="original folder", kind="manga")
+    series.provider = "fakemeta"
+    series.provider_series_id = "x1"
+    db_session.commit()
+
+    resp = client.post(f"/api/series/{series.id}/refresh")
+    assert resp.status_code == 202
+    queue.wait_idle()
+
+    got = client.get(f"/api/series/{series.id}").json()
+    assert got["title"] == "Fetched Title"
+    assert got["year"] == 2001
+    assert got["description"] == "Fetched description."
+    assert "Fetched Author" in got["authors"]
+
+
+def test_refresh_requires_a_provider_match(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="Unmatched")
+    db_session.commit()
+    assert client.post(f"/api/series/{series.id}/refresh").status_code == 400
+    assert client.post("/api/series/nope/refresh").status_code == 404

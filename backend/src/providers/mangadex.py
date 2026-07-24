@@ -9,17 +9,50 @@ M1–M5; the ``MetadataProvider`` contract they satisfy lives in downloads/provi
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import httpx
 
-from src.downloads.provider import RemoteChapter
+from src.downloads.provider import RemoteChapter, SeriesMetadata
 from src.providers.mangadex_client import MangaDexClient
 
 _PAGE_LIMIT = 100
+_COVERS_BASE = "https://uploads.mangadex.org/covers"
+_TRACKER_LINKS = {"al", "mal", "mu", "ap", "kt", "nu"}  # links we keep for tracker matching
 
 
 def _volume(value: str | None) -> int | None:
     return int(value) if value and value.isdigit() else None
+
+
+def _localized(mapping: dict[str, str] | None, language: str) -> str | None:
+    """Pick a value from a MangaDex LocalizedString: preferred language → en → any."""
+    if not mapping:
+        return None
+    return mapping.get(language) or mapping.get("en") or next(iter(mapping.values()), None)
+
+
+def _as_int(value: str | None) -> int | None:
+    try:
+        return int(float(value)) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _relationship_names(relationships: list[dict[str, Any]], kind: str) -> list[str]:
+    """Names of expanded ``kind`` relationships (needs includes[]=author/artist)."""
+    return [
+        rel["attributes"]["name"]
+        for rel in relationships
+        if rel.get("type") == kind and rel.get("attributes", {}).get("name")
+    ]
+
+
+def _relationship_attr(relationships: list[dict[str, Any]], kind: str, attr: str) -> str | None:
+    for rel in relationships:
+        if rel.get("type") == kind and rel.get("attributes"):
+            return rel["attributes"].get(attr)
+    return None
 
 
 class MangaDexProvider:
@@ -65,6 +98,57 @@ class MangaDexProvider:
             if offset >= int(body.get("total", 0)):
                 break
         return chapters
+
+    def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
+        response = self._api.get(
+            f"/manga/{provider_series_id}",
+            params={"includes[]": ["cover_art", "author", "artist"]},
+        )
+        data = response.json()["data"]
+        attributes: dict[str, Any] = data.get("attributes", {})
+        relationships: list[dict[str, Any]] = data.get("relationships", [])
+
+        alt_titles = [
+            (lang, value)
+            for entry in attributes.get("altTitles", [])
+            for lang, value in entry.items()
+        ]
+        tags = [
+            (_localized(tag["attributes"].get("name"), language) or "", tag["attributes"].get("group", "genre"))
+            for tag in attributes.get("tags", [])
+            if tag.get("attributes")
+        ]
+        cover_file = _relationship_attr(relationships, "cover_art", "fileName")
+        links: dict[str, str] = attributes.get("links") or {}
+
+        return SeriesMetadata(
+            provider_series_id=provider_series_id,
+            title=_localized(attributes.get("title"), language) or provider_series_id,
+            alt_titles=alt_titles,
+            description=_localized(attributes.get("description"), language),
+            status=attributes.get("status"),
+            year=attributes.get("year"),
+            content_rating=attributes.get("contentRating"),
+            demographic=attributes.get("publicationDemographic"),
+            original_language=attributes.get("originalLanguage"),
+            tags=[(name, group) for name, group in tags if name],
+            authors=_relationship_names(relationships, "author"),
+            artists=_relationship_names(relationships, "artist"),
+            cover_url=f"{_COVERS_BASE}/{provider_series_id}/{cover_file}.512.jpg" if cover_file else None,
+            total_chapters=_as_int(attributes.get("lastChapter")),
+            community_rating=self._rating(provider_series_id),
+            external_ids={site: value for site, value in links.items() if site in _TRACKER_LINKS},
+        )
+
+    def _rating(self, provider_series_id: str) -> float | None:
+        """Community rating via /statistics — best-effort (never blocks metadata)."""
+        try:
+            response = self._api.get(f"/statistics/manga/{provider_series_id}")
+            stats = response.json().get("statistics", {}).get(provider_series_id, {})
+            average = stats.get("rating", {}).get("average")
+            return float(average) if average is not None else None
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+            return None
 
     def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
         response = self._api.get(f"/at-home/server/{chapter.provider_chapter_id}", athome=True)

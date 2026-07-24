@@ -185,8 +185,10 @@ def _ingest_series(
     summary: ScanSummary,
 ) -> None:
     kind = _series_kind(library)
+    # Match on the folder-derived path (stable identity), not the title — metadata
+    # (PART F/M1) may rename the title, and rescans must not then create a duplicate.
     series = session.scalar(
-        select(Series).where(Series.library_id == library.id, Series.title == title)
+        select(Series).where(Series.library_id == library.id, Series.path_rel == title)
     )
     if series is None:
         series = Series(

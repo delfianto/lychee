@@ -8,7 +8,7 @@ at startup, and tests register a fake one — no network in the pipeline itself.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, cast
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class SeriesMetadata:
     content_rating: str | None = None
     demographic: str | None = None
     original_language: str | None = None
-    tags: list[str] = field(default_factory=list)
+    tags: list[tuple[str, str]] = field(default_factory=list)  # (name, group)
     authors: list[str] = field(default_factory=list)
     artists: list[str] = field(default_factory=list)
     cover_url: str | None = None
@@ -75,7 +75,7 @@ class MetadataProvider(Protocol):
 
     def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]: ...
 
-    def get_metadata(self, provider_series_id: str) -> SeriesMetadata: ...
+    def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata: ...
 
     def list_new_chapters(
         self, provider_series_id: str, *, known: set[str], language: str = "en"
@@ -91,3 +91,11 @@ def register_provider(provider: Provider) -> None:
 
 def get_provider(provider_id: str) -> Provider | None:
     return _REGISTRY.get(provider_id)
+
+
+def get_metadata_provider(provider_id: str) -> MetadataProvider | None:
+    """The registered provider viewed as a MetadataProvider, if it supports metadata."""
+    provider = _REGISTRY.get(provider_id)
+    if provider is not None and hasattr(provider, "get_metadata"):
+        return cast(MetadataProvider, provider)
+    return None

@@ -295,15 +295,18 @@ override.
       DTOs in `downloads/provider.py` (the contract M1/M2/M5 implement).
 - [ ] `data_saver` (quality) option → **moved to M3** (only meaningful once `fetch_pages` consumes it).
 
-**M1 — Metadata fetch + mapping**
-- [ ] `get_metadata(id)`: `GET /manga/{id}?includes[]=cover_art,author,artist` + `/statistics` +
-      `/aggregate`; normalise to a DTO.
-- [ ] Mapper DTO → `Series` / `TitleVariant` / `SeriesCredit` / `Tag`, honouring `locked_fields_json`
-      + language preference. Migration: add `Series.external_ids_json`.
-- [ ] Tag reconciliation: cache `GET /manga/tag`; map to the seeded taxonomy by group→category; create
-      any missing tags.
-- [ ] Cover: if `fetch_covers`, download `.512.jpg` into the cover/thumbnail store; else store the URL.
-- [ ] `POST /api/series/{id}/refresh` → enqueue a **`metadata`** task (background queue, SSE progress).
+**M1 — Metadata fetch + mapping** — ✅ done
+- [x] `MangaDexProvider.get_metadata(id)`: `GET /manga/{id}?includes[]=cover_art,author,artist` +
+      best-effort `/statistics` (community rating) → normalised `SeriesMetadata`. (total_chapters from
+      `lastChapter`; `/aggregate` not needed here.)
+- [x] Mapper `src/catalog/metadata.py` → `Series` / `TitleVariant` / `SeriesCredit` / `Tag`, honouring
+      `locked_fields_json` + language preference. Migration `d59ac262` adds `Series.external_ids_json`.
+      Scanner now keys series identity on `path_rel`, so an adopted title can't duplicate on rescan.
+- [x] Tag reconciliation against the seeded taxonomy by slug/name (group→`Tag.group`); missing tags
+      created. (The manga's own tag list carries the group, so a `/manga/tag` cache isn't needed.)
+- [~] Cover: `fetch_covers` stores the remote `.512.jpg` URL in `cover_source`; `coverUrl` hotlinks it.
+      **Downloading + local thumbnailing deferred** (`get_cover` still generates from local pages).
+- [x] `POST /api/series/{id}/refresh` → enqueues a `metadata` task (queue + SSE); returns 202 + TaskOut.
 
 **M2 — Matching (auto + manual)**
 - [ ] `search(title, …)`: `GET /manga?title=&limit=5&includes[]=cover_art&contentRating[]=…` → candidates.

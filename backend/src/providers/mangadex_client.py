@@ -51,7 +51,11 @@ class MangaDexClient:
         self._max_retries = max_retries
 
     def get(
-        self, path: str, *, params: dict[str, str | int] | None = None, athome: bool = False
+        self,
+        path: str,
+        *,
+        params: dict[str, str | int | list[str]] | None = None,
+        athome: bool = False,
     ) -> httpx.Response:
         """GET an api.mangadex.org path with rate limiting + retries."""
 
