@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import src.models  # noqa: F401  (register all models on Base.metadata)
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import ColumnElement, create_engine, func, select
 from sqlalchemy.orm import Session
 from src.core.persistence.base_model import Base
 from src.integrations.models import Provider, SyncState, Tracker
@@ -17,7 +17,7 @@ def _session(tmp_path: Path) -> Session:
     return Session(engine)
 
 
-def _count(session: Session, model: type, *where: object) -> int:
+def _count(session: Session, model: type, *where: ColumnElement[bool]) -> int:
     stmt = select(func.count()).select_from(model)
     for clause in where:
         stmt = stmt.where(clause)

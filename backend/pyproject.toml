@@ -19,9 +19,13 @@ dependencies = [
     "structlog==26.1.0",
     # ID generation
     "nanoid==2.0.0",
-    # NOTE: domain/media dependencies (pyvips/Pillow, rarfile/libarchive-c, pymupdf,
-    # ebooklib, python-magic, xxhash, natsort, APScheduler, httpx, …) are added per
-    # the relevant ADR as those features land — see ../notes/decisions/.
+    # Media / images — AVIF encode + decode/resize. Native AVIF ships in the
+    # Pillow ≥11.3 wheels (bundled libavif), so no system libs. See ADR 09 (amended
+    # by ADR 19 — AVIF storage policy).
+    "pillow==12.3.0",
+    # NOTE: remaining media/domain deps (rarfile/libarchive-c, pymupdf, ebooklib,
+    # python-magic, xxhash, natsort, APScheduler, httpx, …) are added per the
+    # relevant ADR as those features land — see ../notes/decisions/.
 ]
 
 [project.optional-dependencies]
