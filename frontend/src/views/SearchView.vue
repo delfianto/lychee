@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Search } from "lucide-vue-next";
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { searchSeries } from "../api/queries";
 import SeriesCollection from "../components/SeriesCollection.vue";
-import { librarySeries } from "../mocks/library";
+import type { Series } from "../types";
 
 const route = useRoute();
 const router = useRouter();
 const q = ref(String(route.query.q ?? ""));
+const results = ref<Series[]>([]);
 
 // Reflect deep-links / navbar submits into the local field.
 watch(
@@ -18,13 +20,23 @@ watch(
   },
 );
 
-const results = computed(() => {
-  const term = q.value.trim().toLowerCase();
-  if (!term) return [];
-  return librarySeries.filter(
-    (s) => s.title.toLowerCase().includes(term) || s.authors.some((a) => a.toLowerCase().includes(term)),
-  );
-});
+// Debounced live search against the API.
+let timer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  q,
+  (val) => {
+    if (timer) clearTimeout(timer);
+    const term = val.trim();
+    if (!term) {
+      results.value = [];
+      return;
+    }
+    timer = setTimeout(async () => {
+      results.value = await searchSeries(term);
+    }, 250);
+  },
+  { immediate: true },
+);
 
 function submit(): void {
   const term = q.value.trim();

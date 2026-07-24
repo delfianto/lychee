@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { Grid2x2, LayoutGrid, List } from "lucide-vue-next";
-import { type Component, computed, ref, watch } from "vue";
+import { type Component, ref, watch } from "vue";
 
+import { useSeriesList } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
-import { sortSeries } from "../lib/sort";
-import { recentlyAdded } from "../mocks/library";
 
 type Density = "list" | "compact" | "gallery";
 const DENSITY_KEY = "lychee.density";
@@ -18,9 +17,12 @@ const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "gallery", icon: LayoutGrid, label: "Gallery view" },
 ];
 
-const sorts = ["Recently Added", "Rating", "Title"];
+const SORTS: Record<string, string> = { "Recently Added": "recentlyAdded", Rating: "rating", Title: "title" };
+const sorts = Object.keys(SORTS);
 const sort = ref("Recently Added");
-const sorted = computed(() => sortSeries(recentlyAdded, sort.value));
+
+const { items: results, loading, hasMore, reload, loadMore } = useSeriesList();
+watch(sort, (s) => void reload({ sort: SORTS[s] ?? "recentlyAdded" }), { immediate: true });
 </script>
 
 <template>
@@ -28,7 +30,7 @@ const sorted = computed(() => sortSeries(recentlyAdded, sort.value));
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">Recently added</h1>
-        <p class="text-sm text-base-content/60">{{ recentlyAdded.length }} series</p>
+        <p class="text-sm text-base-content/60">{{ results.length }} series</p>
       </div>
       <div class="flex items-center gap-3">
         <SegmentedToggle v-model="density" :options="densities" aria-label="View density" />
@@ -41,6 +43,12 @@ const sorted = computed(() => sortSeries(recentlyAdded, sort.value));
       </div>
     </div>
 
-    <SeriesCollection :series="sorted" :density="density" />
+    <SeriesCollection
+      :series="results"
+      :density="density"
+      :has-more="hasMore"
+      :loading="loading"
+      @load-more="loadMore"
+    />
   </div>
 </template>

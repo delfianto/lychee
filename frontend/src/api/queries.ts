@@ -71,6 +71,22 @@ export async function fetchLibrarySummaries(): Promise<LibrarySummary[]> {
   return data;
 }
 
+// --- feeds + search ------------------------------------------------------------
+
+export async function fetchUpdates(unread = false, limit = 60): Promise<RecentUpdate[]> {
+  const resp = unread
+    ? await api.GET("/api/updates/unread", { params: { query: { limit } } })
+    : await api.GET("/api/updates", { params: { query: { limit } } });
+  if (resp.error || !resp.data) return [];
+  return resp.data.items.map(toUpdate);
+}
+
+export async function searchSeries(q: string, limit = 30): Promise<Series[]> {
+  const { data, error } = await api.GET("/api/search", { params: { query: { q, limit } } });
+  if (error || !data) return [];
+  return data.map(toSeries);
+}
+
 // --- series grids (cursor pagination) ------------------------------------------
 
 export type SeriesQuery = NonNullable<paths["/api/series"]["get"]["parameters"]["query"]>;
