@@ -28,20 +28,15 @@ import {
   Wand2,
   X,
 } from "lucide-vue-next";
-import { type Component, computed, reactive, ref, watch } from "vue";
+import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
 
+import { api } from "../api/client";
+import { relativeTime } from "../api/format";
+import { fetchDashboard, fetchLibrarySummaries } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
+import { toast } from "../lib/toast";
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../lib/theme";
-import {
-  browseTagGroups,
-  type DownloadTask,
-  downloads,
-  librarySeries,
-  librarySummaries,
-  syncStatus,
-} from "../mocks/library";
-import type { ContentRating, Demographic } from "../types";
 
 const { theme, mode, setTheme, setMode } = useTheme();
 const themeOptions: { value: Mode; label: string }[] = [
@@ -72,47 +67,37 @@ interface TaxRow {
   category: string;
   uses: number;
   enabled: boolean;
+  system: boolean;
 }
-const ratingTiers: { key: ContentRating; label: string }[] = [
-  { key: "safe", label: "Safe" },
-  { key: "suggestive", label: "Suggestive" },
-  { key: "erotica", label: "Erotica" },
-  { key: "mature", label: "Mature" },
-];
-const demoTiers: { key: Demographic; label: string }[] = [
-  { key: "shonen", label: "Shounen" },
-  { key: "shojo", label: "Shoujo" },
-  { key: "seinen", label: "Seinen" },
-  { key: "josei", label: "Josei" },
-];
-const tagUses = (id: string): number => librarySeries.filter((s) => s.tags.some((t) => t.id === id)).length;
-const taxonomy = reactive<TaxRow[]>([
-  ...browseTagGroups.flatMap((g) =>
-    g.tags.map((t) => ({ id: t.id, name: t.name, category: g.group, uses: tagUses(t.id), enabled: true })),
-  ),
-  ...ratingTiers.map((r) => ({
-    id: `cr-${r.key}`,
-    name: r.label,
-    category: "Content Rating",
-    uses: librarySeries.filter((s) => s.contentRating === r.key).length,
-    enabled: true,
-  })),
-  ...demoTiers.map((d) => ({
-    id: `demo-${d.key}`,
-    name: d.label,
-    category: "Demographic",
-    uses: librarySeries.filter((s) => s.demographic === d.key).length,
-    enabled: true,
-  })),
-]);
-const taxCategories = [...new Set(taxonomy.map((r) => r.category))].sort();
+const CAT_LABEL: Record<string, string> = {
+  genre: "Genre",
+  theme: "Theme",
+  content: "Content",
+  format: "Format",
+  content_rating: "Content Rating",
+  demographic: "Demographic",
+};
+// Galleries are few and the table filters/paginates client-side, so load all rows once.
+const taxonomy = ref<TaxRow[]>([]);
+async function loadTaxonomy(): Promise<void> {
+  const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
+  taxonomy.value = (data?.items ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    category: CAT_LABEL[t.category] ?? t.category,
+    uses: t.uses,
+    enabled: t.enabled,
+    system: t.system,
+  }));
+}
+const taxCategories = computed(() => [...new Set(taxonomy.value.map((r) => r.category))].sort());
 const taxSearch = ref("");
 const taxCat = ref("");
 const taxPage = ref(0);
 const TAX_PAGE_SIZE = 20;
 const taxFiltered = computed(() => {
   const q = taxSearch.value.trim().toLowerCase();
-  return taxonomy.filter(
+  return taxonomy.value.filter(
     (r) => (!q || r.name.toLowerCase().includes(q)) && (!taxCat.value || r.category === taxCat.value),
   );
 });
@@ -121,14 +106,46 @@ const taxRows = computed(() =>
   taxFiltered.value.slice(taxPage.value * TAX_PAGE_SIZE, taxPage.value * TAX_PAGE_SIZE + TAX_PAGE_SIZE),
 );
 watch([taxSearch, taxCat], () => (taxPage.value = 0));
-function removeTax(row: TaxRow): void {
-  const i = taxonomy.indexOf(row);
-  if (i >= 0) taxonomy.splice(i, 1);
+async function toggleTax(row: TaxRow): Promise<void> {
+  await api.PATCH("/api/taxonomy/{tag_id}", {
+    params: { path: { tag_id: row.id } },
+    body: { enabled: row.enabled },
+  });
+}
+async function addTax(): Promise<void> {
+  const name = window.prompt("New tag name?");
+  if (!name?.trim()) return;
+  const { data } = await api.POST("/api/taxonomy", {
+    body: { name: name.trim(), category: "genre" },
+  });
+  if (data) {
+    taxonomy.value.push({
+      id: data.id,
+      name: data.name,
+      category: CAT_LABEL[data.category] ?? data.category,
+      uses: data.uses,
+      enabled: data.enabled,
+      system: data.system,
+    });
+    toast(`Added “${data.name}”`);
+  }
+}
+async function removeTax(row: TaxRow): Promise<void> {
+  await api.DELETE("/api/taxonomy/{tag_id}", { params: { path: { tag_id: row.id } } });
+  taxonomy.value = taxonomy.value.filter((r) => r.id !== row.id);
 }
 
-// --- Downloads + MangaDex sync (mock) ---
-const dl = reactive<DownloadTask[]>(downloads.map((d) => ({ ...d })));
-const sync = reactive({ ...syncStatus, syncing: false });
+// --- Downloads + MangaDex sync ---
+interface DlRow {
+  id: string;
+  series: { coverUrl: string; title: string };
+  chapter: string;
+  status: string;
+  progress: number;
+  size: string;
+}
+const dl = ref<DlRow[]>([]);
+const sync = reactive({ lastSync: "never", newChapters: 0, autoEvery: "6h", syncing: false });
 const dlLabel: Record<string, string> = {
   downloading: "Downloading",
   queued: "Queued",
@@ -143,43 +160,158 @@ const dlBadge: Record<string, string> = {
   done: "badge-success",
   failed: "badge-error",
 };
-const hasDone = computed(() => dl.some((d) => d.status === "done"));
-function syncNow(): void {
+const hasDone = computed(() => dl.value.some((d) => d.status === "done"));
+function formatBytes(n: number | null | undefined): string {
+  if (!n) return "—";
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+}
+async function loadDownloads(): Promise<void> {
+  const { data } = await api.GET("/api/downloads");
+  dl.value = (data ?? []).map((d) => ({
+    id: d.id,
+    series: { coverUrl: d.series.coverUrl, title: d.series.title },
+    chapter: d.chapter,
+    status: d.status,
+    progress: d.progress,
+    size: formatBytes(d.sizeBytes),
+  }));
+}
+async function loadSync(): Promise<void> {
+  const { data } = await api.GET("/api/sync");
+  if (!data) return;
+  sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "never";
+  sync.newChapters = data.newChapters;
+  sync.autoEvery = `${Math.max(1, Math.round(data.autoEveryMinutes / 60))}h`;
+}
+async function syncNow(): Promise<void> {
   sync.syncing = true;
-  setTimeout(() => {
-    sync.syncing = false;
-    sync.lastSync = "just now";
-  }, 1500);
+  const { data } = await api.POST("/api/sync");
+  if (data) {
+    sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "just now";
+    sync.newChapters = data.newChapters;
+  }
+  sync.syncing = false;
 }
-function retryDownload(d: DownloadTask): void {
-  d.status = "downloading";
-  d.progress = 0;
+async function retryDownload(d: DlRow): Promise<void> {
+  await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: d.id } } });
+  await loadDownloads();
 }
-function removeDownload(d: DownloadTask): void {
-  const i = dl.indexOf(d);
-  if (i >= 0) dl.splice(i, 1);
+async function removeDownload(d: DlRow): Promise<void> {
+  await api.DELETE("/api/downloads/{task_id}", { params: { path: { task_id: d.id } } });
+  await loadDownloads();
 }
-function clearDone(): void {
-  for (let i = dl.length - 1; i >= 0; i--) if (dl[i].status === "done") dl.splice(i, 1);
+async function clearDone(): Promise<void> {
+  await api.POST("/api/downloads/clear-completed");
+  await loadDownloads();
 }
 
-// --- Libraries (mock) ---
-const libraries = reactive([
-  { name: "Manga", path: "/data/manga", series: 128, lastScan: "2h ago" },
-  { name: "Comics", path: "/data/comics", series: 42, lastScan: "1d ago" },
-]);
+// --- Libraries ---
+interface LibraryRow {
+  id: string;
+  name: string;
+  path: string;
+  series: number;
+  lastScan: string;
+}
+const libraries = ref<LibraryRow[]>([]);
+async function loadLibraries(): Promise<void> {
+  const { data } = await api.GET("/api/libraries");
+  libraries.value = (data ?? []).map((l) => ({
+    id: l.id,
+    name: l.name,
+    path: l.path,
+    series: l.seriesCount,
+    lastScan: l.lastScan ? relativeTime(l.lastScan) : "never",
+  }));
+}
+async function scanAll(): Promise<void> {
+  await api.POST("/api/libraries/scan");
+  await loadLibraries();
+  toast("Scan complete");
+}
+async function scanOne(id: string): Promise<void> {
+  await api.POST("/api/libraries/{library_id}/scan", { params: { path: { library_id: id } } });
+  await loadLibraries();
+  toast("Scan complete");
+}
+async function removeLibrary(id: string): Promise<void> {
+  await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
+  await loadLibraries();
+}
+async function addLibrary(): Promise<void> {
+  const name = window.prompt("Library name?");
+  if (!name?.trim()) return;
+  const path = window.prompt("Library path (a folder on the server)?");
+  if (!path?.trim()) return;
+  await api.POST("/api/libraries", { body: { name: name.trim(), path: path.trim(), kind: "manga" } });
+  await loadLibraries();
+}
 
-// --- Metadata & providers (mock) ---
-const provider = reactive({ enabled: true, language: "en", autoMatch: true, fetchCovers: true });
+// --- Metadata provider (MangaDex) ---
+const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true });
 const providerLanguages = ["en", "ja", "ko", "zh"];
+let providerLoaded = false;
+async function loadProvider(): Promise<void> {
+  const { data } = await api.GET("/api/providers");
+  const md = (data ?? []).find((p) => p.id === "mangadex") ?? (data ?? [])[0];
+  if (md) {
+    provider.id = md.id;
+    provider.enabled = md.enabled;
+    provider.language = md.language;
+    provider.autoMatch = md.autoMatch;
+    provider.fetchCovers = md.fetchCovers;
+  }
+}
+watch(
+  () => ({ ...provider }),
+  () => {
+    if (!providerLoaded) return;
+    void api.PATCH("/api/providers/{provider_id}", {
+      params: { path: { provider_id: provider.id } },
+      body: {
+        enabled: provider.enabled,
+        language: provider.language,
+        autoMatch: provider.autoMatch,
+        fetchCovers: provider.fetchCovers,
+      },
+    });
+  },
+);
 
-// --- Trackers (mock) ---
-const trackers = reactive([
-  { name: "AniList", connected: true, syncOnRead: true },
-  { name: "MyAnimeList", connected: false, syncOnRead: false },
-  { name: "MangaUpdates", connected: false, syncOnRead: false },
-  { name: "NovelUpdates", connected: false, syncOnRead: false },
-]);
+// --- Trackers ---
+interface TrackerRow {
+  id: string;
+  name: string;
+  connected: boolean;
+  syncOnRead: boolean;
+}
+const trackers = ref<TrackerRow[]>([]);
+async function loadTrackers(): Promise<void> {
+  const { data } = await api.GET("/api/trackers");
+  trackers.value = (data ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    connected: t.connected,
+    syncOnRead: t.syncOnRead,
+  }));
+}
+async function toggleTracker(t: TrackerRow): Promise<void> {
+  if (t.connected) {
+    await api.DELETE("/api/trackers/{tracker_id}", { params: { path: { tracker_id: t.id } } });
+    t.connected = false;
+  } else {
+    const { data } = await api.POST("/api/trackers/{tracker_id}/connect", {
+      params: { path: { tracker_id: t.id } },
+    });
+    if (data) t.connected = data.connected;
+  }
+}
+async function setSyncOnRead(t: TrackerRow): Promise<void> {
+  await api.PATCH("/api/trackers/{tracker_id}", {
+    params: { path: { tracker_id: t.id } },
+    body: { syncOnRead: t.syncOnRead },
+  });
+}
 
 // --- Reader defaults (shared with the reader) ---
 const reader = useReaderSettings();
@@ -205,30 +337,52 @@ function setDensity(d: string): void {
 }
 const language = ref("English");
 
-// --- About (mock) ---
-const about = {
-  version: "0.1.0-dev",
-  build: "a3efc06",
-  platform: "Linux · x86_64",
-  database: "SQLite · 84 MB",
-  uptime: "6d 14h",
-  started: "Jul 18, 2026",
-};
-const nonGallery = librarySeries.filter((s) => s.kind !== "gallery");
-const libStats = [
-  { label: "Series", value: nonGallery.length.toLocaleString() },
-  { label: "Chapters", value: nonGallery.reduce((n, s) => n + s.chapterCount, 0).toLocaleString() },
-  { label: "Galleries", value: librarySeries.filter((s) => s.kind === "gallery").length.toLocaleString() },
-  { label: "Storage", value: `${librarySummaries.reduce((n, l) => n + l.sizeGb, 0).toFixed(1)} GB` },
-];
-const serverInfo = [
+// --- About ---
+const about = reactive({ version: "0.0.0", platform: "", database: "", uptime: "", started: "" });
+const libStats = ref<{ label: string; value: string }[]>([]);
+const serverInfo = computed(() => [
   { label: "Version", value: about.version },
-  { label: "Build", value: about.build },
   { label: "Platform", value: about.platform },
   { label: "Database", value: about.database },
   { label: "Uptime", value: about.uptime },
   { label: "Started", value: about.started },
-];
+]);
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  return days > 0 ? `${days}d ${hours}h` : `${hours}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+async function loadAbout(): Promise<void> {
+  const { data } = await api.GET("/api/about");
+  if (data) {
+    about.version = data.version;
+    about.platform = data.platform;
+    about.database = data.database;
+    about.uptime = formatUptime(data.uptimeSeconds);
+    about.started = new Date(data.started).toLocaleDateString();
+  }
+  const [dashboard, summaries] = await Promise.all([fetchDashboard(), fetchLibrarySummaries()]);
+  const storage = summaries.reduce((n, s) => n + s.sizeGb, 0);
+  libStats.value = [
+    { label: "Series", value: dashboard.stats.series.toLocaleString() },
+    { label: "Unread", value: dashboard.stats.unreadChapters.toLocaleString() },
+    { label: "Reading", value: dashboard.stats.reading.toLocaleString() },
+    { label: "Storage", value: `${storage.toFixed(1)} GB` },
+  ];
+}
+
+onMounted(async () => {
+  await Promise.all([
+    loadLibraries(),
+    loadProvider(),
+    loadTrackers(),
+    loadTaxonomy(),
+    loadDownloads(),
+    loadSync(),
+    loadAbout(),
+  ]);
+  providerLoaded = true;
+});
 </script>
 
 <template>
@@ -261,12 +415,12 @@ const serverInfo = [
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
               <div class="flex gap-2">
-                <button class="btn btn-ghost btn-sm">Scan all</button>
-                <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add library</button>
+                <button class="btn btn-ghost btn-sm" @click="scanAll">Scan all</button>
+                <button class="btn btn-primary btn-sm gap-1" @click="addLibrary"><Plus class="size-4" />Add library</button>
               </div>
             </div>
             <div class="grid gap-4 lg:grid-cols-2">
-              <div v-for="lib in libraries" :key="lib.name" class="card bg-base-100">
+              <div v-for="lib in libraries" :key="lib.id" class="card bg-base-100">
                 <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
                   <Library class="size-5 shrink-0 text-primary" />
                   <div class="min-w-0 grow">
@@ -274,9 +428,8 @@ const serverInfo = [
                     <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
                     <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
                   </div>
-                  <button class="btn btn-ghost btn-sm">Scan</button>
-                  <button class="btn btn-ghost btn-sm">Edit</button>
-                  <button class="btn btn-ghost btn-sm text-error">Remove</button>
+                  <button class="btn btn-ghost btn-sm" @click="scanOne(lib.id)">Scan</button>
+                  <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">Remove</button>
                 </div>
               </div>
             </div>
@@ -338,7 +491,7 @@ const serverInfo = [
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Trackers</h3>
               <div class="card grow bg-base-100">
                 <div class="card-body gap-4 p-4">
-                  <div v-for="t in trackers" :key="t.name" class="flex flex-wrap items-center justify-between gap-4">
+                  <div v-for="t in trackers" :key="t.id" class="flex flex-wrap items-center justify-between gap-4">
                     <div class="flex items-start gap-3">
                       <Link2 class="mt-0.5 size-5 shrink-0 text-primary" />
                       <div>
@@ -351,12 +504,12 @@ const serverInfo = [
                     <div class="flex items-center gap-3">
                       <label v-if="t.connected" class="flex items-center gap-2 text-xs text-base-content/60">
                         Sync on read
-                        <input v-model="t.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                        <input v-model="t.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" @change="setSyncOnRead(t)" />
                       </label>
                       <button
                         class="btn btn-sm"
                         :class="t.connected ? 'btn-ghost text-error' : 'btn-primary'"
-                        @click="t.connected = !t.connected"
+                        @click="toggleTracker(t)"
                       >
                         {{ t.connected ? "Disconnect" : "Connect" }}
                       </button>
@@ -482,7 +635,7 @@ const serverInfo = [
         <div v-else-if="active === 'content'" key="content" class="flex flex-col gap-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Content taxonomy</h3>
-            <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add</button>
+            <button class="btn btn-primary btn-sm gap-1" @click="addTax"><Plus class="size-4" />Add</button>
           </div>
 
           <!-- Search + type filter -->
@@ -517,11 +670,10 @@ const serverInfo = [
                       <td><span class="badge badge-ghost badge-sm whitespace-nowrap">{{ row.category }}</span></td>
                       <td class="text-base-content/60">{{ row.uses }}</td>
                       <td>
-                        <input v-model="row.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                        <input v-model="row.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" @change="toggleTax(row)" />
                       </td>
                       <td class="whitespace-nowrap text-right">
-                        <button class="btn btn-ghost btn-xs">Edit</button>
-                        <button class="btn btn-ghost btn-xs text-error" @click="removeTax(row)">Delete</button>
+                        <button class="btn btn-ghost btn-xs text-error" :disabled="row.system" @click="removeTax(row)">Delete</button>
                       </td>
                     </tr>
                     <tr v-if="!taxRows.length">
