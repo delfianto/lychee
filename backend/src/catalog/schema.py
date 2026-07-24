@@ -86,6 +86,12 @@ class SeriesArtOut(CamelModel):
     images: list[str]
 
 
+class LibrarySummaryOut(CamelModel):
+    key: str
+    title: str
+    size_gb: float
+
+
 class DashboardStats(CamelModel):
     series: int
     unread_chapters: int

@@ -1,7 +1,9 @@
 """Tests for chapters, update feeds, dashboard, and search."""
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from src.catalog.models import Book
 
 from tests.support import make_series
 
@@ -79,3 +81,15 @@ def test_search(client: TestClient, db_session: Session) -> None:
 
     assert [s["title"] for s in client.get("/api/search", params={"q": "ber"}).json()] == ["Berserk"]
     assert client.get("/api/search", params={"q": ""}).json() == []
+
+
+def test_library_summary(client: TestClient, db_session: Session) -> None:
+    make_series(db_session, title="M", kind="manga", chapter_count=1)
+    db_session.commit()
+    book = db_session.scalars(select(Book)).first()
+    assert book is not None
+    book.file_size = 2_000_000_000  # 2 GB
+    db_session.commit()
+
+    data = client.get("/api/libraries/summary").json()
+    assert {"key": "manga", "title": "Manga", "sizeGb": 2.0} in data

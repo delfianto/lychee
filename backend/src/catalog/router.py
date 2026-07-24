@@ -10,6 +10,7 @@ from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterDetailOut,
     DashboardOut,
+    LibrarySummaryOut,
     RecentUpdateOut,
     SeriesArtOut,
     SeriesOut,
@@ -110,6 +111,12 @@ def unread_updates(
 def dashboard(db: DbSession) -> DashboardOut:
     """One call for the Home dashboard: stats + continue-reading + updates + added."""
     return service.dashboard(db)
+
+
+@router.get("/libraries/summary")
+def libraries_summary(db: DbSession) -> list[LibrarySummaryOut]:
+    """Per-library storage usage (Home strip + About)."""
+    return service.library_summaries(db)
 
 
 @router.get("/search")

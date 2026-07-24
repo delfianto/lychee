@@ -12,6 +12,7 @@ from src.catalog.schema import (
     ChapterOut,
     DashboardOut,
     DashboardStats,
+    LibrarySummaryOut,
     RecentUpdateOut,
     SeriesArtOut,
     SeriesOut,
@@ -230,3 +231,26 @@ def series_art(session: Session, series_id: str) -> SeriesArtOut:
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
     return SeriesArtOut(images=[])
+
+
+_KIND_ROUTE: dict[str, tuple[str, str]] = {
+    "manga": ("manga", "Manga"),
+    "comic": ("comics", "Comics"),
+    "gallery": ("gallery", "Gallery"),
+}
+
+
+def library_summaries(session: Session) -> list[LibrarySummaryOut]:
+    """Per-kind storage usage (Home + About). GB rounded; caller hides zero-size."""
+    summaries: list[LibrarySummaryOut] = []
+    for kind, size_bytes in repo.library_size_by_kind(session):
+        meta = _KIND_ROUTE.get(kind)
+        if meta is None:
+            continue
+        route, title = meta
+        summaries.append(
+            LibrarySummaryOut(key=route, title=title, size_gb=round(size_bytes / 1e9, 1))
+        )
+    order = {"manga": 0, "comics": 1, "gallery": 2}
+    summaries.sort(key=lambda s: order.get(s.key, 9))
+    return summaries
