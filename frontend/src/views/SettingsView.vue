@@ -31,7 +31,7 @@ import {
 import { type Component, computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { api } from "../api/client";
-import { activeTasks, onTaskDone } from "../api/events";
+import { activeTasks, onTaskDone, onTaskEvent } from "../api/events";
 import { relativeTime } from "../api/format";
 import { fetchDashboard, fetchLibrarySummaries } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
@@ -373,7 +373,7 @@ async function loadAbout(): Promise<void> {
 }
 
 // Refetch the affected list when a background scan/download finishes (SSE).
-const disposeTaskListener = onTaskDone((task) => {
+const disposeDone = onTaskDone((task) => {
   if (task.kind === "scan") {
     void loadLibraries();
     toast(
@@ -384,7 +384,21 @@ const disposeTaskListener = onTaskDone((task) => {
     void loadDownloads();
   }
 });
-onUnmounted(disposeTaskListener);
+// While a download runs, refresh the table on progress events (throttled) so
+// rows climb mid-chapter rather than appearing only when the whole job finishes.
+let dlReloadTimer: ReturnType<typeof setTimeout> | null = null;
+const disposeProgress = onTaskEvent((event) => {
+  if (!event.startsWith("download.") || dlReloadTimer !== null) return;
+  dlReloadTimer = setTimeout(() => {
+    dlReloadTimer = null;
+    void loadDownloads();
+  }, 400);
+});
+onUnmounted(() => {
+  disposeDone();
+  disposeProgress();
+  if (dlReloadTimer !== null) clearTimeout(dlReloadTimer);
+});
 
 onMounted(async () => {
   await Promise.all([

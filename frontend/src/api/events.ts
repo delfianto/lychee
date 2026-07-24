@@ -14,11 +14,13 @@ interface TaskEvent {
   task: Task;
 }
 type DoneHandler = (task: Task) => void;
+type EventHandler = (event: string, task: Task) => void;
 
 const KEEP = 50;
 const tasks = ref<Task[]>([]);
 const connected = ref(false);
 const doneHandlers = new Set<DoneHandler>();
+const eventHandlers = new Set<EventHandler>();
 let source: EventSource | null = null;
 
 function upsert(task: Task): void {
@@ -46,6 +48,7 @@ export function connectTaskStream(): void {
       return;
     }
     upsert(payload.task);
+    for (const handler of eventHandlers) handler(payload.event, payload.task);
     if (payload.event.endsWith(".done") || payload.event.endsWith(".failed")) {
       for (const handler of doneHandlers) handler(payload.task);
     }
@@ -57,6 +60,14 @@ export function onTaskDone(handler: DoneHandler): () => void {
   doneHandlers.add(handler);
   return () => {
     doneHandlers.delete(handler);
+  };
+}
+
+/** Fire `handler` for every task event (started/progress/done/failed). Returns a disposer. */
+export function onTaskEvent(handler: EventHandler): () => void {
+  eventHandlers.add(handler);
+  return () => {
+    eventHandlers.delete(handler);
   };
 }
 

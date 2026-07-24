@@ -129,9 +129,9 @@
 ## B5. Providers + downloader
 - [~] MangaDex provider: chapter listing + page download ✅; **metadata match/import + field mapping +
       cover fetch ❌**.
-- [x] Chapter downloader → AVIF + DownloadTask rows ✅; runs on the background queue with per-chapter
-      SSE progress (`download.progress`). ⚠ DownloadTask rows commit at the end, so the Downloads
-      *table* updates on `download.done`, not mid-chapter; pause/resume not implemented.
+- [x] Chapter downloader → AVIF + DownloadTask rows ✅; runs on the background queue with per-page SSE
+      progress (`download.progress`). Rows commit as each chapter downloads, so the Downloads table
+      climbs mid-chapter (FE reloads on throttled progress events). ⚠ pause/resume not implemented.
 - [ ] **Sync** — `/api/sync` is a stub (stamps timestamp); no real new-chapter check.
 
 ## B6. Search

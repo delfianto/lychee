@@ -11,6 +11,7 @@ is a follow-up.
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from sqlalchemy import select
@@ -44,6 +45,22 @@ def _number_sort(number: str) -> float | None:
         return None
 
 
+def _report_page(
+    session: Session,
+    on_progress: Callable[[int, str], None] | None,
+    index: int,
+    total: int,
+    number: str,
+    chapter_pct: int,
+) -> None:
+    """Commit the in-flight chapter row (so /api/downloads sees it climb) and emit an
+    overall-progress SSE event. Bound per chapter via functools.partial."""
+    session.commit()
+    if on_progress is not None:
+        overall = round(((index - 1) + chapter_pct / 100) / total * 100)
+        on_progress(overall, f"Ch. {number}")
+
+
 def _download_chapter(
     session: Session,
     *,
@@ -53,6 +70,7 @@ def _download_chapter(
     provider: Provider,
     storage_root: Path,
     task: DownloadTask,
+    on_page: Callable[[int], None] | None = None,
 ) -> Chapter:
     pages = provider.fetch_pages(remote)
     rel = f"{series.id}/{remote.provider_chapter_id}"
@@ -66,6 +84,8 @@ def _download_chapter(
         _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
         size += len(data)
         task.progress = int((index + 1) / total * 100)
+        if on_page is not None:
+            on_page(task.progress)  # publish this chapter's page progress
 
     book = Book(
         series_id=series.id,
@@ -119,6 +139,7 @@ def download_series(
     pending = [remote for remote in remotes if remote.number not in existing]
     if limit is not None:
         pending = pending[:limit]
+    total = len(pending)
 
     tasks: list[DownloadTask] = []
     for index, remote in enumerate(pending, start=1):
@@ -127,6 +148,7 @@ def download_series(
         )
         session.add(task)
         session.flush()
+        session.commit()  # the row shows up as "downloading" in /api/downloads at once
         try:
             _download_chapter(
                 session,
@@ -136,14 +158,15 @@ def download_series(
                 provider=provider,
                 storage_root=storage_root,
                 task=task,
+                on_page=partial(_report_page, session, on_progress, index, total, remote.number),
             )
             task.status = "done"
             task.progress = 100
         except Exception as exc:  # noqa: BLE001 - record failure on the task, keep going
             task.status = "failed"
             task.error = str(exc)
+        session.commit()  # persist the row's final status so the table settles
         tasks.append(task)
         if on_progress is not None:
-            on_progress(round(index / len(pending) * 100), f"Ch. {remote.number}")
-    session.flush()
+            on_progress(round(index / total * 100), f"Ch. {remote.number}")
     return tasks
