@@ -28,15 +28,14 @@ import type { ContentRating } from "../types";
 
 const { theme, toggle } = useTheme();
 
-// Related settings are grouped into a few pages so no single page feels empty.
+// The card-form settings collapse onto one "General" page; the table-heavy
+// tag/rating management gets its own page, and About stays separate.
 const sections: { key: string; label: string; icon: Component }[] = [
-  { key: "libraries", label: "Libraries", icon: Library },
+  { key: "general", label: "General", icon: SlidersHorizontal },
   { key: "content", label: "Content", icon: Tag },
-  { key: "integrations", label: "Integrations", icon: Globe },
-  { key: "preferences", label: "Preferences", icon: SlidersHorizontal },
   { key: "about", label: "About", icon: Info },
 ];
-const active = ref("libraries");
+const active = ref("general");
 
 // --- Tags (mock) ---
 const enabled = reactive<Record<string, boolean>>({});
@@ -107,7 +106,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
   <div class="p-4 sm:p-6">
     <h1 class="mb-6 text-3xl font-bold">Settings</h1>
 
-    <div class="flex max-w-5xl flex-col gap-6 lg:flex-row lg:gap-8">
+    <div class="flex max-w-7xl flex-col gap-6 lg:flex-row lg:gap-8">
       <!-- Section rail -->
       <nav class="flex gap-1 overflow-x-auto pb-1 lg:w-52 lg:shrink-0 lg:flex-col lg:overflow-visible lg:pb-0">
         <button
@@ -123,27 +122,195 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
 
       <!-- Content pane -->
       <div class="min-w-0 grow">
-        <!-- Libraries -->
-        <div v-if="active === 'libraries'" class="flex flex-col gap-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
-            <div class="flex gap-2">
-              <button class="btn btn-ghost btn-sm">Scan all</button>
-              <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add library</button>
-            </div>
-          </div>
-          <div v-for="lib in libraries" :key="lib.name" class="card bg-base-100">
-            <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
-              <Library class="size-5 shrink-0 text-primary" />
-              <div class="min-w-0 grow">
-                <div class="font-medium">{{ lib.name }}</div>
-                <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
-                <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
+        <!-- General: Libraries + Integrations + Preferences -->
+        <div v-if="active === 'general'" class="flex flex-col gap-8">
+          <!-- Libraries -->
+          <section class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
+              <div class="flex gap-2">
+                <button class="btn btn-ghost btn-sm">Scan all</button>
+                <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add library</button>
               </div>
-              <button class="btn btn-ghost btn-sm">Scan</button>
-              <button class="btn btn-ghost btn-sm">Edit</button>
-              <button class="btn btn-ghost btn-sm text-error">Remove</button>
             </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div v-for="lib in libraries" :key="lib.name" class="card bg-base-100">
+                <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
+                  <Library class="size-5 shrink-0 text-primary" />
+                  <div class="min-w-0 grow">
+                    <div class="font-medium">{{ lib.name }}</div>
+                    <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
+                    <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">Scan</button>
+                  <button class="btn btn-ghost btn-sm">Edit</button>
+                  <button class="btn btn-ghost btn-sm text-error">Remove</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Providers + Trackers side by side -->
+          <div class="grid items-start gap-6 lg:grid-cols-2">
+            <section class="flex flex-col gap-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Metadata providers</h3>
+              <div class="card bg-base-100">
+                <div class="card-body gap-4 p-4">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">MangaDex</div>
+                        <div class="text-xs text-base-content/50">Primary metadata source &amp; optional chapter downloader</div>
+                      </div>
+                    </div>
+                    <input v-model="provider.enabled" type="checkbox" class="toggle toggle-primary" />
+                  </div>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Preferred language</div>
+                        <div class="text-xs text-base-content/50">Fetch metadata &amp; chapters in this language when available</div>
+                      </div>
+                    </div>
+                    <select v-model="provider.language" class="select select-bordered select-sm w-28">
+                      <option v-for="l in providerLanguages" :key="l">{{ l }}</option>
+                    </select>
+                  </label>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Wand2 class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Auto-match on scan</div>
+                        <div class="text-xs text-base-content/50">Match new series to MangaDex automatically after each scan</div>
+                      </div>
+                    </div>
+                    <input v-model="provider.autoMatch" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                  </label>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Image class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Download covers</div>
+                        <div class="text-xs text-base-content/50">Fetch cover art from the provider when a series has none</div>
+                      </div>
+                    </div>
+                    <input v-model="provider.fetchCovers" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="flex flex-col gap-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Trackers</h3>
+              <div class="card bg-base-100">
+                <div class="card-body gap-4 p-4">
+                  <div v-for="t in trackers" :key="t.name" class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-medium">{{ t.name }}</div>
+                      <div class="text-xs" :class="t.connected ? 'text-success' : 'text-base-content/50'">
+                        {{ t.connected ? "Connected" : "Not connected" }}
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <label v-if="t.connected" class="flex items-center gap-2 text-xs text-base-content/60">
+                        Sync on read
+                        <input v-model="t.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                      </label>
+                      <button
+                        class="btn btn-sm"
+                        :class="t.connected ? 'btn-ghost text-error' : 'btn-primary'"
+                        @click="t.connected = !t.connected"
+                      >
+                        {{ t.connected ? "Disconnect" : "Connect" }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Appearance + Reader side by side -->
+          <div class="grid items-start gap-6 lg:grid-cols-2">
+            <section class="flex flex-col gap-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Appearance</h3>
+              <div class="card bg-base-100">
+                <div class="card-body gap-4 p-4">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Sun class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Theme</div>
+                        <div class="text-xs text-base-content/50">Dark or light interface</div>
+                      </div>
+                    </div>
+                    <div class="join">
+                      <button class="btn btn-sm join-item" :class="theme === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'dark' && toggle()">Dark</button>
+                      <button class="btn btn-sm join-item" :class="theme === 'light' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'light' && toggle()">Light</button>
+                    </div>
+                  </div>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <LayoutGrid class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Default library density</div>
+                        <div class="text-xs text-base-content/50">How libraries open by default</div>
+                      </div>
+                    </div>
+                    <select
+                      class="select select-bordered select-sm w-28"
+                      :value="density"
+                      @change="setDensity(($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="list">List</option>
+                      <option value="compact">Compact</option>
+                      <option value="gallery">Gallery</option>
+                    </select>
+                  </label>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Language</div>
+                        <div class="text-xs text-base-content/50">Interface language</div>
+                      </div>
+                    </div>
+                    <select v-model="language" class="select select-bordered select-sm w-28">
+                      <option>English</option>
+                      <option>日本語</option>
+                      <option>Español</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="flex flex-col gap-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader defaults</h3>
+              <div class="card bg-base-100">
+                <div class="card-body gap-4 p-4">
+                  <div v-for="grp in readerGroups" :key="grp.key" class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                      <component :is="grp.icon" class="size-5 shrink-0 text-primary" />
+                      <span class="text-sm font-medium">{{ grp.label }}</span>
+                    </div>
+                    <div class="join">
+                      <button
+                        v-for="o in grp.opts"
+                        :key="o.v"
+                        class="btn btn-sm join-item"
+                        :class="readerValue(grp.key) === o.v ? 'btn-primary' : 'btn-ghost'"
+                        @click="setReader(grp.key, o.v)"
+                      >
+                        {{ o.l }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -201,170 +368,6 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
               </div>
             </div>
             <p class="text-xs text-base-content/60">Higher level = more explicit. Drives per-library content filtering.</p>
-          </section>
-        </div>
-
-        <!-- Integrations: Providers + Trackers -->
-        <div v-else-if="active === 'integrations'" class="grid items-start gap-6 lg:grid-cols-2">
-          <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Metadata providers</h3>
-            <div class="card bg-base-100">
-              <div class="card-body gap-4 p-4">
-                <div class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">MangaDex</div>
-                      <div class="text-xs text-base-content/50">Primary metadata source &amp; optional chapter downloader</div>
-                    </div>
-                  </div>
-                  <input v-model="provider.enabled" type="checkbox" class="toggle toggle-primary" />
-                </div>
-                <label class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Preferred language</div>
-                      <div class="text-xs text-base-content/50">Fetch metadata &amp; chapters in this language when available</div>
-                    </div>
-                  </div>
-                  <select v-model="provider.language" class="select select-bordered select-sm w-32">
-                    <option v-for="l in providerLanguages" :key="l">{{ l }}</option>
-                  </select>
-                </label>
-                <label class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Wand2 class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Auto-match on scan</div>
-                      <div class="text-xs text-base-content/50">Match new series to MangaDex automatically after each scan</div>
-                    </div>
-                  </div>
-                  <input v-model="provider.autoMatch" type="checkbox" class="toggle toggle-primary toggle-sm" />
-                </label>
-                <label class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Image class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Download covers</div>
-                      <div class="text-xs text-base-content/50">Fetch cover art from the provider when a series has none</div>
-                    </div>
-                  </div>
-                  <input v-model="provider.fetchCovers" type="checkbox" class="toggle toggle-primary toggle-sm" />
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Trackers</h3>
-            <div class="card bg-base-100">
-              <div class="card-body gap-4 p-4">
-                <div v-for="t in trackers" :key="t.name" class="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div class="text-sm font-medium">{{ t.name }}</div>
-                    <div class="text-xs" :class="t.connected ? 'text-success' : 'text-base-content/50'">
-                      {{ t.connected ? "Connected" : "Not connected" }}
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <label v-if="t.connected" class="flex items-center gap-2 text-xs text-base-content/60">
-                      Sync on read
-                      <input v-model="t.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" />
-                    </label>
-                    <button
-                      class="btn btn-sm"
-                      :class="t.connected ? 'btn-ghost text-error' : 'btn-primary'"
-                      @click="t.connected = !t.connected"
-                    >
-                      {{ t.connected ? "Disconnect" : "Connect" }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <!-- Preferences: Appearance + Reader -->
-        <div v-else-if="active === 'preferences'" class="grid items-start gap-6 lg:grid-cols-2">
-          <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Appearance</h3>
-            <div class="card bg-base-100">
-              <div class="card-body gap-4 p-4">
-                <div class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Sun class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Theme</div>
-                      <div class="text-xs text-base-content/50">Dark or light interface</div>
-                    </div>
-                  </div>
-                  <div class="join">
-                    <button class="btn btn-sm join-item" :class="theme === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'dark' && toggle()">Dark</button>
-                    <button class="btn btn-sm join-item" :class="theme === 'light' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'light' && toggle()">Light</button>
-                  </div>
-                </div>
-                <label class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <LayoutGrid class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Default library density</div>
-                      <div class="text-xs text-base-content/50">How libraries open by default</div>
-                    </div>
-                  </div>
-                  <select
-                    class="select select-bordered select-sm w-32"
-                    :value="density"
-                    @change="setDensity(($event.target as HTMLSelectElement).value)"
-                  >
-                    <option value="list">List</option>
-                    <option value="compact">Compact</option>
-                    <option value="gallery">Gallery</option>
-                  </select>
-                </label>
-                <label class="flex items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
-                    <div>
-                      <div class="text-sm font-medium">Language</div>
-                      <div class="text-xs text-base-content/50">Interface language</div>
-                    </div>
-                  </div>
-                  <select v-model="language" class="select select-bordered select-sm w-32">
-                    <option>English</option>
-                    <option>日本語</option>
-                    <option>Español</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader defaults</h3>
-            <div class="card bg-base-100">
-              <div class="card-body gap-4 p-4">
-                <div v-for="grp in readerGroups" :key="grp.key" class="flex flex-wrap items-center justify-between gap-3">
-                  <div class="flex items-center gap-3">
-                    <component :is="grp.icon" class="size-5 shrink-0 text-primary" />
-                    <span class="text-sm font-medium">{{ grp.label }}</span>
-                  </div>
-                  <div class="join">
-                    <button
-                      v-for="o in grp.opts"
-                      :key="o.v"
-                      class="btn btn-sm join-item"
-                      :class="readerValue(grp.key) === o.v ? 'btn-primary' : 'btn-ghost'"
-                      @click="setReader(grp.key, o.v)"
-                    >
-                      {{ o.l }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p class="text-xs text-base-content/60">Defaults for newly opened chapters; per-series overrides stick.</p>
           </section>
         </div>
 
