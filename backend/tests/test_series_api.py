@@ -1,0 +1,100 @@
+"""Tests for the series grid + detail API."""
+
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from tests.support import make_series
+
+
+def test_list_series_empty(client: TestClient) -> None:
+    resp = client.get("/api/series")
+    assert resp.status_code == 200
+    assert resp.json() == {"items": [], "nextCursor": None}
+
+
+def test_list_and_detail_with_derived_counts(client: TestClient, db_session: Session) -> None:
+    make_series(
+        db_session,
+        title="Berserk",
+        kind="manga",
+        chapter_count=5,
+        unread=2,
+        tag_ids=["action"],
+        favorite=True,
+    )
+    db_session.commit()
+
+    data = client.get("/api/series").json()
+    assert len(data["items"]) == 1
+    item = data["items"][0]
+    assert item["title"] == "Berserk"
+    assert item["chapterCount"] == 5
+    assert item["unreadCount"] == 2
+    assert item["lastReadChapter"] == 3.0  # 3 of 5 read
+    assert item["favorite"] is True
+    assert item["coverUrl"].endswith(f"/api/series/{item['id']}/cover")
+    assert item["tags"][0]["id"] == "action"
+
+    detail = client.get(f"/api/series/{item['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["id"] == item["id"]
+
+
+def test_detail_missing_is_404(client: TestClient) -> None:
+    assert client.get("/api/series/does-not-exist").status_code == 404
+
+
+def test_filter_by_kind_and_favorite(client: TestClient, db_session: Session) -> None:
+    make_series(db_session, title="Manga A", kind="manga", favorite=True)
+    make_series(db_session, title="Comic B", kind="comic", favorite=False)
+    make_series(db_session, title="Gallery C", kind="gallery")
+    db_session.commit()
+
+    manga = client.get("/api/series", params={"kind": "manga"}).json()["items"]
+    assert [s["title"] for s in manga] == ["Manga A"]
+
+    favorites = client.get("/api/series", params={"favorite": "true"}).json()["items"]
+    assert [s["title"] for s in favorites] == ["Manga A"]
+
+
+def test_tag_include_and_exclude(client: TestClient, db_session: Session) -> None:
+    make_series(db_session, title="Action Only", tag_ids=["action"])
+    make_series(db_session, title="Action + Romance", tag_ids=["action", "romance"])
+    make_series(db_session, title="Romance Only", tag_ids=["romance"])
+    db_session.commit()
+
+    only_action = client.get("/api/series", params={"tags": "action,-romance"}).json()["items"]
+    assert [s["title"] for s in only_action] == ["Action Only"]
+
+    both = client.get("/api/series", params={"tags": "action,romance", "tagMode": "and"}).json()
+    assert [s["title"] for s in both["items"]] == ["Action + Romance"]
+
+
+def test_sort_by_title(client: TestClient, db_session: Session) -> None:
+    for title in ("Charlie", "alpha", "Bravo"):
+        make_series(db_session, title=title)
+    db_session.commit()
+
+    titles = [s["title"] for s in client.get("/api/series", params={"sort": "title"}).json()["items"]]
+    assert titles == ["alpha", "Bravo", "Charlie"]
+
+
+def test_cursor_pagination_walks_all(client: TestClient, db_session: Session) -> None:
+    for i in range(5):
+        make_series(db_session, title=f"S{i}")
+    db_session.commit()
+
+    seen: list[str] = []
+    cursor: str | None = None
+    for _ in range(10):  # safety bound
+        params: dict[str, str | int] = {"limit": 2}
+        if cursor:
+            params["cursor"] = cursor
+        page = client.get("/api/series", params=params).json()
+        seen.extend(s["id"] for s in page["items"])
+        cursor = page["nextCursor"]
+        if cursor is None:
+            break
+
+    assert len(seen) == 5
+    assert len(set(seen)) == 5  # no dupes, no gaps
