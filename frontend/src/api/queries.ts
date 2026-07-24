@@ -162,6 +162,13 @@ export function useSeriesList() {
 
 // --- series detail -------------------------------------------------------------
 
+export async function patchSeries(
+  id: string,
+  body: { favorite?: boolean; libraryStatus?: string; rating?: number | null },
+): Promise<void> {
+  await api.PATCH("/api/series/{series_id}", { params: { path: { series_id: id } }, body });
+}
+
 export async function fetchSeries(id: string): Promise<Series> {
   const { data, error } = await api.GET("/api/series/{series_id}", {
     params: { path: { series_id: id } },

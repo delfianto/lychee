@@ -3,7 +3,7 @@ import { Bookmark, BookOpen, Check, Heart, ListPlus, RefreshCw, Star } from "luc
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
-import { fetchArt, fetchChapters, fetchRelated, fetchSeries } from "../api/queries";
+import { fetchArt, fetchChapters, fetchRelated, fetchSeries, patchSeries } from "../api/queries";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
@@ -41,6 +41,7 @@ async function load(id: string): Promise<void> {
   artCovers.value = art;
   favorite.value = s.favorite ?? false;
   libraryStatus.value = s.libraryStatus ?? "none";
+  userRating.value = s.userRating ?? null;
 }
 watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
 
@@ -52,8 +53,25 @@ function toggleList(l: Collection): void {
   toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
 }
 
+function toggleFavorite(): void {
+  if (!series.value) return;
+  favorite.value = !favorite.value;
+  void patchSeries(series.value.id, { favorite: favorite.value });
+}
+function setStatus(status: LibraryStatus): void {
+  if (!series.value) return;
+  libraryStatus.value = status;
+  void patchSeries(series.value.id, { libraryStatus: status });
+}
 function setRating(n: number): void {
+  if (!series.value) return;
   userRating.value = n;
+  void patchSeries(series.value.id, { rating: n });
+}
+function clearRating(): void {
+  if (!series.value) return;
+  userRating.value = null;
+  void patchSeries(series.value.id, { rating: null });
 }
 
 const statuses: { value: LibraryStatus; label: string }[] = [
@@ -152,7 +170,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                   class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
                 >
                   <li v-for="s in statuses" :key="s.value">
-                    <a :class="{ 'menu-active': s.value === libraryStatus }" @click="libraryStatus = s.value">
+                    <a :class="{ 'menu-active': s.value === libraryStatus }" @click="setStatus(s.value)">
                       {{ s.label }}
                     </a>
                   </li>
@@ -182,7 +200,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                       />
                     </button>
                   </div>
-                  <button v-if="userRating" class="btn btn-ghost btn-xs mt-2 w-full" @click="userRating = null">
+                  <button v-if="userRating" class="btn btn-ghost btn-xs mt-2 w-full" @click="clearRating">
                     Clear rating
                   </button>
                 </div>
@@ -193,7 +211,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 class="btn btn-square btn-sm"
                 :class="{ 'text-error': favorite }"
                 aria-label="Favorite"
-                @click="favorite = !favorite"
+                @click="toggleFavorite"
               >
                 <Heart class="size-4" :class="{ 'fill-current': favorite }" />
               </button>

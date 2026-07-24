@@ -3,7 +3,7 @@ import { Check, Heart, Images, ListPlus } from "lucide-vue-next";
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
-import { fetchGalleryImages, fetchSeries } from "../api/queries";
+import { fetchGalleryImages, fetchSeries, patchSeries } from "../api/queries";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
 import { toast } from "../lib/toast";
@@ -31,6 +31,12 @@ function toggleList(l: Collection): void {
   const wasIn = collections.hasSeries(l.id, gid);
   collections.toggleSeries(l.id, gid);
   toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
+}
+
+function toggleFavorite(): void {
+  if (!gallery.value) return;
+  favorite.value = !favorite.value;
+  void patchSeries(gallery.value.id, { favorite: favorite.value });
 }
 
 // Lightbox
@@ -100,7 +106,7 @@ function openAt(i: number): void {
             class="btn btn-square btn-sm"
             :class="{ 'text-error': favorite }"
             aria-label="Favorite"
-            @click="favorite = !favorite"
+            @click="toggleFavorite"
           >
             <Heart class="size-4" :class="{ 'fill-current': favorite }" />
           </button>
