@@ -2,11 +2,14 @@
 
 import httpx
 from src.downloads.provider import RemoteChapter
-from src.providers.mangadex import API_BASE, MangaDexProvider
+from src.providers.mangadex import MangaDexProvider
+from src.providers.mangadex_client import API_BASE
 
 
 def _handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
+    if path == "/report":  # mandatory MangaDex@Home report (best-effort)
+        return httpx.Response(200)
     if path.endswith("/feed"):
         return httpx.Response(
             200,

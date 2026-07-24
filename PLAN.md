@@ -284,13 +284,16 @@ override.
 
 ### Phases
 
-**M0 — Client foundation** (shared infra)
-- [ ] Rate-limited `httpx` client: token bucket ~5 req/s global + a separate 40/min at-home bucket;
-      429 / `Retry-After` backoff; required `User-Agent`; retries + jitter on 429/5xx.
-- [ ] MangaDex@Home report client (POST `.network/report`; best-effort — never fails a download).
-- [ ] Extend the provider abstraction: a `MetadataProvider` protocol (`search`, `get_metadata`,
-      `list_new_chapters`) alongside the download methods; the MangaDex impl satisfies both.
-- [ ] Provider config: add a `data_saver` (quality) option (migration or `options_json`).
+**M0 — Client foundation** (shared infra) — ✅ done
+- [x] Rate-limited client: `src/providers/ratelimit.py` (`TokenBucket`, thread-safe, injectable
+      clock) + `src/providers/mangadex_client.py` (`MangaDexClient`): global 5 req/s + at-home 40/min
+      buckets, 429 / `X-RateLimit-Retry-After` + bounded 5xx retries, required `User-Agent`.
+      `MangaDexProvider` refactored onto it.
+- [x] MangaDex@Home report — best-effort `MangaDexClient.report(...)`, wired into `fetch_pages`
+      (per-page success/failure report; never fails a download).
+- [x] Provider abstraction extended: `MetadataProvider` protocol + `MangaMatch` / `SeriesMetadata`
+      DTOs in `downloads/provider.py` (the contract M1/M2/M5 implement).
+- [ ] `data_saver` (quality) option → **moved to M3** (only meaningful once `fetch_pages` consumes it).
 
 **M1 — Metadata fetch + mapping**
 - [ ] `get_metadata(id)`: `GET /manga/{id}?includes[]=cover_art,author,artist` + `/statistics` +
@@ -309,11 +312,12 @@ override.
 - [ ] Manual: `GET /api/series/{id}/match-candidates?q=` + `POST /api/series/{id}/match` + unlink; FE
       match-picker modal (with covers) on SeriesDetail; a "Refresh metadata" action.
 
-**M3 — Download enhancements** (pipeline already on the queue with per-page progress)
+**M3 — Download enhancements** (pipeline on the queue; M0 added rate limiting + per-page reporting)
 - [ ] Feed: `contentRating[]` (all, filtered to the library's policy), `includes[]=scanlation_group`,
       capture `publishAt`→`source_uploaded_at`, title, volume; feed `limit=500`; respect the offset cap.
-- [ ] `fetch_pages`: quality from config (`data` / `data-saver`); mandatory per-page report; 403 →
-      re-fetch at-home; 40/min bucket; no auth headers to nodes.
+- [ ] Provider `data_saver` (quality) config (migration or `options_json`) + `fetch_pages` picks
+      `data` vs `data-saver`; on 403 re-fetch `/at-home/server` and retry. (Per-page report + the
+      40/min at-home bucket are already done in M0.)
 
 **M4 — Account auth (OAuth2) + follows / status import**
 - [ ] OAuth2 personal-client flow (password → refresh grant); encrypted token store (Provider columns

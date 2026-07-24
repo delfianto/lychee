@@ -7,7 +7,7 @@ at startup, and tests register a fake one — no network in the pipeline itself.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 
@@ -28,6 +28,58 @@ class Provider(Protocol):
 
     def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
         ...
+
+
+# --- Metadata side of the abstraction (PART F) --------------------------------
+# Declared here so the matching (M2), refresh (M1), and sync (M5) services can
+# depend on the contract now; MangaDexProvider implements it in those phases.
+
+
+@dataclass(frozen=True)
+class MangaMatch:
+    """A search hit when matching a local series to a provider entry (M2)."""
+
+    provider_series_id: str
+    title: str
+    year: int | None = None
+    status: str | None = None
+    cover_url: str | None = None
+
+
+@dataclass
+class SeriesMetadata:
+    """Normalised provider metadata for one series (M1), before mapping to the model."""
+
+    provider_series_id: str
+    title: str
+    alt_titles: list[tuple[str, str]] = field(default_factory=list)  # (language, title)
+    description: str | None = None
+    status: str | None = None
+    year: int | None = None
+    content_rating: str | None = None
+    demographic: str | None = None
+    original_language: str | None = None
+    tags: list[str] = field(default_factory=list)
+    authors: list[str] = field(default_factory=list)
+    artists: list[str] = field(default_factory=list)
+    cover_url: str | None = None
+    total_chapters: int | None = None
+    community_rating: float | None = None
+    external_ids: dict[str, str] = field(default_factory=dict)  # site -> id: al, mal, mu, …
+
+
+class MetadataProvider(Protocol):
+    """Search + metadata + new-chapter discovery (PART F M1/M2/M5)."""
+
+    id: str
+
+    def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]: ...
+
+    def get_metadata(self, provider_series_id: str) -> SeriesMetadata: ...
+
+    def list_new_chapters(
+        self, provider_series_id: str, *, known: set[str], language: str = "en"
+    ) -> list[RemoteChapter]: ...
 
 
 _REGISTRY: dict[str, Provider] = {}
