@@ -4,6 +4,275 @@
   themes: dark --default, light;
 }
 
+/* Popular community themes, authored from their published palettes as full
+   DaisyUI themes (base surfaces + harmonized accents). base-100 is the elevated
+   surface (cards/navbar), base-200 the page background, base-300 the deepest.
+   The theme registry lives in lib/theme.ts. */
+@plugin "daisyui/theme" {
+  name: "nord";
+  color-scheme: dark;
+  --color-base-100: #3b4252;
+  --color-base-200: #2e3440;
+  --color-base-300: #272c36;
+  --color-base-content: #eceff4;
+  --color-primary: #88c0d0;
+  --color-primary-content: #2e3440;
+  --color-secondary: #81a1c1;
+  --color-secondary-content: #2e3440;
+  --color-accent: #b48ead;
+  --color-accent-content: #2e3440;
+  --color-neutral: #4c566a;
+  --color-neutral-content: #eceff4;
+  --color-info: #5e81ac;
+  --color-info-content: #eceff4;
+  --color-success: #a3be8c;
+  --color-success-content: #2e3440;
+  --color-warning: #ebcb8b;
+  --color-warning-content: #2e3440;
+  --color-error: #bf616a;
+  --color-error-content: #eceff4;
+}
+@plugin "daisyui/theme" {
+  name: "dracula";
+  color-scheme: dark;
+  --color-base-100: #343746;
+  --color-base-200: #282a36;
+  --color-base-300: #1e1f29;
+  --color-base-content: #f8f8f2;
+  --color-primary: #bd93f9;
+  --color-primary-content: #282a36;
+  --color-secondary: #ff79c6;
+  --color-secondary-content: #282a36;
+  --color-accent: #8be9fd;
+  --color-accent-content: #282a36;
+  --color-neutral: #44475a;
+  --color-neutral-content: #f8f8f2;
+  --color-info: #8be9fd;
+  --color-info-content: #282a36;
+  --color-success: #50fa7b;
+  --color-success-content: #282a36;
+  --color-warning: #f1fa8c;
+  --color-warning-content: #282a36;
+  --color-error: #ff5555;
+  --color-error-content: #f8f8f2;
+}
+@plugin "daisyui/theme" {
+  name: "catppuccin-mocha";
+  color-scheme: dark;
+  --color-base-100: #313244;
+  --color-base-200: #1e1e2e;
+  --color-base-300: #181825;
+  --color-base-content: #cdd6f4;
+  --color-primary: #cba6f7;
+  --color-primary-content: #1e1e2e;
+  --color-secondary: #f5c2e7;
+  --color-secondary-content: #1e1e2e;
+  --color-accent: #94e2d5;
+  --color-accent-content: #1e1e2e;
+  --color-neutral: #45475a;
+  --color-neutral-content: #cdd6f4;
+  --color-info: #89b4fa;
+  --color-info-content: #1e1e2e;
+  --color-success: #a6e3a1;
+  --color-success-content: #1e1e2e;
+  --color-warning: #f9e2af;
+  --color-warning-content: #1e1e2e;
+  --color-error: #f38ba8;
+  --color-error-content: #1e1e2e;
+}
+@plugin "daisyui/theme" {
+  name: "catppuccin-latte";
+  color-scheme: light;
+  --color-base-100: #eff1f5;
+  --color-base-200: #e6e9ef;
+  --color-base-300: #dce0e8;
+  --color-base-content: #4c4f69;
+  --color-primary: #8839ef;
+  --color-primary-content: #eff1f5;
+  --color-secondary: #ea76cb;
+  --color-secondary-content: #eff1f5;
+  --color-accent: #179299;
+  --color-accent-content: #eff1f5;
+  --color-neutral: #6c6f85;
+  --color-neutral-content: #eff1f5;
+  --color-info: #1e66f5;
+  --color-info-content: #eff1f5;
+  --color-success: #40a02b;
+  --color-success-content: #eff1f5;
+  --color-warning: #df8e1d;
+  --color-warning-content: #4c4f69;
+  --color-error: #d20f39;
+  --color-error-content: #eff1f5;
+}
+@plugin "daisyui/theme" {
+  name: "gruvbox-dark";
+  color-scheme: dark;
+  --color-base-100: #3c3836;
+  --color-base-200: #282828;
+  --color-base-300: #1d2021;
+  --color-base-content: #ebdbb2;
+  --color-primary: #fabd2f;
+  --color-primary-content: #282828;
+  --color-secondary: #fe8019;
+  --color-secondary-content: #282828;
+  --color-accent: #8ec07c;
+  --color-accent-content: #282828;
+  --color-neutral: #504945;
+  --color-neutral-content: #ebdbb2;
+  --color-info: #83a598;
+  --color-info-content: #282828;
+  --color-success: #b8bb26;
+  --color-success-content: #282828;
+  --color-warning: #fabd2f;
+  --color-warning-content: #282828;
+  --color-error: #fb4934;
+  --color-error-content: #282828;
+}
+@plugin "daisyui/theme" {
+  name: "gruvbox-light";
+  color-scheme: light;
+  --color-base-100: #fbf1c7;
+  --color-base-200: #f2e5bc;
+  --color-base-300: #ebdbb2;
+  --color-base-content: #3c3836;
+  --color-primary: #b57614;
+  --color-primary-content: #fbf1c7;
+  --color-secondary: #af3a03;
+  --color-secondary-content: #fbf1c7;
+  --color-accent: #427b58;
+  --color-accent-content: #fbf1c7;
+  --color-neutral: #7c6f64;
+  --color-neutral-content: #fbf1c7;
+  --color-info: #076678;
+  --color-info-content: #fbf1c7;
+  --color-success: #79740e;
+  --color-success-content: #fbf1c7;
+  --color-warning: #b57614;
+  --color-warning-content: #fbf1c7;
+  --color-error: #9d0006;
+  --color-error-content: #fbf1c7;
+}
+@plugin "daisyui/theme" {
+  name: "solarized-dark";
+  color-scheme: dark;
+  --color-base-100: #073642;
+  --color-base-200: #002b36;
+  --color-base-300: #00212b;
+  --color-base-content: #93a1a1;
+  --color-primary: #268bd2;
+  --color-primary-content: #fdf6e3;
+  --color-secondary: #2aa198;
+  --color-secondary-content: #fdf6e3;
+  --color-accent: #6c71c4;
+  --color-accent-content: #fdf6e3;
+  --color-neutral: #586e75;
+  --color-neutral-content: #fdf6e3;
+  --color-info: #268bd2;
+  --color-info-content: #fdf6e3;
+  --color-success: #859900;
+  --color-success-content: #fdf6e3;
+  --color-warning: #b58900;
+  --color-warning-content: #fdf6e3;
+  --color-error: #dc322f;
+  --color-error-content: #fdf6e3;
+}
+@plugin "daisyui/theme" {
+  name: "solarized-light";
+  color-scheme: light;
+  --color-base-100: #fdf6e3;
+  --color-base-200: #eee8d5;
+  --color-base-300: #e3ddc9;
+  --color-base-content: #657b83;
+  --color-primary: #268bd2;
+  --color-primary-content: #fdf6e3;
+  --color-secondary: #2aa198;
+  --color-secondary-content: #fdf6e3;
+  --color-accent: #6c71c4;
+  --color-accent-content: #fdf6e3;
+  --color-neutral: #93a1a1;
+  --color-neutral-content: #002b36;
+  --color-info: #268bd2;
+  --color-info-content: #fdf6e3;
+  --color-success: #859900;
+  --color-success-content: #fdf6e3;
+  --color-warning: #b58900;
+  --color-warning-content: #fdf6e3;
+  --color-error: #dc322f;
+  --color-error-content: #fdf6e3;
+}
+@plugin "daisyui/theme" {
+  name: "tokyonight";
+  color-scheme: dark;
+  --color-base-100: #1f2335;
+  --color-base-200: #1a1b26;
+  --color-base-300: #16161e;
+  --color-base-content: #c0caf5;
+  --color-primary: #7aa2f7;
+  --color-primary-content: #1a1b26;
+  --color-secondary: #bb9af7;
+  --color-secondary-content: #1a1b26;
+  --color-accent: #7dcfff;
+  --color-accent-content: #1a1b26;
+  --color-neutral: #292e42;
+  --color-neutral-content: #c0caf5;
+  --color-info: #7dcfff;
+  --color-info-content: #1a1b26;
+  --color-success: #9ece6a;
+  --color-success-content: #1a1b26;
+  --color-warning: #e0af68;
+  --color-warning-content: #1a1b26;
+  --color-error: #f7768e;
+  --color-error-content: #1a1b26;
+}
+@plugin "daisyui/theme" {
+  name: "rosepine";
+  color-scheme: dark;
+  --color-base-100: #1f1d2e;
+  --color-base-200: #191724;
+  --color-base-300: #161421;
+  --color-base-content: #e0def4;
+  --color-primary: #c4a7e7;
+  --color-primary-content: #191724;
+  --color-secondary: #ebbcba;
+  --color-secondary-content: #191724;
+  --color-accent: #9ccfd8;
+  --color-accent-content: #191724;
+  --color-neutral: #26233a;
+  --color-neutral-content: #e0def4;
+  --color-info: #31748f;
+  --color-info-content: #e0def4;
+  --color-success: #9ccfd8;
+  --color-success-content: #191724;
+  --color-warning: #f6c177;
+  --color-warning-content: #191724;
+  --color-error: #eb6f92;
+  --color-error-content: #191724;
+}
+@plugin "daisyui/theme" {
+  name: "rosepine-dawn";
+  color-scheme: light;
+  --color-base-100: #fffaf3;
+  --color-base-200: #faf4ed;
+  --color-base-300: #f2e9e1;
+  --color-base-content: #575279;
+  --color-primary: #907aa9;
+  --color-primary-content: #fffaf3;
+  --color-secondary: #d7827e;
+  --color-secondary-content: #fffaf3;
+  --color-accent: #56949f;
+  --color-accent-content: #fffaf3;
+  --color-neutral: #9893a5;
+  --color-neutral-content: #fffaf3;
+  --color-info: #286983;
+  --color-info-content: #fffaf3;
+  --color-success: #56949f;
+  --color-success-content: #fffaf3;
+  --color-warning: #ea9d34;
+  --color-warning-content: #575279;
+  --color-error: #b4637a;
+  --color-error-content: #fffaf3;
+}
+
 /* The status-dot colors live only in a TS map (lib/display.ts), so force-generate
    them — the class scanner would otherwise purge them as "unused". */
 @source inline("bg-{success,info,warning,error}");
@@ -21,57 +290,6 @@
      on base-content at a low alpha instead — the same trick that makes
      badge-outline read in both themes. Tune the whole app's borders here. */
   --surface-border: color-mix(in oklch, var(--color-base-content) 20%, transparent);
-}
-
-/* Accent color schemes — override only the accent trio (via Tailwind's color
-   scale) so every scheme works on top of both the light and dark base. */
-[data-scheme="emerald"] {
-  --color-primary: var(--color-emerald-500);
-  --color-primary-content: var(--color-emerald-50);
-  --color-secondary: var(--color-teal-500);
-  --color-secondary-content: var(--color-teal-50);
-  --color-accent: var(--color-lime-400);
-  --color-accent-content: var(--color-lime-950);
-}
-[data-scheme="teal"] {
-  --color-primary: var(--color-teal-500);
-  --color-primary-content: var(--color-teal-50);
-  --color-secondary: var(--color-cyan-500);
-  --color-secondary-content: var(--color-cyan-50);
-  --color-accent: var(--color-emerald-400);
-  --color-accent-content: var(--color-emerald-950);
-}
-[data-scheme="sky"] {
-  --color-primary: var(--color-sky-500);
-  --color-primary-content: var(--color-sky-50);
-  --color-secondary: var(--color-blue-500);
-  --color-secondary-content: var(--color-blue-50);
-  --color-accent: var(--color-cyan-400);
-  --color-accent-content: var(--color-cyan-950);
-}
-[data-scheme="violet"] {
-  --color-primary: var(--color-violet-500);
-  --color-primary-content: var(--color-violet-50);
-  --color-secondary: var(--color-purple-500);
-  --color-secondary-content: var(--color-purple-50);
-  --color-accent: var(--color-fuchsia-400);
-  --color-accent-content: var(--color-fuchsia-950);
-}
-[data-scheme="rose"] {
-  --color-primary: var(--color-rose-500);
-  --color-primary-content: var(--color-rose-50);
-  --color-secondary: var(--color-pink-500);
-  --color-secondary-content: var(--color-pink-50);
-  --color-accent: var(--color-fuchsia-400);
-  --color-accent-content: var(--color-fuchsia-950);
-}
-[data-scheme="amber"] {
-  --color-primary: var(--color-amber-500);
-  --color-primary-content: var(--color-amber-950);
-  --color-secondary: var(--color-orange-500);
-  --color-secondary-content: var(--color-orange-50);
-  --color-accent: var(--color-yellow-400);
-  --color-accent-content: var(--color-yellow-950);
 }
 
 /* Every floating surface (cards, dropdown menus) shares the one border token,

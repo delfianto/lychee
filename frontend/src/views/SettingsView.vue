@@ -24,14 +24,18 @@ import { type Component, reactive, ref } from "vue";
 
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
-import { COLOR_SCHEMES, type Mode, useTheme } from "../lib/theme";
+import { THEMES, type Mode, useTheme } from "../lib/theme";
 import { browseTagGroups } from "../mocks/library";
 import type { ContentRating } from "../types";
 
-const { mode, scheme, setMode, setScheme } = useTheme();
+const { theme, mode, setTheme, setMode } = useTheme();
 const themeOptions: { value: Mode; label: string }[] = [
   { value: "dark", label: "Dark" },
   { value: "light", label: "Light" },
+];
+const themeGroups = [
+  { label: "Light", themes: THEMES.filter((t) => t.mode === "light") },
+  { label: "Dark", themes: THEMES.filter((t) => t.mode === "dark") },
 ];
 
 // The card-form settings collapse onto one "General" page; the table-heavy
@@ -129,8 +133,11 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
 
       <!-- Content pane -->
       <div class="min-w-0 grow">
+        <!-- Fade between sub-tabs (same transition as page navigation). Distinct
+             keys are required or Vue reuses the <div> and skips the animation. -->
+        <Transition name="page" mode="out-in">
         <!-- General: Libraries + Integrations + Preferences -->
-        <div v-if="active === 'general'" class="flex flex-col gap-8">
+        <div v-if="active === 'general'" key="general" class="flex flex-col gap-8">
           <!-- Libraries -->
           <section class="flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -252,8 +259,8 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                     <div class="flex items-start gap-3">
                       <Sun class="mt-0.5 size-5 shrink-0 text-primary" />
                       <div>
-                        <div class="text-sm font-medium">Theme</div>
-                        <div class="text-xs text-base-content/50">Dark or light interface</div>
+                        <div class="text-sm font-medium">Mode</div>
+                        <div class="text-xs text-base-content/50">Flip between your light &amp; dark theme</div>
                       </div>
                     </div>
                     <SegmentedToggle :model-value="mode" :options="themeOptions" aria-label="Theme" @update:model-value="setMode" />
@@ -318,32 +325,35 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
             </section>
           </div>
 
-          <!-- Color scheme (accent palette — independent of the light/dark mode above) -->
+          <!-- Theme — full community themes. The Dark/Light toggle above flips
+               between your last light and dark pick. -->
           <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Color scheme</h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Theme</h3>
             <div class="card bg-base-100">
-              <div class="card-body gap-3 p-4">
-                <p class="text-xs text-base-content/50">Accent palette. Works with both the light and dark mode.</p>
-                <div class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
-                  <button
-                    v-for="s in COLOR_SCHEMES"
-                    :key="s"
-                    class="flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition"
-                    :class="scheme === s ? 'bg-base-200 ring-2 ring-primary' : 'hover:bg-base-200'"
-                    :aria-label="`Use ${s} color scheme`"
-                    @click="setScheme(s)"
-                  >
-                    <div
-                      :data-scheme="s"
-                      class="grid size-11 grid-cols-2 grid-rows-2 overflow-hidden rounded-md border border-base-300"
+              <div class="card-body gap-4 p-4">
+                <div v-for="group in themeGroups" :key="group.label" class="flex flex-col gap-2">
+                  <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">{{ group.label }}</div>
+                  <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    <button
+                      v-for="t in group.themes"
+                      :key="t.id"
+                      class="flex items-center gap-2.5 rounded-lg p-2 text-left transition"
+                      :class="theme === t.id ? 'bg-base-200 ring-2 ring-primary' : 'hover:bg-base-200'"
+                      :aria-label="`Use ${t.name} ${group.label} theme`"
+                      @click="setTheme(t.id)"
                     >
-                      <div class="bg-base-100"></div>
-                      <div class="bg-primary"></div>
-                      <div class="bg-secondary"></div>
-                      <div class="bg-accent"></div>
-                    </div>
-                    <span class="text-xs capitalize text-base-content/70">{{ s }}</span>
-                  </button>
+                      <div
+                        :data-theme="t.id"
+                        class="grid size-9 shrink-0 grid-cols-2 grid-rows-2 overflow-hidden rounded-md border border-base-300"
+                      >
+                        <div class="bg-base-100"></div>
+                        <div class="bg-primary"></div>
+                        <div class="bg-secondary"></div>
+                        <div class="bg-accent"></div>
+                      </div>
+                      <span class="min-w-0 truncate text-xs text-base-content/80">{{ t.name }}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -351,7 +361,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
         </div>
 
         <!-- Content: Tags + Content rating -->
-        <div v-else-if="active === 'content'" class="flex flex-col gap-8">
+        <div v-else-if="active === 'content'" key="content" class="flex flex-col gap-8">
           <section class="flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Tags</h3>
@@ -408,7 +418,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
         </div>
 
         <!-- About -->
-        <div v-else-if="active === 'about'" class="flex flex-col gap-3">
+        <div v-else-if="active === 'about'" key="about" class="flex flex-col gap-3">
           <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">About</h3>
           <div class="card bg-base-100">
             <div class="card-body gap-3 p-4">
@@ -438,6 +448,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
           </div>
           <p class="text-xs text-base-content/60">Self-hosted manga &amp; comic server.</p>
         </div>
+        </Transition>
       </div>
     </div>
   </div>
