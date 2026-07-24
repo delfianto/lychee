@@ -99,8 +99,6 @@ const SEEDS: Seed[] = [
   { title: "Saga", cc: "us", kind: "comic", status: "ongoing", demographic: "none", rating: 9.0, content: "mature", tags: ["sci-fi", "fantasy", "romance"], year: 2012, chapters: 66, fav: true, unread: 2, lib: "reading", read: 54, desc: "Two soldiers from opposite sides of a galactic war fall in love and flee with their newborn daughter, hunted across a strange and gorgeous universe." },
   { title: "Watchmen", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.2, content: "mature", tags: ["superhero", "mystery", "drama"], year: 1986, chapters: 12, lib: "completed", desc: "In an alternate 1985, the murder of a costumed vigilante pulls a group of retired heroes into a conspiracy that questions the very idea of heroism." },
   { title: "The Sandman", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.1, content: "mature", tags: ["fantasy", "horror", "drama"], year: 1989, chapters: 75, desc: "Freed after decades of captivity, Dream of the Endless sets out to rebuild his realm — a sprawling myth woven from history, folklore and nightmare." },
-  { title: "Dune", cc: "us", kind: "book", status: "completed", demographic: "none", rating: 9.3, content: "safe", tags: ["sci-fi", "adventure"], year: 1965, chapters: 48, desc: "On the desert world of Arrakis, the only source of the universe's most precious substance, a betrayed noble heir is forged into a messianic force." },
-  { title: "The Name of the Wind", cc: "us", kind: "book", status: "ongoing", demographic: "none", rating: 9.0, content: "safe", tags: ["fantasy", "adventure"], year: 2007, chapters: 92, desc: "A legendary figure hiding as a humble innkeeper recounts his own story: how a gifted, reckless orphan became the most notorious name of his age." },
 ];
 
 let n = 0;
@@ -166,8 +164,6 @@ export function libraryFor(key: string): LibraryDef {
       return { key, title: "Reading", series: librarySeries.filter((s) => s.lastReadChapter !== undefined) };
     case "comics":
       return { key, title: "Comics", series: librarySeries.filter((s) => s.kind === "comic") };
-    case "books":
-      return { key, title: "Books", series: librarySeries.filter((s) => s.kind === "book") };
     default:
       return { key: "manga", title: "Manga", series: librarySeries.filter((s) => s.kind === "manga") };
   }
