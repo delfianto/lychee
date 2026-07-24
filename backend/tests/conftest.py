@@ -9,11 +9,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from src.catalog.deps import get_thumbnail_store
+from src.core.config import settings
 from src.core.persistence.base_model import Base
 from src.core.persistence.database import get_db
 from src.main import app
 from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
+
+# Tests manage their own schema per fixture; never migrate/seed the real database.
+settings.auto_bootstrap = False
 
 
 @pytest.fixture
