@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from src.catalog.models import Chapter, Series, SeriesCredit
+from src.catalog.models import Book, Chapter, Series, SeriesCredit
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
 from src.taxonomy.models import series_tag
@@ -422,6 +422,16 @@ def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRo
     """Title search (simple LIKE for now; FTS5 lands in B6)."""
     rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
     return rows
+
+
+def library_size_by_kind(session: Session) -> list[tuple[str, int]]:
+    """Total stored bytes grouped by series kind (for the storage summary)."""
+    rows = session.execute(
+        select(Series.kind, func.coalesce(func.sum(Book.file_size), 0))
+        .join(Book, Book.series_id == Series.id)
+        .group_by(Series.kind)
+    ).all()
+    return [(r[0], int(r[1])) for r in rows]
 
 
 def related_series(session: Session, series_id: str, *, limit: int = 12) -> list[SeriesRow]:
