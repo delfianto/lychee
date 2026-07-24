@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { fetchChapterDetail, fetchChapters, fetchSeries } from "../api/queries";
+import { fetchChapterDetail, fetchChapters, fetchSeries, putProgress } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import {
   type ReaderBackground,
@@ -51,6 +51,12 @@ watch(chapterId, (id) => void load(id), { immediate: true });
 const nextChapterId = computed(() => {
   const idx = orderedIds.value.indexOf(chapterId.value);
   return idx >= 0 ? orderedIds.value[idx + 1] : undefined;
+});
+
+// Record reading position as pages turn (the backend marks the chapter read when
+// the last page is reached, which drives unread counts + continue-reading).
+watch(currentPage, (page) => {
+  if (pages.value.length) void putProgress(chapterId.value, page);
 });
 function goToChapter(id: string | undefined): void {
   if (id) void router.push(`/read/${id}`);
