@@ -1,6 +1,7 @@
 """Tests for the download pipeline + Downloads API (fake provider, no network)."""
 
 import io
+import threading
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -85,6 +86,46 @@ def test_download_requires_provider(client: TestClient, db_session: Session) -> 
     series = make_series(db_session, title="Unlinked")
     db_session.commit()
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 400
+
+
+class _BlockingProvider:
+    """Blocks inside fetch_pages until released, so a download stays mid-flight."""
+
+    id = "blocking"
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.gate = threading.Event()
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        return [RemoteChapter("bc1", "1", 1, None, "en")]
+
+    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+        self.started.set()
+        _ = self.gate.wait(timeout=5)
+        return [_png(), _png()]
+
+
+def test_download_row_visible_while_running(client: TestClient, db_session: Session) -> None:
+    provider = _BlockingProvider()
+    register_provider(provider)
+    series = make_series(db_session, title="Blocking", kind="manga")
+    series.provider = "blocking"
+    series.provider_series_id = "remote-b"
+    db_session.commit()
+
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    assert provider.started.wait(2)  # worker began the (blocked) chapter fetch
+    try:
+        # the row is committed as "downloading" before the chapter finishes
+        rows = client.get("/api/downloads").json()
+        assert len(rows) == 1
+        assert rows[0]["status"] == "downloading"
+    finally:
+        provider.gate.set()  # release the worker regardless of the assertions
+
+    queue.wait_idle()
+    assert client.get("/api/downloads").json()[0]["status"] == "done"
 
 
 def test_delete_and_clear_completed(client: TestClient, db_session: Session) -> None:

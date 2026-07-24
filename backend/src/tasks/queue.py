@@ -56,7 +56,9 @@ class TaskQueue:
         return task
 
     def _run(self, task: TaskInfo, work: Work) -> None:
-        session = self._session_factory()
+        # expire_on_commit=False: work (esp. downloads) commits repeatedly to expose
+        # progress to readers, and must keep using its loaded ORM objects afterward.
+        session = self._session_factory(expire_on_commit=False)
         try:
             result = work(session, lambda pct, detail: tracker.progress(task, pct, detail))
             session.commit()
