@@ -26,9 +26,10 @@
          download of an already-linked series works today).
    - [ ] **Tracker OAuth + outbound sync** (connect is a stub; nothing pushes read status).
    - [ ] **Real sync** — `/api/sync` is a stub; check MangaDex for new chapters.
-   - [ ] **Task runner** (SQLite queue + APScheduler + ProcessPoolExecutor) — scans/downloads are
-         synchronous today.
-   - [ ] **SSE** `/api/events` + `/api/tasks` — live scan/download/sync progress (UI would poll now).
+   - [x] **SSE** `/api/events` + `/api/tasks` + task tracker — scans emit live progress events. ✅ done.
+   - [ ] **Background execution queue** — scans/downloads still run synchronously in the request; the
+         tracker/SSE layer is done, only the fire-and-forget worker (APScheduler/ProcessPoolExecutor)
+         remains. FE SSE consumption (live progress bars) also pending.
 3. **Coverage:**
    - [ ] Containers RAR/7z/PDF/EPUB + `python-magic` content sniffing (ZIP/CBZ/image-dir/AVIF-dir only).
    - [~] Search is `LIKE`; **FTS5** (B6) for ranking/typo tolerance.
@@ -81,7 +82,7 @@
 - [x] Cursor pagination `{items, nextCursor}` for grids/feeds.
 - [x] Page pagination `{items, total, page, pageSize}` (taxonomy → `OffsetPage`).
 - [x] Image URLs are API paths (`/api/series/{id}/cover`, `/api/chapters/{id}/pages/{n}`).
-- [ ] **SSE** at `GET /api/events` — not built.
+- [x] **SSE** at `GET /api/events` (+ `/api/tasks`); task tracker emits scan progress.
 - [x] No auth in v1 (single-user).
 - [~] Errors: uses FastAPI `{"detail"}` via a `LycheeError` handler, **not** `{error:{code,message}}`.
       404 for missing / 400 for corrupt containers works.
@@ -120,7 +121,8 @@
       (no content sniffing).
 - [x] Scan pipeline (walk → diff → reconcile, soft-delete + (size, partial_hash) restore) + library
       CRUD/scan API. ⚠ restore doesn't migrate reading progress (chapters dropped on soft-delete).
-- [ ] Task runner (SQLite queue + APScheduler; priority, per-series serialization; SSE) — synchronous.
+- [~] Task tracker + SSE progress events ✅; **background queue** (APScheduler, per-series
+      serialization, ProcessPoolExecutor) ❌ — scans run synchronously in the request.
 
 ## B5. Providers + downloader
 - [~] MangaDex provider: chapter listing + page download ✅; **metadata match/import + field mapping +
@@ -178,8 +180,8 @@
 - [x] Appearance/Reader/Theme/Density/Language client-side (localStorage).
 
 ### Live
-- [ ] `GET /api/events` (SSE) — not built.
-- [ ] `GET /api/tasks` — not built.
+- [x] `GET /api/events` (SSE) — task tracker emits `<kind>.started/progress/done/failed`.
+- [x] `GET /api/tasks` — recent/running task snapshot.
 
 ---
 
@@ -214,8 +216,9 @@
 6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider.
        (Metadata match/import, real sync, background queue + live progress deferred.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
-       sync/about/taxonomy/collections APIs, FE Lists + Settings swapped. **Remaining: tracker OAuth +
-       outbound sync, real sync + MangaDex import, SSE, FTS5, extra containers, task runner.**
+       sync/about/taxonomy/collections APIs, SSE + task tracker, FE Lists + Settings swapped.
+       **Remaining: tracker OAuth + outbound sync, real sync + MangaDex import, background task queue
+       + FE SSE consumption, FTS5, extra containers.**
 
 ## Handy commands
 - Backend: `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates+seeds).
