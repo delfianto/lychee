@@ -23,6 +23,14 @@
   aspect-ratio: 2 / 3;
 }
 
+/* Hide the native scrollbar on horizontal carousels (they page via dots / wheel). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Reader "sepia" reading tone — a deliberate comfort color, defined once here
    rather than as scattered arbitrary utilities in markup. */
 .reader-sepia {
