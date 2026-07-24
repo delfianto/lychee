@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from "vue-router";
 
 import AppShell from "../layouts/AppShell.vue";
 import AddedView from "../views/AddedView.vue";
+import GalleryDetail from "../views/GalleryDetail.vue";
+import GalleryView from "../views/GalleryView.vue";
 import LibraryHome from "../views/LibraryHome.vue";
 import LibraryView from "../views/LibraryView.vue";
 import ListDetailView from "../views/ListDetailView.vue";
@@ -28,6 +30,8 @@ export const router = createRouter({
         { path: "reading", name: "reading", component: LibraryView, props: { libraryKey: "reading" } },
         { path: "manga", name: "manga", component: LibraryView, props: { libraryKey: "manga" } },
         { path: "comics", name: "comics", component: LibraryView, props: { libraryKey: "comics" } },
+        { path: "gallery", name: "gallery", component: GalleryView },
+        { path: "gallery/:id", name: "gallery-detail", component: GalleryDetail },
         { path: "updates", name: "updates", component: UpdatesView },
         { path: "unread", name: "unread", component: UnreadView },
         { path: "added", name: "added", component: AddedView },

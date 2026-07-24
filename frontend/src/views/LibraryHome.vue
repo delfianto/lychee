@@ -7,7 +7,7 @@ import RecentUpdates from "../components/RecentUpdates.vue";
 import SeriesRail from "../components/SeriesRail.vue";
 import { continueReading, librarySeries, librarySummaries, recentlyAdded, recentUpdates } from "../mocks/library";
 
-const totalSeries = librarySeries.length;
+const totalSeries = librarySeries.filter((s) => s.kind !== "gallery").length;
 const unreadTotal = librarySeries.reduce((sum, s) => sum + s.unreadCount, 0);
 const readingCount = librarySeries.filter((s) => s.libraryStatus === "reading").length;
 const homeUpdates = recentUpdates.slice(0, 12);

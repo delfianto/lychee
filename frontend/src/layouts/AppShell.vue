@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Book,
   BookOpen,
+  GalleryThumbnails,
   Cherry,
   Dices,
   Heart,
@@ -57,6 +58,7 @@ const nav: NavItem[] = [
   { label: "Favorites", icon: Heart, to: "/favorites" },
   { label: "Manga", icon: Book, to: "/manga" },
   { label: "Comics", icon: Images, to: "/comics" },
+  { label: "Gallery", icon: GalleryThumbnails, to: "/gallery" },
   { label: "Lists", icon: Layers, to: "/lists" },
 ];
 </script>
