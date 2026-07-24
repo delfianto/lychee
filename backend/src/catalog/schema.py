@@ -7,9 +7,7 @@ filesystem paths (ADR 09 / B0).
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from src.core.schema import CamelModel
+from src.core.schema import CamelModel, UtcDatetime
 
 
 class TagOut(CamelModel):
@@ -51,7 +49,7 @@ class ChapterOut(CamelModel):
     title: str | None = None
     group: str | None = None
     language: str
-    uploaded_at: datetime | None = None
+    uploaded_at: UtcDatetime | None = None
     read: bool
     comments: int
 
@@ -67,7 +65,7 @@ class ChapterDetailOut(CamelModel):
     page_count: int
     comments: int
     read: bool
-    uploaded_at: datetime | None = None
+    uploaded_at: UtcDatetime | None = None
 
 
 class VolumeGroupOut(CamelModel):
@@ -79,7 +77,7 @@ class RecentUpdateOut(CamelModel):
     series: SeriesOut
     volume: int | None
     chapter: str
-    updated_at: datetime
+    updated_at: UtcDatetime
 
 
 class SeriesArtOut(CamelModel):

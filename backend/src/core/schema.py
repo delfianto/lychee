@@ -11,10 +11,26 @@
 
 import base64
 import json
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PlainSerializer
 from pydantic.alias_generators import to_camel
+
+
+def _utc_iso(value: datetime) -> str:
+    """Serialize a datetime as UTC ISO-8601 with an explicit offset.
+
+    SQLite returns our (UTC) timestamps as *naive* datetimes; without this the
+    JSON would omit the zone and browsers would misread it as local time.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat()
+
+
+# Use for every API datetime field so the wire value is unambiguously UTC.
+UtcDatetime = Annotated[datetime, PlainSerializer(_utc_iso, return_type=str)]
 
 
 class CamelModel(BaseModel):

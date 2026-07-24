@@ -1,22 +1,43 @@
 <script setup lang="ts">
 import { BookMarked, BookOpen, ChevronRight, HardDrive, Library } from "lucide-vue-next";
+import { onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import { fetchDashboard, fetchLibrarySummaries, type LibrarySummary } from "../api/queries";
 import FeaturedCarousel from "../components/FeaturedCarousel.vue";
 import RecentUpdates from "../components/RecentUpdates.vue";
 import SeriesRail from "../components/SeriesRail.vue";
-import { continueReading, librarySeries, librarySummaries, recentlyAdded, recentUpdates } from "../mocks/library";
+import type { RecentUpdate, Series } from "../types";
 
-const totalSeries = librarySeries.filter((s) => s.kind !== "gallery").length;
-const unreadTotal = librarySeries.reduce((sum, s) => sum + s.unreadCount, 0);
-const readingCount = librarySeries.filter((s) => s.libraryStatus === "reading").length;
-const homeUpdates = recentUpdates.slice(0, 12);
+const loading = ref(true);
+const totalSeries = ref(0);
+const unreadTotal = ref(0);
+const readingCount = ref(0);
+const continueReading = ref<Series[]>([]);
+const homeUpdates = ref<RecentUpdate[]>([]);
+const recentlyAdded = ref<Series[]>([]);
 // Storage per library — hide empty (0 GB) ones so the strip stays uncluttered.
-const storageLibs = librarySummaries.filter((l) => l.sizeGb > 0);
+const storageLibs = ref<LibrarySummary[]>([]);
+
+onMounted(async () => {
+  const [dashboard, summaries] = await Promise.all([fetchDashboard(), fetchLibrarySummaries()]);
+  totalSeries.value = dashboard.stats.series;
+  unreadTotal.value = dashboard.stats.unreadChapters;
+  readingCount.value = dashboard.stats.reading;
+  continueReading.value = dashboard.continueReading;
+  homeUpdates.value = dashboard.recentUpdates;
+  recentlyAdded.value = dashboard.recentlyAdded;
+  storageLibs.value = summaries.filter((l) => l.sizeGb > 0);
+  loading.value = false;
+});
 </script>
 
 <template>
   <div class="flex flex-col gap-8 p-4 sm:p-6">
+    <div v-if="loading" class="flex justify-center py-20">
+      <span class="loading loading-spinner loading-lg text-primary" />
+    </div>
+    <template v-else>
     <!-- At-a-glance stats -->
     <div class="stats stats-vertical w-full surface-border bg-base-100 shadow-sm sm:stats-horizontal sm:w-auto sm:self-start">
       <RouterLink to="/manga" class="stat transition hover:bg-base-200">
@@ -75,5 +96,6 @@ const storageLibs = librarySummaries.filter((l) => l.sizeGb > 0);
       </div>
       <SeriesRail :series="recentlyAdded" />
     </section>
+    </template>
   </div>
 </template>

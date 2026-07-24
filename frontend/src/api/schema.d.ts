@@ -452,10 +452,7 @@ export interface components {
             volume: number | null;
             /** Chapter */
             chapter: string;
-            /**
-             * Updatedat
-             * Format: date-time
-             */
+            /** Updatedat */
             updatedAt: string;
         };
         /** SeriesArtOut */
