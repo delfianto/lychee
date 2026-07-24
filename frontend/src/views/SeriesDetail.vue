@@ -106,8 +106,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             </button>
           </div>
 
-          <!-- Action row: local controls (left) · upstream actions (right) -->
-          <div class="flex flex-wrap items-center justify-between gap-2">
+          <!-- Action row: pinned to the bottom of the hero so it sits consistently
+               regardless of synopsis length. -->
+          <div class="mt-auto flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
               <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
                 <BookOpen class="size-4" />
