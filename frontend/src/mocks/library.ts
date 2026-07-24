@@ -245,6 +245,29 @@ export function galleryImages(id: string, count = 24): string[] {
   return Array.from({ length: count }, (_, i) => `https://picsum.photos/seed/${id}-g${i}/800/1000`);
 }
 
+// --- Downloads + provider sync (mock) --------------------------------------
+export interface DownloadTask {
+  id: string;
+  series: Series;
+  chapter: string;
+  status: "downloading" | "queued" | "paused" | "done" | "failed";
+  progress: number; // 0–100
+  size: string;
+}
+const byTitle = (prefix: string): Series => librarySeries.find((s) => s.title.startsWith(prefix)) ?? librarySeries[0];
+export const downloads: DownloadTask[] = [
+  { id: "d1", series: byTitle("Chainsaw Man"), chapter: "Ch. 151", status: "downloading", progress: 62, size: "18.2 MB" },
+  { id: "d2", series: byTitle("Frieren"), chapter: "Ch. 128", status: "downloading", progress: 34, size: "12.0 MB" },
+  { id: "d3", series: byTitle("One Piece"), chapter: "Ch. 1103", status: "queued", progress: 0, size: "—" },
+  { id: "d4", series: byTitle("Vinland Saga"), chapter: "Ch. 211", status: "queued", progress: 0, size: "—" },
+  { id: "d5", series: byTitle("Tower of God"), chapter: "Ch. 601", status: "paused", progress: 45, size: "8.4 MB" },
+  { id: "d6", series: byTitle("Berserk"), chapter: "Ch. 374", status: "failed", progress: 0, size: "—" },
+  { id: "d7", series: byTitle("Dungeon Meshi"), chapter: "Ch. 103", status: "done", progress: 100, size: "22.1 MB" },
+  { id: "d8", series: byTitle("20th Century"), chapter: "Ch. 250", status: "done", progress: 100, size: "19.7 MB" },
+];
+
+export const syncStatus = { lastSync: "12m ago", autoEvery: "6h", newChapters: 4 };
+
 // --- Chapters (series detail) ----------------------------------------------
 let chapNo = 210;
 function makeChapter(volume: number, i: number): Chapter {
