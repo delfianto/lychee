@@ -20,10 +20,8 @@ export const router = createRouter({
         { path: "series/:id", name: "series", component: SeriesDetail },
         { path: "settings", name: "settings", component: SettingsView },
         { path: "favorites", name: "favorites", component: LibraryView, props: { libraryKey: "favorites" } },
-        { path: "reading", name: "reading", component: LibraryView, props: { libraryKey: "reading" } },
         { path: "manga", name: "manga", component: LibraryView, props: { libraryKey: "manga" } },
         { path: "comics", name: "comics", component: LibraryView, props: { libraryKey: "comics" } },
-        { path: "books", name: "books", component: LibraryView, props: { libraryKey: "books" } },
       ],
     },
     // Reader is full-screen — it deliberately sits outside the app shell.

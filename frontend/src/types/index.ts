@@ -45,7 +45,7 @@ export interface Series {
   /** Community rating, 0–10. */
   rating?: number;
   favorite?: boolean;
-  kind?: "manga" | "comic" | "book";
+  kind?: "manga" | "comic";
   /** This user's shelf status (drives the library's status tabs). */
   libraryStatus?: LibraryStatus;
 }
