@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  ArrowLeft,
   Book,
   BookOpen,
   Cherry,
@@ -13,28 +14,22 @@ import {
   Library,
   List,
   Menu,
+  Moon,
   Search,
   Settings,
+  Sun,
 } from "lucide-vue-next";
-import { type Component, ref } from "vue";
-import { RouterLink, RouterView } from "vue-router";
+import { type Component, computed, ref } from "vue";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
-// Primary nav (only routed items link; the rest are placeholders until built).
-const primary: { label: string; icon: Component; to?: string }[] = [
-  { label: "Home", icon: House, to: "/" },
-  { label: "Favorites", icon: Heart },
-  { label: "Browse", icon: Compass, to: "/browse" },
-  { label: "Search", icon: Search },
-  { label: "Reading", icon: BookOpen },
-  { label: "Random", icon: Dices },
-];
+import { useTheme } from "../lib/theme";
+import { randomSeriesId } from "../mocks/library";
 
-const libraries: { label: string; icon: Component; count: number }[] = [
-  { label: "Lists", icon: List, count: 4 },
-  { label: "Manga", icon: Book, count: 128 },
-  { label: "Comics", icon: Images, count: 42 },
-  { label: "Books", icon: Library, count: 17 },
-];
+const router = useRouter();
+const route = useRoute();
+const { theme, toggle } = useTheme();
+
+const isSettings = computed(() => route.path === "/settings");
 
 const collapsed = ref(false); // desktop: collapse to an icon rail
 const mobileOpen = ref(false); // mobile: off-canvas drawer
@@ -42,6 +37,35 @@ const mobileOpen = ref(false); // mobile: off-canvas drawer
 function closeMobile(): void {
   mobileOpen.value = false;
 }
+
+function goRandom(): void {
+  mobileOpen.value = false;
+  void router.push(`/series/${randomSeriesId()}`);
+}
+
+interface NavItem {
+  label: string;
+  icon: Component;
+  to?: string;
+  action?: () => void;
+}
+
+// Primary nav (items without `to`/`action` are placeholders until built).
+const primary: NavItem[] = [
+  { label: "Home", icon: House, to: "/" },
+  { label: "Favorites", icon: Heart, to: "/favorites" },
+  { label: "Browse", icon: Compass, to: "/browse" },
+  { label: "Search", icon: Search },
+  { label: "Reading", icon: BookOpen, to: "/reading" },
+  { label: "Random", icon: Dices, action: goRandom },
+];
+
+const libraries: { label: string; icon: Component; count: number; to?: string }[] = [
+  { label: "Lists", icon: List, count: 4 },
+  { label: "Manga", icon: Book, count: 128, to: "/manga" },
+  { label: "Comics", icon: Images, count: 42, to: "/comics" },
+  { label: "Books", icon: Library, count: 17, to: "/books" },
+];
 </script>
 
 <template>
@@ -63,16 +87,31 @@ function closeMobile(): void {
             <ChevronsRight v-if="collapsed" class="size-5" />
             <ChevronsLeft v-else class="size-5" />
           </button>
-          <label class="input input-bordered input-sm ml-1 hidden items-center gap-2 sm:flex">
+        </div>
+        <div class="navbar-end gap-1">
+          <label class="input input-bordered input-sm hidden w-56 items-center gap-2 sm:flex md:w-64">
             <Search class="size-4 opacity-60" />
             <input type="search" class="grow" placeholder="Search…" />
           </label>
-        </div>
-        <div class="navbar-end gap-1">
-          <button class="btn btn-circle btn-ghost btn-sm" aria-label="Random"><Dices class="size-5" /></button>
-          <RouterLink to="/settings" class="btn btn-circle btn-ghost btn-sm" aria-label="Settings">
+          <button
+            class="btn btn-circle btn-ghost btn-sm"
+            :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+            @click="toggle"
+          >
+            <Sun v-if="theme === 'dark'" class="size-5" />
+            <Moon v-else class="size-5" />
+          </button>
+          <RouterLink
+            v-if="!isSettings"
+            to="/settings"
+            class="btn btn-circle btn-ghost btn-sm"
+            aria-label="Settings"
+          >
             <Settings class="size-5" />
           </RouterLink>
+          <button v-else class="btn btn-circle btn-ghost btn-sm" aria-label="Back" @click="router.back()">
+            <ArrowLeft class="size-5" />
+          </button>
           <div class="avatar avatar-placeholder">
             <div class="w-8 rounded-full bg-neutral text-neutral-content"><span class="text-xs">U</span></div>
           </div>
@@ -99,7 +138,7 @@ function closeMobile(): void {
           <li v-for="item in primary" :key="item.label">
             <RouterLink
               v-if="item.to"
-              :to="item.to!"
+              :to="item.to"
               active-class="menu-active"
               :exact-active-class="item.to === '/' ? 'menu-active' : undefined"
               :class="{ 'justify-center px-0': collapsed }"
@@ -108,6 +147,15 @@ function closeMobile(): void {
               <component :is="item.icon" class="size-5 shrink-0" />
               <span v-show="!collapsed">{{ item.label }}</span>
             </RouterLink>
+            <a
+              v-else-if="item.action"
+              class="cursor-pointer"
+              :class="{ 'justify-center px-0': collapsed }"
+              @click="item.action"
+            >
+              <component :is="item.icon" class="size-5 shrink-0" />
+              <span v-show="!collapsed">{{ item.label }}</span>
+            </a>
             <a v-else class="opacity-80" :class="{ 'justify-center px-0': collapsed }">
               <component :is="item.icon" class="size-5 shrink-0" />
               <span v-show="!collapsed">{{ item.label }}</span>
@@ -116,7 +164,18 @@ function closeMobile(): void {
 
           <li v-show="!collapsed" class="menu-title">Libraries</li>
           <li v-for="lib in libraries" :key="lib.label">
-            <a class="opacity-80" :class="{ 'justify-center px-0': collapsed }">
+            <RouterLink
+              v-if="lib.to"
+              :to="lib.to"
+              active-class="menu-active"
+              :class="{ 'justify-center px-0': collapsed }"
+              @click="closeMobile"
+            >
+              <component :is="lib.icon" class="size-5 shrink-0" />
+              <span v-show="!collapsed">{{ lib.label }}</span>
+              <span v-show="!collapsed" class="badge badge-ghost badge-sm ml-auto">{{ lib.count }}</span>
+            </RouterLink>
+            <a v-else class="opacity-80" :class="{ 'justify-center px-0': collapsed }">
               <component :is="lib.icon" class="size-5 shrink-0" />
               <span v-show="!collapsed">{{ lib.label }}</span>
               <span v-show="!collapsed" class="badge badge-ghost badge-sm ml-auto">{{ lib.count }}</span>

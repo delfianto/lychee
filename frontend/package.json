@@ -11,6 +11,7 @@
     "api:gen": "openapi-typescript ../backend/openapi.json -o ./src/api/schema.d.ts"
   },
   "dependencies": {
+    "flag-icons": "^7.5.0",
     "lucide-vue-next": "^1.0.0",
     "openapi-fetch": "^0.17.0",
     "pinia": "^3.0.4",
