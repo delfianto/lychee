@@ -1,0 +1,54 @@
+"""Integration config: metadata providers, trackers, and the sync singleton.
+
+All three use stable slug ids (``mangadex``, ``anilist``, …) so seeds and the API
+reference them by a readable key. Seeded idempotently at startup.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from src.core.persistence.base_model import Base, TimestampMixin
+
+
+class Provider(Base, TimestampMixin):
+    """A metadata provider (e.g. MangaDex) and its per-provider options."""
+
+    __tablename__ = "provider"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # slug
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    language: Mapped[str] = mapped_column(String(16), default="en", nullable=False)
+    auto_match: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    fetch_covers: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class Tracker(Base, TimestampMixin):
+    """An outbound reading tracker (AniList / MangaUpdates / MyAnimeList) (ADR 16)."""
+
+    __tablename__ = "tracker"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # slug
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    connected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sync_on_read: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    account_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    access_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SyncState(Base, TimestampMixin):
+    """Singleton row (id ``default``) backing the Downloads → Sync card."""
+
+    __tablename__ = "sync_state"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default="default")
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_every_minutes: Mapped[int] = mapped_column(Integer, default=360, nullable=False)  # 6h
+    syncing: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    new_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
