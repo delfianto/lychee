@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.bootstrap import bootstrap
 from src.catalog.router import router as catalog_router
 from src.core.config import settings
 from src.core.exceptions import LycheeError
@@ -20,6 +21,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     logger.info("application_startup", environment=settings.environment)
+    if settings.auto_bootstrap:
+        bootstrap()
     yield
     logger.info("application_shutdown")
 

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Storage root for generated binary files (thumbnails, etc.).
     storage_path: str = "./storage"
 
+    # Run migrations + seed on startup. Disabled in tests (they manage schema).
+    auto_bootstrap: bool = True
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000
