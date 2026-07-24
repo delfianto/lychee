@@ -134,11 +134,19 @@ export const continueReading: Series[] = librarySeries
   .filter((s) => s.lastReadChapter !== undefined)
   .slice(0, 6);
 
-export const recentUpdates: RecentUpdate[] = librarySeries.slice(0, 8).map((series, i) => ({
-  series,
-  chapterLabel: `Ch. ${series.chapterCount - (i % 3)}`,
-  updatedAt: `${i + 1}h ago`,
-}));
+export const recentUpdates: RecentUpdate[] = Array.from({ length: 24 }, (_, i) => {
+  const series = librarySeries[i % librarySeries.length];
+  const chapNum = series.chapterCount - (i % 5);
+  return {
+    series,
+    volume: i % 4 === 3 ? null : Math.max(1, Math.round(chapNum / 10)),
+    chapter: String(chapNum),
+    updatedAt: i < 12 ? `${i + 1}h ago` : `${i - 11}d ago`,
+  };
+});
+
+/** Newest series first (reverse of insertion order) — for the Home "Recently added" rail. */
+export const recentlyAdded: Series[] = [...librarySeries].reverse();
 
 export function findSeries(id: string): Series {
   return librarySeries.find((s) => s.id === id) ?? librarySeries[0];

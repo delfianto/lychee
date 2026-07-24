@@ -28,40 +28,31 @@ function toggle<T>(set: Set<T>, value: T): void {
   if (set.has(value)) set.delete(value);
   else set.add(value);
 }
-function reset(): void {
-  props.filters.query = "";
-  props.filters.tags = {};
-  props.filters.ratings.clear();
-  props.filters.demographics.clear();
-  props.filters.statuses.clear();
-  props.filters.readStates.clear();
-}
 </script>
 
 <template>
-  <div class="card bg-base-100">
-    <div class="card-body gap-4 p-4">
-      <!-- Tags (tri-state include/exclude + AND/OR) -->
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-semibold">Tags</span>
-          <div class="join">
-            <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'and' }" @click="filters.tagMode = 'and'">AND</button>
-            <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'or' }" @click="filters.tagMode = 'or'">OR</button>
-          </div>
-        </div>
-        <div v-for="g in browseTagGroups" :key="g.group" class="flex flex-col gap-1">
-          <span class="text-xs text-base-content/60">{{ g.group }}</span>
-          <div class="flex flex-wrap gap-1">
-            <button v-for="t in g.tags" :key="t.id" class="btn btn-xs" :class="tagClass(t.id)" @click="cycleTag(t.id)">
-              {{ t.name }}
-            </button>
-          </div>
+  <div class="flex flex-col gap-4">
+    <!-- Tags (tri-state include/exclude + AND/OR) -->
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-semibold">Tags</span>
+        <div class="join ml-auto">
+          <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'and' }" @click="filters.tagMode = 'and'">AND</button>
+          <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'or' }" @click="filters.tagMode = 'or'">OR</button>
         </div>
       </div>
+      <div v-for="g in browseTagGroups" :key="g.group" class="flex flex-col gap-1">
+        <span class="text-xs text-base-content/60">{{ g.group }}</span>
+        <div class="flex flex-wrap gap-1">
+          <button v-for="t in g.tags" :key="t.id" class="btn btn-xs" :class="tagClass(t.id)" @click="cycleTag(t.id)">
+            {{ t.name }}
+          </button>
+        </div>
+      </div>
+    </div>
 
-      <div class="divider my-0"></div>
-
+    <!-- Facets -->
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Content rating</span>
         <div class="flex flex-wrap gap-1">
@@ -70,7 +61,6 @@ function reset(): void {
           </button>
         </div>
       </div>
-
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Demographic</span>
         <div class="flex flex-wrap gap-1">
@@ -79,16 +69,14 @@ function reset(): void {
           </button>
         </div>
       </div>
-
       <div class="flex flex-col gap-2">
-        <span class="text-sm font-semibold">Status</span>
+        <span class="text-sm font-semibold">Publication status</span>
         <div class="flex flex-wrap gap-1">
           <button v-for="s in statusOptions" :key="s" class="btn btn-xs capitalize" :class="filters.statuses.has(s) ? 'btn-primary' : 'btn-ghost'" @click="toggle(filters.statuses, s)">
             {{ s }}
           </button>
         </div>
       </div>
-
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Read status</span>
         <div class="flex flex-wrap gap-1">
@@ -96,11 +84,6 @@ function reset(): void {
             {{ rs.label }}
           </button>
         </div>
-      </div>
-
-      <div class="flex gap-2">
-        <button class="btn btn-ghost btn-sm grow" @click="reset">Reset</button>
-        <button class="btn btn-primary btn-sm grow">Apply</button>
       </div>
     </div>
   </div>

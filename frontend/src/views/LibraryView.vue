@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { Grid2x2, LayoutGrid, List, LoaderCircle } from "lucide-vue-next";
-import { type Component, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-vue-next";
+import { type Component, computed, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
-import SeriesCoverCard from "../components/SeriesCoverCard.vue";
-import SeriesListCard from "../components/SeriesListCard.vue";
-import { libraryFor } from "../mocks/library";
-import type { LibraryStatus } from "../types";
+import FilterPanel from "../components/FilterPanel.vue";
+import SeriesCollection from "../components/SeriesCollection.vue";
+import { allBrowseTags, libraryFor } from "../mocks/library";
+import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus, Series } from "../types";
 
 const props = defineProps<{ libraryKey: string }>();
 const route = useRoute();
 
+// --- Density -------------------------------------------------------------
 type Density = "list" | "compact" | "gallery";
 const DENSITY_KEY = "lychee.density";
-
-// Density comes from `?view=` (deep-link) if present, else the persisted choice, else list.
 function initialDensity(): Density {
   const q = route.query.view;
   if (q === "list" || q === "compact" || q === "gallery") return q;
@@ -23,13 +22,13 @@ function initialDensity(): Density {
 }
 const density = ref<Density>(initialDensity());
 watch(density, (d) => localStorage.setItem(DENSITY_KEY, d));
-
 const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "list", icon: List, label: "List view" },
   { value: "compact", icon: Grid2x2, label: "Compact view" },
   { value: "gallery", icon: LayoutGrid, label: "Gallery view" },
 ];
 
+// --- Shelf-status tabs + sort -------------------------------------------
 const statusTabs: { value: LibraryStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "reading", label: "Reading" },
@@ -40,80 +39,169 @@ const statusTabs: { value: LibraryStatus | "all"; label: string }[] = [
   { value: "re_reading", label: "Re-reading" },
 ];
 const activeTab = ref<LibraryStatus | "all">("all");
-
 const sorts = ["Rating", "Recently Added", "Recently Updated", "Title", "Unread"];
 const sort = ref("Recently Added");
 
-const lib = computed(() => libraryFor(props.libraryKey));
-const filtered = computed(() =>
-  activeTab.value === "all"
-    ? lib.value.series
-    : lib.value.series.filter((s) => s.libraryStatus === activeTab.value),
-);
-
-// --- Infinite scroll (client-side reveal over the mock list) ---------------
-const PAGE = 12;
-const visibleCount = ref(PAGE);
-const visible = computed(() => filtered.value.slice(0, visibleCount.value));
-const hasMore = computed(() => visibleCount.value < filtered.value.length);
-const loadingMore = ref(false);
-const sentinel = ref<HTMLElement | null>(null);
-const sentinelVisible = ref(false);
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-function maybeLoadMore(): void {
-  if (!sentinelVisible.value || !hasMore.value || loadingMore.value) return;
-  loadingMore.value = true;
-  // Small delay so the spinner registers; a real API call replaces this later.
-  timer = setTimeout(() => {
-    visibleCount.value += PAGE;
-    loadingMore.value = false;
-  }, 180);
-}
-
-// Keep filling while the sentinel stays in view (short lists / fast scroll).
-watch(loadingMore, (busy) => {
-  if (!busy) maybeLoadMore();
+// --- Advanced filters ----------------------------------------------------
+const showFilters = ref(false);
+const filters = reactive<BrowseFilters>({
+  query: "",
+  tags: {},
+  tagMode: "and",
+  ratings: new Set(),
+  demographics: new Set(),
+  statuses: new Set(),
+  readStates: new Set(),
+  sort: "",
 });
 
-// Reset paging (and tab) when the library or the active filter changes.
+function resetFilters(): void {
+  filters.query = "";
+  filters.tags = {};
+  filters.ratings = new Set();
+  filters.demographics = new Set();
+  filters.statuses = new Set();
+  filters.readStates = new Set();
+}
+
+const tagName = (id: string): string => allBrowseTags.find((t) => t.id === id)?.name ?? id;
+
+const activeChips = computed(() => {
+  const chips: { key: string; label: string; remove: () => void }[] = [];
+  if (filters.query) chips.push({ key: "q", label: `“${filters.query}”`, remove: () => (filters.query = "") });
+  for (const [id, state] of Object.entries(filters.tags))
+    chips.push({ key: `t-${id}`, label: `${state === "exclude" ? "−" : "+"} ${tagName(id)}`, remove: () => delete filters.tags[id] });
+  for (const r of filters.ratings) chips.push({ key: `r-${r}`, label: r, remove: () => filters.ratings.delete(r) });
+  for (const d of filters.demographics) chips.push({ key: `d-${d}`, label: d, remove: () => filters.demographics.delete(d) });
+  for (const s of filters.statuses) chips.push({ key: `s-${s}`, label: s, remove: () => filters.statuses.delete(s) });
+  for (const rs of filters.readStates) chips.push({ key: `rs-${rs}`, label: rs, remove: () => filters.readStates.delete(rs) });
+  return chips;
+});
+
+// --- Presets (persisted, shared across libraries) ------------------------
+interface Preset {
+  name: string;
+  query: string;
+  tags: Record<string, "include" | "exclude">;
+  tagMode: "and" | "or";
+  ratings: ContentRating[];
+  demographics: Demographic[];
+  statuses: PublicationStatus[];
+  readStates: string[];
+}
+const PRESETS_KEY = "lychee.presets";
+function loadPresets(): Preset[] {
+  try {
+    return JSON.parse(localStorage.getItem(PRESETS_KEY) ?? "[]") as Preset[];
+  } catch {
+    return [];
+  }
+}
+const presets = ref<Preset[]>(loadPresets());
+const presetName = ref("");
+function persistPresets(): void {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets.value));
+}
+function savePreset(): void {
+  const name = presetName.value.trim();
+  if (!name) return;
+  const p: Preset = {
+    name,
+    query: filters.query,
+    tags: { ...filters.tags },
+    tagMode: filters.tagMode,
+    ratings: [...filters.ratings],
+    demographics: [...filters.demographics],
+    statuses: [...filters.statuses],
+    readStates: [...filters.readStates],
+  };
+  const idx = presets.value.findIndex((x) => x.name === name);
+  if (idx >= 0) presets.value[idx] = p;
+  else presets.value.push(p);
+  persistPresets();
+  presetName.value = "";
+}
+function applyPreset(p: Preset): void {
+  filters.query = p.query;
+  filters.tags = { ...p.tags };
+  filters.tagMode = p.tagMode;
+  filters.ratings = new Set(p.ratings);
+  filters.demographics = new Set(p.demographics);
+  filters.statuses = new Set(p.statuses);
+  filters.readStates = new Set(p.readStates);
+}
+function deletePreset(name: string): void {
+  presets.value = presets.value.filter((p) => p.name !== name);
+  persistPresets();
+}
+
+// --- Filtering -----------------------------------------------------------
+const lib = computed(() => libraryFor(props.libraryKey));
+
+function matchesTags(s: Series): boolean {
+  const entries = Object.entries(filters.tags);
+  const include = entries.filter(([, v]) => v === "include").map(([k]) => k);
+  const exclude = entries.filter(([, v]) => v === "exclude").map(([k]) => k);
+  const ids = new Set(s.tags.map((t) => t.id));
+  if (exclude.some((id) => ids.has(id))) return false;
+  if (include.length === 0) return true;
+  return filters.tagMode === "and" ? include.every((id) => ids.has(id)) : include.some((id) => ids.has(id));
+}
+function readState(s: Series): string {
+  if (s.lastReadChapter === undefined) return "unread";
+  return s.unreadCount > 0 ? "in_progress" : "read";
+}
+
+const filtered = computed(() => {
+  let list = lib.value.series;
+  if (activeTab.value !== "all") list = list.filter((s) => s.libraryStatus === activeTab.value);
+  const q = filters.query.trim().toLowerCase();
+  if (q)
+    list = list.filter(
+      (s) => s.title.toLowerCase().includes(q) || s.authors.some((a) => a.toLowerCase().includes(q)),
+    );
+  if (Object.keys(filters.tags).length) list = list.filter(matchesTags);
+  if (filters.ratings.size) list = list.filter((s) => filters.ratings.has(s.contentRating));
+  if (filters.demographics.size) list = list.filter((s) => filters.demographics.has(s.demographic));
+  if (filters.statuses.size) list = list.filter((s) => filters.statuses.has(s.status));
+  if (filters.readStates.size) list = list.filter((s) => filters.readStates.has(readState(s)));
+  return list;
+});
+
+// Reset tab + filters when switching libraries.
 watch(
   () => props.libraryKey,
   () => {
     activeTab.value = "all";
-    visibleCount.value = PAGE;
+    resetFilters();
   },
 );
-watch(activeTab, () => {
-  visibleCount.value = PAGE;
-});
-
-let observer: IntersectionObserver | null = null;
-onMounted(() => {
-  observer = new IntersectionObserver(
-    ([entry]) => {
-      sentinelVisible.value = entry?.isIntersecting ?? false;
-      maybeLoadMore();
-    },
-    { rootMargin: "300px" },
-  );
-  if (sentinel.value) observer.observe(sentinel.value);
-});
-onBeforeUnmount(() => {
-  observer?.disconnect();
-  if (timer) clearTimeout(timer);
-});
 </script>
 
 <template>
   <div class="flex flex-col gap-4 p-4 sm:p-6">
-    <!-- Header + controls -->
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 class="text-3xl font-bold">{{ lib.title }}</h1>
-        <p class="text-sm text-base-content/60">{{ filtered.length }} series</p>
-      </div>
-      <div class="flex items-center gap-3">
+    <!-- Title -->
+    <div>
+      <h1 class="text-3xl font-bold">{{ lib.title }}</h1>
+      <p class="text-sm text-base-content/60">{{ filtered.length }} series</p>
+    </div>
+
+    <!-- Toolbar: search + filters · density + sort -->
+    <div class="flex flex-wrap items-center gap-2">
+      <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
+        <Search class="size-4 opacity-60" />
+        <input v-model="filters.query" type="search" class="grow" placeholder="Search this library…" />
+      </label>
+      <button
+        class="btn btn-sm gap-1.5"
+        :class="showFilters || activeChips.length ? 'btn-primary' : 'btn-ghost'"
+        @click="showFilters = !showFilters"
+      >
+        <SlidersHorizontal class="size-4" />Filters
+        <span v-if="activeChips.length" class="badge badge-xs">{{ activeChips.length }}</span>
+      </button>
+
+      <div class="ml-auto flex items-center gap-3">
         <div class="join">
           <button
             v-for="d in densities"
@@ -135,7 +223,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Reading-status filter tabs -->
+    <!-- Shelf-status tabs -->
     <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto">
       <a
         v-for="tab in statusTabs"
@@ -149,25 +237,54 @@ onBeforeUnmount(() => {
       </a>
     </div>
 
-    <!-- Body -->
-    <div v-if="!filtered.length" class="py-16 text-center text-base-content/60">Nothing here yet.</div>
-    <div
-      v-else-if="density === 'gallery'"
-      class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-    >
-      <SeriesCoverCard v-for="s in visible" :key="s.id" :series="s" />
-    </div>
-    <div v-else-if="density === 'compact'" class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <SeriesListCard v-for="s in visible" :key="s.id" :series="s" compact />
-    </div>
-    <div v-else class="flex flex-col gap-3">
-      <SeriesListCard v-for="s in visible" :key="s.id" :series="s" />
+    <!-- Saved presets -->
+    <div v-if="presets.length" class="flex flex-wrap items-center gap-1.5">
+      <span class="text-xs text-base-content/50">Presets</span>
+      <span
+        v-for="p in presets"
+        :key="p.name"
+        class="badge badge-outline cursor-pointer gap-1 hover:border-primary"
+        @click="applyPreset(p)"
+      >
+        {{ p.name }}
+        <button class="opacity-60 hover:opacity-100" aria-label="Delete preset" @click.stop="deletePreset(p.name)">
+          <X class="size-3" />
+        </button>
+      </span>
     </div>
 
-    <!-- Endless-scroll sentinel (fires ~300px early) + loading spinner -->
-    <div ref="sentinel" class="h-px w-full" aria-hidden="true"></div>
-    <div v-if="loadingMore" class="flex justify-center py-4">
-      <LoaderCircle class="size-6 animate-spin text-base-content/50" />
+    <!-- Active-filter chips -->
+    <div v-if="activeChips.length" class="flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="c in activeChips"
+        :key="c.key"
+        class="badge badge-primary badge-sm gap-1 capitalize"
+        @click="c.remove()"
+      >
+        {{ c.label }}<X class="size-3" />
+      </button>
+      <button class="btn btn-ghost btn-xs" @click="resetFilters">Clear all</button>
     </div>
+
+    <!-- Foldable advanced filters -->
+    <div v-if="showFilters" class="flex flex-col gap-4 rounded-box bg-base-100 p-4">
+      <FilterPanel :filters="filters" />
+      <div class="divider my-0"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium">Save as preset</span>
+        <input
+          v-model="presetName"
+          type="text"
+          placeholder="e.g. Unread Seinen"
+          class="input input-bordered input-sm max-w-xs"
+          @keyup.enter="savePreset"
+        />
+        <button class="btn btn-primary btn-sm" :disabled="!presetName.trim()" @click="savePreset">Save</button>
+        <button class="btn btn-ghost btn-sm ml-auto" @click="resetFilters">Clear all filters</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <SeriesCollection :series="filtered" :density="density" empty-text="No series match these filters." />
   </div>
 </template>
