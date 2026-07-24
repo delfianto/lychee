@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { LayoutList, List } from "lucide-vue-next";
-import { type Component, ref } from "vue";
+import { type Component, onMounted, ref } from "vue";
 
+import { fetchUpdates } from "../api/queries";
 import ChapterFeed from "../components/ChapterFeed.vue";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
-import { unreadChapters } from "../mocks/library";
+import type { RecentUpdate } from "../types";
 
 type FeedView = "list" | "thumb";
 const view = ref<FeedView>("thumb");
@@ -12,6 +13,11 @@ const viewOptions: { value: FeedView; icon: Component; label: string }[] = [
   { value: "list", icon: List, label: "List view" },
   { value: "thumb", icon: LayoutList, label: "Thumbnail list view" },
 ];
+
+const entries = ref<RecentUpdate[]>([]);
+onMounted(async () => {
+  entries.value = await fetchUpdates(true);
+});
 </script>
 
 <template>
@@ -19,11 +25,11 @@ const viewOptions: { value: FeedView; icon: Component; label: string }[] = [
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">Unread chapters</h1>
-        <p class="text-sm text-base-content/60">{{ unreadChapters.length }} unread chapters</p>
+        <p class="text-sm text-base-content/60">{{ entries.length }} unread chapters</p>
       </div>
       <SegmentedToggle v-model="view" :options="viewOptions" aria-label="View" />
     </div>
     <!-- Every row is unread here, so the per-row "new" badge would be noise. -->
-    <ChapterFeed :entries="unreadChapters" :view="view" :new-badge="false" />
+    <ChapterFeed :entries="entries" :view="view" :new-badge="false" />
   </div>
 </template>
