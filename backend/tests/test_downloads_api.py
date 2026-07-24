@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy.orm import Session
 from src.downloads.provider import RemoteChapter, register_provider
+from src.tasks.queue import queue
 
 from tests.support import make_series
 
@@ -45,9 +46,13 @@ def test_download_creates_chapters_and_avif_pages(
 ) -> None:
     series = _linked_series(db_session)
 
-    tasks = client.post("/api/downloads", json={"seriesId": series.id}).json()
-    assert len(tasks) == 2
-    assert all(t["status"] == "done" for t in tasks)
+    resp = client.post("/api/downloads", json={"seriesId": series.id})
+    assert resp.status_code == 202
+    queue.wait_idle()
+
+    downloads = client.get("/api/downloads").json()
+    assert len(downloads) == 2
+    assert all(t["status"] == "done" for t in downloads)
 
     chapters = client.get(f"/api/series/{series.id}/chapters").json()
     numbers = [c["number"] for group in chapters for c in group["chapters"]]
@@ -62,10 +67,14 @@ def test_download_creates_chapters_and_avif_pages(
 
 def test_download_is_idempotent_and_listed(client: TestClient, db_session: Session) -> None:
     series = _linked_series(db_session)
-    client.post("/api/downloads", json={"seriesId": series.id})
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
 
-    again = client.post("/api/downloads", json={"seriesId": series.id}).json()
-    assert again == []  # both chapters already present
+    again = client.post("/api/downloads", json={"seriesId": series.id})
+    assert again.status_code == 202
+    queue.wait_idle()
+    tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert tasks[again.json()["id"]]["result"] == {"downloaded": 0}  # both already present
 
     listed = client.get("/api/downloads").json()
     assert len(listed) == 2
@@ -80,7 +89,10 @@ def test_download_requires_provider(client: TestClient, db_session: Session) -> 
 
 def test_delete_and_clear_completed(client: TestClient, db_session: Session) -> None:
     series = _linked_series(db_session)
-    tasks = client.post("/api/downloads", json={"seriesId": series.id}).json()
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
+    tasks = client.get("/api/downloads").json()
+    assert len(tasks) == 2
 
     assert client.delete(f"/api/downloads/{tasks[0]['id']}").status_code == 204
     assert len(client.get("/api/downloads").json()) == 1

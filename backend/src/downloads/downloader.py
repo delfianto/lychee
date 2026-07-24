@@ -10,6 +10,7 @@ is a follow-up.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy import select
@@ -103,18 +104,24 @@ def download_series(
     *,
     language: str = "en",
     limit: int | None = None,
+    on_progress: Callable[[int, str], None] | None = None,
 ) -> list[DownloadTask]:
-    """Download every remote chapter of ``series`` not already present."""
+    """Download every remote chapter of ``series`` not already present.
+
+    ``on_progress(percent, label)`` fires after each chapter so callers can
+    surface live download progress (SSE).
+    """
     library = downloads_library(session, storage_root)
     remotes = provider.list_chapters(series.provider_series_id or "", language=language)
     existing = {
         c.number for c in session.scalars(select(Chapter).where(Chapter.series_id == series.id))
     }
+    pending = [remote for remote in remotes if remote.number not in existing]
+    if limit is not None:
+        pending = pending[:limit]
 
     tasks: list[DownloadTask] = []
-    for remote in remotes:
-        if remote.number in existing:
-            continue
+    for index, remote in enumerate(pending, start=1):
         task = DownloadTask(
             series_id=series.id, chapter_label=f"Ch. {remote.number}", status="downloading"
         )
@@ -136,7 +143,7 @@ def download_series(
             task.status = "failed"
             task.error = str(exc)
         tasks.append(task)
-        if limit is not None and len(tasks) >= limit:
-            break
+        if on_progress is not None:
+            on_progress(round(index / len(pending) * 100), f"Ch. {remote.number}")
     session.flush()
     return tasks

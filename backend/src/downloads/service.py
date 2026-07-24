@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -15,6 +16,8 @@ from src.downloads.downloader import download_series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadTaskOut
+from src.tasks.queue import Work, queue
+from src.tasks.schema import TaskOut
 
 
 def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskOut]:
@@ -42,7 +45,22 @@ def list_downloads(session: Session) -> list[DownloadTaskOut]:
     return _tasks_out(session, rows)
 
 
-def create_downloads(session: Session, series_id: str, storage_root: Path) -> list[DownloadTaskOut]:
+def _download_work(series_id: str, storage_root: Path) -> Work:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        series = session.get(Series, series_id)
+        if series is None or not series.provider:
+            raise BadRequestError("series is not linked to a provider")
+        provider = get_provider(series.provider)
+        if provider is None:
+            raise BadRequestError(f"provider {series.provider!r} is not available")
+        tasks = download_series(session, series, provider, storage_root, on_progress=on_progress)
+        return {"downloaded": len(tasks)}
+
+    return work
+
+
+def create_downloads(session: Session, series_id: str, storage_root: Path) -> TaskOut:
+    """Validate the series + provider (here), then run the download on the task queue."""
     series = session.get(Series, series_id)
     if series is None:
         raise NotFoundError(f"series {series_id!r} not found")
@@ -51,12 +69,11 @@ def create_downloads(session: Session, series_id: str, storage_root: Path) -> li
     provider = get_provider(series.provider)
     if provider is None:
         raise BadRequestError(f"provider {series.provider!r} is not available")
-    tasks = download_series(session, series, provider, storage_root)
-    session.commit()
-    return _tasks_out(session, tasks)
+    task = queue.submit("download", f"Downloading {series.title}", _download_work(series_id, storage_root))
+    return TaskOut.model_validate(task)
 
 
-def retry_download(session: Session, task_id: str, storage_root: Path) -> list[DownloadTaskOut]:
+def retry_download(session: Session, task_id: str, storage_root: Path) -> TaskOut:
     task = session.get(DownloadTask, task_id)
     if task is None:
         raise NotFoundError(f"download {task_id!r} not found")
