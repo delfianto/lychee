@@ -22,6 +22,3 @@ Thumbs.db
 # Claude Code — shared config (settings.json, hooks/, skills/) is tracked;
 # ignore only the per-machine local overrides
 .claude/settings.local.json
-
-# Local scratch planning tracker (not committed)
-/PLAN.md
