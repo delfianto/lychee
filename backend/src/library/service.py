@@ -9,6 +9,7 @@ from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.ingest.scanner import ScanSummary, scan_library
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate, ScanResultOut
+from src.tasks.tracker import tracker
 
 _KINDS = {"manga", "comic", "gallery", "mixed"}
 
@@ -77,18 +78,37 @@ def _summary_out(summary: ScanSummary) -> ScanResultOut:
 
 
 def scan_one(session: Session, library_id: str) -> ScanResultOut:
-    summary = scan_library(session, _get(session, library_id))
-    session.commit()
+    library = _get(session, library_id)
+    task = tracker.start("scan", f"Scanning {library.name}")
+    try:
+        summary = scan_library(
+            session, library, on_progress=lambda pct, label: tracker.progress(task, pct, label)
+        )
+        session.commit()
+    except Exception as exc:  # noqa: BLE001 - record failure on the task, then re-raise
+        session.rollback()
+        tracker.finish(task, error=str(exc))
+        raise
+    tracker.finish(task)
     return _summary_out(summary)
 
 
 def scan_all(session: Session) -> ScanResultOut:
+    task = tracker.start("scan", "Scanning all libraries")
     total = ScanSummary()
-    for library in session.scalars(select(Library).where(Library.enabled.is_(True))):
-        summary = scan_library(session, library)
-        total.series_added += summary.series_added
-        total.books_added += summary.books_added
-        total.books_updated += summary.books_updated
-        total.books_removed += summary.books_removed
-    session.commit()
+    try:
+        libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
+        for i, library in enumerate(libraries, start=1):
+            summary = scan_library(session, library)
+            total.series_added += summary.series_added
+            total.books_added += summary.books_added
+            total.books_updated += summary.books_updated
+            total.books_removed += summary.books_removed
+            tracker.progress(task, round(i / len(libraries) * 100) if libraries else 100, library.name)
+        session.commit()
+    except Exception as exc:  # noqa: BLE001 - record failure on the task, then re-raise
+        session.rollback()
+        tracker.finish(task, error=str(exc))
+        raise
+    tracker.finish(task)
     return _summary_out(total)
