@@ -87,6 +87,37 @@ export async function searchSeries(q: string, limit = 30): Promise<Series[]> {
   return data.map(toSeries);
 }
 
+export interface TagGroup {
+  group: string;
+  tags: { id: string; name: string }[];
+}
+
+const _FILTER_GROUPS = ["genre", "theme", "content", "format"];
+const _GROUP_LABEL: Record<string, string> = {
+  genre: "Genre",
+  theme: "Theme",
+  content: "Content",
+  format: "Format",
+};
+
+/** The series-linked tag vocabulary (for the advanced filter panel). */
+export async function fetchTagGroups(): Promise<TagGroup[]> {
+  const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
+  const items = data?.items ?? [];
+  return _FILTER_GROUPS.map((g) => ({
+    group: _GROUP_LABEL[g],
+    tags: items.filter((i) => i.category === g).map((i) => ({ id: i.id, name: i.name })),
+  })).filter((g) => g.tags.length > 0);
+}
+
+/** A random series id (for the navbar dice), or null if the library is empty. */
+export async function randomSeriesId(): Promise<string | null> {
+  const { data } = await api.GET("/api/series", { params: { query: { limit: 50 } } });
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)].id;
+}
+
 // --- series grids (cursor pagination) ------------------------------------------
 
 export type SeriesQuery = NonNullable<paths["/api/series"]["get"]["parameters"]["query"]>;
