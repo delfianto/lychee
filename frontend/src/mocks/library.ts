@@ -1,63 +1,140 @@
 // Placeholder data so the UI renders before the API exists. Covers use picsum
 // (dev only). Swap this module for the generated API client later.
 
-import type { Chapter, RecentUpdate, Series, Tag, VolumeGroup } from "../types";
+import type {
+  Chapter,
+  ContentRating,
+  Demographic,
+  LibraryStatus,
+  PublicationStatus,
+  RecentUpdate,
+  Series,
+  Tag,
+  TagGroup,
+  VolumeGroup,
+} from "../types";
 
-const tag = (id: string, name: string, group: Tag["group"]): Tag => ({ id, name, group });
+// --- Tag registry ----------------------------------------------------------
+const TAGS: Record<string, Tag> = {};
+function t(id: string, name: string, group: TagGroup): Tag {
+  const tag: Tag = { id, name, group };
+  TAGS[id] = tag;
+  return tag;
+}
 
 const GENRES: Tag[] = [
-  tag("action", "Action", "genre"),
-  tag("drama", "Drama", "genre"),
-  tag("comedy", "Comedy", "genre"),
-  tag("romance", "Romance", "genre"),
-  tag("fantasy", "Fantasy", "genre"),
-  tag("slice", "Slice of Life", "genre"),
+  t("action", "Action", "genre"),
+  t("adventure", "Adventure", "genre"),
+  t("comedy", "Comedy", "genre"),
+  t("drama", "Drama", "genre"),
+  t("fantasy", "Fantasy", "genre"),
+  t("historical", "Historical", "genre"),
+  t("horror", "Horror", "genre"),
+  t("mystery", "Mystery", "genre"),
+  t("romance", "Romance", "genre"),
+  t("sci-fi", "Sci-Fi", "genre"),
+  t("slice", "Slice of Life", "genre"),
+  t("sports", "Sports", "genre"),
+  t("thriller", "Thriller", "genre"),
+  t("martial-arts", "Martial Arts", "genre"),
+  t("superhero", "Superhero", "genre"),
+  t("cooking", "Cooking", "genre"),
+  t("art", "Art", "genre"),
+  t("psychological", "Psychological", "genre"),
+];
+const THEMES: Tag[] = [
+  t("isekai", "Isekai", "theme"),
+  t("school", "School Life", "theme"),
+  t("magic", "Magic", "theme"),
+  t("military", "Military", "theme"),
+  t("revenge", "Revenge", "theme"),
+  t("survival", "Survival", "theme"),
+];
+const CONTENT: Tag[] = [
+  t("gore", "Gore", "content"),
+  t("sexual-violence", "Sexual Violence", "content"),
 ];
 
 function cover(seed: string): string {
   return `https://picsum.photos/seed/${seed}/300/450`;
 }
 
+// --- Series seeds ----------------------------------------------------------
+interface Seed {
+  title: string;
+  cc: string; // origin country (ISO alpha-2, lowercase)
+  kind: NonNullable<Series["kind"]>;
+  status: PublicationStatus;
+  demographic: Demographic;
+  rating: number;
+  content: ContentRating;
+  tags: string[];
+  year: number;
+  chapters: number;
+  desc: string;
+  fav?: boolean;
+  unread?: number;
+  lib?: LibraryStatus;
+  read?: number; // last-read chapter (marks it in-progress)
+}
+
+const SEEDS: Seed[] = [
+  { title: "Dungeon Meshi", cc: "jp", kind: "manga", status: "completed", demographic: "seinen", rating: 9.2, content: "safe", tags: ["fantasy", "comedy", "adventure", "cooking"], year: 2014, chapters: 102, fav: true, unread: 12, lib: "reading", read: 45, desc: "When young adventurer Laios and his party are wiped out by a dragon deep in a labyrinth, they resolve to march right back down — and this time, live off the monsters they slay along the way." },
+  { title: "Frieren: Beyond Journey's End", cc: "jp", kind: "manga", status: "ongoing", demographic: "shonen", rating: 9.6, content: "safe", tags: ["fantasy", "adventure", "drama"], year: 2020, chapters: 127, fav: true, unread: 3, lib: "reading", read: 120, desc: "The elf mage Frieren outlived the party she once saved the world with. Now she sets out to truly understand the humans whose brief lives left such a mark on her own." },
+  { title: "Berserk", cc: "jp", kind: "manga", status: "hiatus", demographic: "seinen", rating: 9.8, content: "mature", tags: ["action", "fantasy", "horror"], year: 1989, chapters: 375, fav: true, lib: "on_hold", desc: "Guts, the Black Swordsman, seeks vengeance against the demonic forces that branded him — a brutal dark-fantasy epic of ambition, friendship and fate." },
+  { title: "Vinland Saga", cc: "jp", kind: "manga", status: "ongoing", demographic: "seinen", rating: 9.1, content: "mature", tags: ["action", "adventure", "historical"], year: 2005, chapters: 210, unread: 7, lib: "reading", read: 190, desc: "A young Viking bent on revenge is slowly forced to reckon with what a life beyond endless war might look like." },
+  { title: "One Piece", cc: "jp", kind: "manga", status: "ongoing", demographic: "shonen", rating: 9.3, content: "safe", tags: ["action", "adventure", "fantasy"], year: 1997, chapters: 1102, lib: "plan_to_read", desc: "Monkey D. Luffy sets sail with a crew of misfits in search of the legendary treasure that will crown him King of the Pirates." },
+  { title: "Vagabond", cc: "jp", kind: "manga", status: "hiatus", demographic: "seinen", rating: 9.4, content: "mature", tags: ["action", "historical", "martial-arts"], year: 1998, chapters: 327, desc: "A fictionalized retelling of the life of Japan's greatest swordsman, Miyamoto Musashi, and his relentless pursuit of what it means to be strong." },
+  { title: "20th Century Boys", cc: "jp", kind: "manga", status: "completed", demographic: "seinen", rating: 8.9, content: "safe", tags: ["mystery", "sci-fi", "thriller"], year: 1999, chapters: 249, lib: "completed", desc: "A childhood prophecy scrawled in a secret hideout begins to come true decades later, dragging a group of former friends into a plot to end the world." },
+  { title: "Goodnight Punpun", cc: "jp", kind: "manga", status: "completed", demographic: "seinen", rating: 9.0, content: "mature", tags: ["drama", "slice", "psychological"], year: 2007, chapters: 147, lib: "completed", desc: "An unflinching coming-of-age story that follows an ordinary boy — drawn as a tiny bird — through the quiet devastations of growing up." },
+  { title: "Chainsaw Man", cc: "jp", kind: "manga", status: "ongoing", demographic: "shonen", rating: 8.7, content: "mature", tags: ["action", "horror", "comedy"], year: 2018, chapters: 150, fav: true, unread: 5, lib: "reading", read: 97, desc: "Denji fuses with his chainsaw-devil dog to become a devil hunter for a shadowy agency, chasing a dream as simple as a full stomach and a normal life." },
+  { title: "Blue Period", cc: "jp", kind: "manga", status: "ongoing", demographic: "seinen", rating: 8.4, content: "safe", tags: ["drama", "art", "slice"], year: 2017, chapters: 60, lib: "dropped", desc: "A high-achieving but aimless student discovers painting and throws himself at the brutal, exhilarating world of art school entrance exams." },
+  { title: "Witch Hat Atelier", cc: "jp", kind: "manga", status: "ongoing", demographic: "shonen", rating: 8.6, content: "safe", tags: ["fantasy", "adventure", "magic"], year: 2016, chapters: 75, desc: "In a world where magic is a secret drawn with pen and ink, a curious girl is taken in by a mysterious witch and begins to learn the craft." },
+  { title: "Monster", cc: "jp", kind: "manga", status: "completed", demographic: "seinen", rating: 9.1, content: "mature", tags: ["mystery", "thriller", "psychological"], year: 1994, chapters: 162, lib: "completed", desc: "A gifted surgeon saves the life of a boy who grows into a monster, and must hunt his own act of mercy across a haunted post–Cold War Europe." },
+  { title: "Akira", cc: "jp", kind: "manga", status: "completed", demographic: "seinen", rating: 8.8, content: "mature", tags: ["sci-fi", "action"], year: 1982, chapters: 120, lib: "re_reading", read: 30, desc: "In Neo-Tokyo, a biker gang member's latent psychic power spirals out of control, threatening to unleash the same catastrophe that once leveled the city." },
+  { title: "Solo Leveling", cc: "kr", kind: "manga", status: "completed", demographic: "none", rating: 8.5, content: "suggestive", tags: ["action", "fantasy"], year: 2018, chapters: 179, fav: true, lib: "completed", desc: "The world's weakest hunter gains a mysterious system that lets him level up without limit, rising from bottom-rung fodder toward monstrous power." },
+  { title: "Tower of God", cc: "kr", kind: "manga", status: "ongoing", demographic: "none", rating: 8.2, content: "suggestive", tags: ["fantasy", "adventure", "action"], year: 2010, chapters: 600, unread: 1, lib: "reading", read: 540, desc: "A boy enters a mysterious tower to chase the only person who ever mattered to him, climbing floor by deadly floor toward whatever waits at the top." },
+  { title: "Omniscient Reader's Viewpoint", cc: "kr", kind: "manga", status: "ongoing", demographic: "none", rating: 8.9, content: "suggestive", tags: ["action", "fantasy", "drama"], year: 2020, chapters: 220, lib: "plan_to_read", desc: "The only reader who finished a long-dead web novel wakes to find its apocalypse coming true — and he alone knows how the story is supposed to go." },
+  { title: "The Ravages of Time", cc: "cn", kind: "manga", status: "ongoing", demographic: "none", rating: 8.3, content: "safe", tags: ["historical", "action", "military"], year: 2001, chapters: 600, desc: "A cold retelling of the Three Kingdoms era from the shadows, where a secret band of strategists moves warlords like pieces across a bleeding board." },
+  { title: "Saga", cc: "us", kind: "comic", status: "ongoing", demographic: "none", rating: 9.0, content: "mature", tags: ["sci-fi", "fantasy", "romance"], year: 2012, chapters: 66, fav: true, unread: 2, lib: "reading", read: 54, desc: "Two soldiers from opposite sides of a galactic war fall in love and flee with their newborn daughter, hunted across a strange and gorgeous universe." },
+  { title: "Watchmen", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.2, content: "mature", tags: ["superhero", "mystery", "drama"], year: 1986, chapters: 12, lib: "completed", desc: "In an alternate 1985, the murder of a costumed vigilante pulls a group of retired heroes into a conspiracy that questions the very idea of heroism." },
+  { title: "The Sandman", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.1, content: "mature", tags: ["fantasy", "horror", "drama"], year: 1989, chapters: 75, desc: "Freed after decades of captivity, Dream of the Endless sets out to rebuild his realm — a sprawling myth woven from history, folklore and nightmare." },
+  { title: "Dune", cc: "us", kind: "book", status: "completed", demographic: "none", rating: 9.3, content: "safe", tags: ["sci-fi", "adventure"], year: 1965, chapters: 48, desc: "On the desert world of Arrakis, the only source of the universe's most precious substance, a betrayed noble heir is forged into a messianic force." },
+  { title: "The Name of the Wind", cc: "us", kind: "book", status: "ongoing", demographic: "none", rating: 9.0, content: "safe", tags: ["fantasy", "adventure"], year: 2007, chapters: 92, desc: "A legendary figure hiding as a humble innkeeper recounts his own story: how a gifted, reckless orphan became the most notorious name of his age." },
+];
+
 let n = 0;
-function makeSeries(title: string, opts: Partial<Series> = {}): Series {
+function fromSeed(s: Seed): Series {
   n += 1;
   const id = `s${n}`;
   return {
     id,
-    title,
+    title: s.title,
     coverUrl: cover(id),
     authors: ["Author Name"],
     artists: ["Artist Name"],
-    status: "ongoing",
-    contentRating: "safe",
-    demographic: "seinen",
-    tags: GENRES.slice(0, 3),
-    chapterCount: 120,
-    unreadCount: 0,
-    year: 2019,
-    description:
-      "A placeholder synopsis. Replace with real metadata once the scan pipeline and " +
-      "MangaDex provider are wired up. It should truncate gracefully after a few lines, " +
-      "expanding when the reader chooses to see more of the description.",
-    ...opts,
+    status: s.status,
+    contentRating: s.content,
+    demographic: s.demographic,
+    tags: s.tags.map((tid) => TAGS[tid]).filter((x): x is Tag => Boolean(x)),
+    chapterCount: s.chapters,
+    unreadCount: s.unread ?? 0,
+    year: s.year,
+    description: s.desc,
+    originCountry: s.cc,
+    rating: s.rating,
+    favorite: s.fav ?? false,
+    kind: s.kind,
+    libraryStatus: s.lib ?? "none",
+    ...(s.read !== undefined ? { lastReadChapter: s.read, totalChapters: s.chapters } : {}),
   };
 }
 
-export const continueReading: Series[] = [
-  makeSeries("Hanzawa Naoki", {
-    unreadCount: 3,
-    lastReadChapter: 45,
-    totalChapters: 120,
-    tags: [GENRES[1], GENRES[2]],
-    demographic: "seinen",
-  }),
-  makeSeries("Blue Period", { unreadCount: 1, lastReadChapter: 58, totalChapters: 62 }),
-  makeSeries("Vinland Saga", { unreadCount: 7, lastReadChapter: 190, totalChapters: 210 }),
-];
+export const librarySeries: Series[] = SEEDS.map(fromSeed);
 
-export const librarySeries: Series[] = Array.from({ length: 18 }, (_, i) =>
-  makeSeries(`Series Title ${i + 1}`, { unreadCount: i % 4 === 0 ? (i % 9) + 1 : 0 }),
-);
+export const continueReading: Series[] = librarySeries
+  .filter((s) => s.lastReadChapter !== undefined)
+  .slice(0, 6);
 
 export const recentUpdates: RecentUpdate[] = librarySeries.slice(0, 8).map((series, i) => ({
   series,
@@ -66,9 +143,37 @@ export const recentUpdates: RecentUpdate[] = librarySeries.slice(0, 8).map((seri
 }));
 
 export function findSeries(id: string): Series {
-  return [...continueReading, ...librarySeries].find((s) => s.id === id) ?? continueReading[0];
+  return librarySeries.find((s) => s.id === id) ?? librarySeries[0];
 }
 
+export function randomSeriesId(): string {
+  const i = Math.floor(Math.random() * librarySeries.length);
+  return librarySeries[i].id;
+}
+
+/** A named library slice, resolved from a route key (manga / comics / books / …). */
+export interface LibraryDef {
+  key: string;
+  title: string;
+  series: Series[];
+}
+
+export function libraryFor(key: string): LibraryDef {
+  switch (key) {
+    case "favorites":
+      return { key, title: "Favorites", series: librarySeries.filter((s) => s.favorite) };
+    case "reading":
+      return { key, title: "Reading", series: librarySeries.filter((s) => s.lastReadChapter !== undefined) };
+    case "comics":
+      return { key, title: "Comics", series: librarySeries.filter((s) => s.kind === "comic") };
+    case "books":
+      return { key, title: "Books", series: librarySeries.filter((s) => s.kind === "book") };
+    default:
+      return { key: "manga", title: "Manga", series: librarySeries.filter((s) => s.kind === "manga") };
+  }
+}
+
+// --- Chapters (series detail) ----------------------------------------------
 let chapNo = 210;
 function makeChapter(volume: number, i: number): Chapter {
   const num = chapNo;
@@ -90,17 +195,6 @@ export const mockVolumes: VolumeGroup[] = [3, 2, 1].map((vol) => ({
   volume: vol,
   chapters: Array.from({ length: 4 }, (_, i) => makeChapter(vol, i)),
 }));
-
-const THEMES: Tag[] = [
-  tag("isekai", "Isekai", "theme"),
-  tag("school", "School Life", "theme"),
-  tag("magic", "Magic", "theme"),
-  tag("military", "Military", "theme"),
-];
-const CONTENT: Tag[] = [
-  tag("gore", "Gore", "content"),
-  tag("sexual-violence", "Sexual Violence", "content"),
-];
 
 export const browseTagGroups: { group: string; tags: Tag[] }[] = [
   { group: "Genre", tags: GENRES },

@@ -40,6 +40,14 @@ export interface Series {
   /** Per-user reading position, when in progress. */
   lastReadChapter?: number;
   totalChapters?: number;
+  /** ISO 3166-1 alpha-2 (lowercase) origin country — drives the flag + manga/manhwa/manhua. */
+  originCountry?: string;
+  /** Community rating, 0–10. */
+  rating?: number;
+  favorite?: boolean;
+  kind?: "manga" | "comic" | "book";
+  /** This user's shelf status (drives the library's status tabs). */
+  libraryStatus?: LibraryStatus;
 }
 
 export interface RecentUpdate {

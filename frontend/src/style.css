@@ -4,6 +4,19 @@
   themes: dark --default, light;
 }
 
+/* The status-dot colors live only in a TS map (lib/display.ts), so force-generate
+   them — the class scanner would otherwise purge them as "unused". */
+@source inline("bg-{success,info,warning,error}");
+
+/* One corner-radius language: buttons/inputs/tabs (field) and badges/tags
+   (selector) share the same radius so they stop looking mismatched. */
+:root,
+[data-theme] {
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+}
+
 /* Portrait 2:3 cover ratio, as a reusable utility so we never sprinkle
    `aspect-[2/3]` (the one arbitrary value the mockups kept reaching for). */
 @utility cover {
