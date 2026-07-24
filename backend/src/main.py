@@ -13,6 +13,7 @@ from src.core.config import settings
 from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
 from src.health.router import router as health_router
+from src.library.router import router as library_router
 
 configure_logging()
 logger = get_logger(__name__)
@@ -51,6 +52,7 @@ async def _domain_exception_handler(_request: Request, exc: LycheeError) -> JSON
 
 app.include_router(health_router)
 app.include_router(catalog_router)
+app.include_router(library_router)
 
 
 @app.get("/")
