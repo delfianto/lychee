@@ -6,7 +6,9 @@ import LibraryHome from "../views/LibraryHome.vue";
 import LibraryView from "../views/LibraryView.vue";
 import ListDetailView from "../views/ListDetailView.vue";
 import ListsView from "../views/ListsView.vue";
+import NotFoundView from "../views/NotFoundView.vue";
 import ReaderView from "../views/ReaderView.vue";
+import SearchView from "../views/SearchView.vue";
 import SeriesDetail from "../views/SeriesDetail.vue";
 import SettingsView from "../views/SettingsView.vue";
 import UpdatesView from "../views/UpdatesView.vue";
@@ -28,6 +30,8 @@ export const router = createRouter({
         { path: "added", name: "added", component: AddedView },
         { path: "lists", name: "lists", component: ListsView },
         { path: "lists/:id", name: "list-detail", component: ListDetailView },
+        { path: "search", name: "search", component: SearchView },
+        { path: ":pathMatch(.*)*", name: "not-found", component: NotFoundView },
       ],
     },
     // Reader is full-screen — it deliberately sits outside the app shell.

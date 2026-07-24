@@ -36,6 +36,13 @@ function goRandom(): void {
   void router.push(`/series/${randomSeriesId()}`);
 }
 
+const searchQuery = ref("");
+function goSearch(): void {
+  mobileOpen.value = false;
+  const q = searchQuery.value.trim();
+  void router.push({ path: "/search", query: q ? { q } : {} });
+}
+
 interface NavItem {
   label: string;
   icon: Component;
@@ -87,7 +94,7 @@ const nav: NavItem[] = [
         <div class="navbar-end gap-1">
           <label class="input input-bordered input-sm hidden w-44 items-center gap-2 sm:flex lg:w-56">
             <Search class="size-4 opacity-60" />
-            <input type="search" class="grow" placeholder="Search…" />
+            <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" @keyup.enter="goSearch" />
           </label>
           <button class="btn btn-circle btn-ghost btn-sm" aria-label="Random series" @click="goRandom">
             <Dices class="size-5" />
