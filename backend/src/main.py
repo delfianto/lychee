@@ -13,6 +13,7 @@ from src.collections.router import router as collections_router
 from src.core.config import settings
 from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
+from src.downloads.provider import register_provider
 from src.downloads.router import router as downloads_router
 from src.health.router import router as health_router
 from src.integrations.router import router as integrations_router
@@ -29,6 +30,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     logger.info("application_startup", environment=settings.environment)
     if settings.auto_bootstrap:
         bootstrap()
+    from src.providers.mangadex import MangaDexProvider
+
+    register_provider(MangaDexProvider())
     yield
     logger.info("application_shutdown")
 
