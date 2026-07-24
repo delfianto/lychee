@@ -272,6 +272,99 @@
   --color-error: #b4637a;
   --color-error-content: #fffaf3;
 }
+/* Light counterparts — same palettes on a light base (Nord Snow Storm,
+   Dracula's official "Alucard", Tokyo Night Day), so every family is 1:1. */
+@plugin "daisyui/theme" {
+  name: "nord-light";
+  color-scheme: light;
+  --color-base-100: #eceff4;
+  --color-base-200: #e5e9f0;
+  --color-base-300: #d8dee9;
+  --color-base-content: #2e3440;
+  --color-primary: #5e81ac;
+  --color-primary-content: #eceff4;
+  --color-secondary: #81a1c1;
+  --color-secondary-content: #2e3440;
+  --color-accent: #b48ead;
+  --color-accent-content: #eceff4;
+  --color-neutral: #4c566a;
+  --color-neutral-content: #eceff4;
+  --color-info: #5e81ac;
+  --color-info-content: #eceff4;
+  --color-success: #a3be8c;
+  --color-success-content: #2e3440;
+  --color-warning: #ebcb8b;
+  --color-warning-content: #2e3440;
+  --color-error: #bf616a;
+  --color-error-content: #eceff4;
+}
+@plugin "daisyui/theme" {
+  name: "dracula-light";
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f2f2f7;
+  --color-base-300: #e2e2ec;
+  --color-base-content: #1f1f1f;
+  --color-primary: #644ac9;
+  --color-primary-content: #ffffff;
+  --color-secondary: #a3144d;
+  --color-secondary-content: #ffffff;
+  --color-accent: #036a96;
+  --color-accent-content: #ffffff;
+  --color-neutral: #6c664b;
+  --color-neutral-content: #ffffff;
+  --color-info: #036a96;
+  --color-info-content: #ffffff;
+  --color-success: #14710a;
+  --color-success-content: #ffffff;
+  --color-warning: #846e15;
+  --color-warning-content: #ffffff;
+  --color-error: #cb3a2a;
+  --color-error-content: #ffffff;
+}
+@plugin "daisyui/theme" {
+  name: "tokyonight-light";
+  color-scheme: light;
+  --color-base-100: #e9e9ed;
+  --color-base-200: #e1e2e7;
+  --color-base-300: #d0d5e3;
+  --color-base-content: #343b58;
+  --color-primary: #2e7de9;
+  --color-primary-content: #e1e2e7;
+  --color-secondary: #9854f1;
+  --color-secondary-content: #e1e2e7;
+  --color-accent: #007197;
+  --color-accent-content: #e1e2e7;
+  --color-neutral: #848cb5;
+  --color-neutral-content: #e1e2e7;
+  --color-info: #007197;
+  --color-info-content: #e1e2e7;
+  --color-success: #587539;
+  --color-success-content: #e1e2e7;
+  --color-warning: #8c6c3e;
+  --color-warning-content: #e1e2e7;
+  --color-error: #f52a65;
+  --color-error-content: #e1e2e7;
+}
+
+/* Default themes keep DaisyUI's neutral surfaces, but soften the stock blue
+   accent (it was the most "in your face" element) to a muted steel blue. */
+[data-theme="light"] {
+  --color-primary: #4c6d99;
+  --color-primary-content: #f8fafc;
+  --color-secondary: #647a94;
+  --color-secondary-content: #f8fafc;
+  --color-accent: #4f8a89;
+  --color-accent-content: #f8fafc;
+}
+[data-theme="dark"] {
+  --color-primary: #80a0c8;
+  --color-primary-content: #11151c;
+  --color-secondary: #97a6bb;
+  --color-secondary-content: #11151c;
+  --color-accent: #6fb0ad;
+  --color-accent-content: #11151c;
+}
 
 /* The status-dot colors live only in a TS map (lib/display.ts), so force-generate
    them — the class scanner would otherwise purge them as "unused". */
