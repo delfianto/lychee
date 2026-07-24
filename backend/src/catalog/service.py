@@ -5,8 +5,18 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from src.catalog import repository as repo
-from src.catalog.repository import SeriesFilters, SeriesRow
-from src.catalog.schema import SeriesOut, TagOut
+from src.catalog.models import Series
+from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
+from src.catalog.schema import (
+    ChapterDetailOut,
+    ChapterOut,
+    DashboardOut,
+    DashboardStats,
+    RecentUpdateOut,
+    SeriesOut,
+    TagOut,
+    VolumeGroupOut,
+)
 from src.core.exceptions import NotFoundError
 from src.core.schema import Page
 
@@ -107,3 +117,100 @@ def get_series(session: Session, series_id: str) -> SeriesOut:
     if row is None:
         raise NotFoundError(f"series {series_id!r} not found")
     return to_series_out(row)
+
+
+def to_chapter_out(row: ChapterRow) -> ChapterOut:
+    c = row.chapter
+    return ChapterOut(
+        id=c.id,
+        volume=c.volume,
+        number=c.number or "",
+        title=c.title,
+        group=c.group_name,
+        language=c.language,
+        uploaded_at=c.source_uploaded_at or c.created_at,
+        read=row.read,
+        comments=c.comment_count,
+    )
+
+
+def list_chapters(
+    session: Session, series_id: str, *, language: str | None, order: str
+) -> list[VolumeGroupOut]:
+    """Chapters grouped by volume, preserving the requested chapter order."""
+    if session.get(Series, series_id) is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    rows = repo.list_chapters(session, series_id, language=language, descending=order != "asc")
+    groups: list[VolumeGroupOut] = []
+    by_volume: dict[int | None, VolumeGroupOut] = {}
+    for row in rows:
+        volume = row.chapter.volume
+        group = by_volume.get(volume)
+        if group is None:
+            group = VolumeGroupOut(volume=volume, chapters=[])
+            by_volume[volume] = group
+            groups.append(group)
+        group.chapters.append(to_chapter_out(row))
+    return groups
+
+
+def get_chapter(session: Session, chapter_id: str) -> ChapterDetailOut:
+    row = repo.get_chapter(session, chapter_id)
+    if row is None:
+        raise NotFoundError(f"chapter {chapter_id!r} not found")
+    c = row.chapter
+    return ChapterDetailOut(
+        id=c.id,
+        series_id=c.series_id,
+        volume=c.volume,
+        number=c.number or "",
+        title=c.title,
+        group=c.group_name,
+        language=c.language,
+        page_count=c.page_count,
+        comments=c.comment_count,
+        read=row.read,
+        uploaded_at=c.source_uploaded_at or c.created_at,
+    )
+
+
+def _to_recent_update(row: UpdateRow, series: SeriesOut) -> RecentUpdateOut:
+    return RecentUpdateOut(
+        series=series,
+        volume=row.chapter.volume,
+        chapter=row.chapter.number or "",
+        updated_at=row.updated_at,
+    )
+
+
+def updates(
+    session: Session, *, unread_only: bool, cursor: str | None, limit: int
+) -> Page[RecentUpdateOut]:
+    limit = max(1, min(limit, _MAX_LIMIT))
+    rows, next_cursor = repo.recent_updates(
+        session, unread_only=unread_only, cursor=cursor, limit=limit
+    )
+    series_map = repo.get_series_rows(session, [r.chapter.series_id for r in rows])
+    items = [
+        _to_recent_update(r, to_series_out(series_map[r.chapter.series_id]))
+        for r in rows
+        if r.chapter.series_id in series_map
+    ]
+    return Page[RecentUpdateOut](items=items, next_cursor=next_cursor)
+
+
+def dashboard(session: Session) -> DashboardOut:
+    series_count, unread_chapters, reading = repo.dashboard_counts(session)
+    recent = updates(session, unread_only=False, cursor=None, limit=12)
+    return DashboardOut(
+        stats=DashboardStats(series=series_count, unread_chapters=unread_chapters, reading=reading),
+        continue_reading=[to_series_out(r) for r in repo.continue_reading(session, limit=6)],
+        recent_updates=recent.items,
+        recently_added=[to_series_out(r) for r in repo.recently_added(session, limit=12)],
+    )
+
+
+def search(session: Session, q: str, *, limit: int = 20) -> list[SeriesOut]:
+    if not q.strip():
+        return []
+    return [to_series_out(r) for r in repo.search_series(session, q.strip(), limit=limit)]

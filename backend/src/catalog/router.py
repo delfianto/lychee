@@ -5,7 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from src.catalog import service
-from src.catalog.schema import SeriesOut
+from src.catalog.schema import (
+    ChapterDetailOut,
+    DashboardOut,
+    RecentUpdateOut,
+    SeriesOut,
+    VolumeGroupOut,
+)
 from src.core.persistence.database import DbSession
 from src.core.schema import Page
 
@@ -54,3 +60,43 @@ def list_series(
 def get_series(db: DbSession, series_id: str) -> SeriesOut:
     """Full series detail."""
     return service.get_series(db, series_id)
+
+
+@router.get("/series/{series_id}/chapters")
+def list_chapters(
+    db: DbSession, series_id: str, language: str | None = None, order: str = "desc"
+) -> list[VolumeGroupOut]:
+    """Chapters grouped by volume (Related/chapters tab)."""
+    return service.list_chapters(db, series_id, language=language, order=order)
+
+
+@router.get("/chapters/{chapter_id}")
+def get_chapter(db: DbSession, chapter_id: str) -> ChapterDetailOut:
+    """Chapter detail for the reader."""
+    return service.get_chapter(db, chapter_id)
+
+
+@router.get("/updates")
+def updates(db: DbSession, cursor: str | None = None, limit: int = 24) -> Page[RecentUpdateOut]:
+    """Recently updated chapters across the library."""
+    return service.updates(db, unread_only=False, cursor=cursor, limit=limit)
+
+
+@router.get("/updates/unread")
+def unread_updates(
+    db: DbSession, cursor: str | None = None, limit: int = 24
+) -> Page[RecentUpdateOut]:
+    """Unread chapters across the library."""
+    return service.updates(db, unread_only=True, cursor=cursor, limit=limit)
+
+
+@router.get("/dashboard")
+def dashboard(db: DbSession) -> DashboardOut:
+    """One call for the Home dashboard: stats + continue-reading + updates + added."""
+    return service.dashboard(db)
+
+
+@router.get("/search")
+def search(db: DbSession, q: str = "", limit: int = 20) -> list[SeriesOut]:
+    """Title search powering the navbar."""
+    return service.search(db, q, limit=limit)
