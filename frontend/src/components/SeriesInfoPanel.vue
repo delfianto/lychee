@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { contentRatingClass, contentRatingLabel } from "../lib/display";
 import type { Series } from "../types";
 
 defineProps<{ series: Series }>();
@@ -29,6 +30,12 @@ const trackers = [
           <span class="badge badge-sm badge-outline capitalize">{{ series.demographic }}</span>
         </div>
         <div>
+          <div class="text-xs text-base-content/60">Content rating</div>
+          <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
+            {{ contentRatingLabel[series.contentRating] }}
+          </span>
+        </div>
+        <div>
           <div class="text-xs text-base-content/60">Publication</div>
           <div>{{ cap(series.status) }}<template v-if="series.year"> · {{ series.year }}</template></div>
         </div>
@@ -37,7 +44,7 @@ const trackers = [
       <div class="flex flex-col gap-2">
         <div class="text-xs text-base-content/60">Tags</div>
         <div class="flex flex-wrap gap-1">
-          <span v-for="t in series.tags" :key="t.id" class="badge badge-sm">{{ t.name }}</span>
+          <span v-for="t in series.tags" :key="t.id" class="badge badge-outline badge-sm">{{ t.name }}</span>
         </div>
       </div>
 

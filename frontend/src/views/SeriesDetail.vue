@@ -4,7 +4,9 @@ import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import ChapterList from "../components/ChapterList.vue";
+import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
+import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
 import { findSeries, mockVolumes } from "../mocks/library";
 import type { LibraryStatus } from "../types";
 
@@ -51,11 +53,20 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
         />
         <div class="flex min-w-0 grow flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h1 class="text-3xl font-bold">{{ series.title }}</h1>
+            <h1 class="flex items-center gap-2 text-3xl font-bold">
+              <CountryFlag v-if="series.originCountry" :cc="series.originCountry" />
+              {{ series.title }}
+            </h1>
             <p class="text-sm text-base-content/70">{{ series.authors.join(", ") }}</p>
             <div class="flex flex-wrap items-center gap-2 text-xs">
-              <span class="badge badge-sm">{{ cap(series.status) }}</span>
-              <span v-if="series.year" class="text-base-content/60">{{ series.year }}</span>
+              <span class="flex items-center gap-1.5">
+                <span class="size-2 rounded-full" :class="statusColor[series.status]"></span>
+                {{ cap(series.status) }}
+              </span>
+              <span v-if="series.year" class="text-base-content/60">· {{ series.year }}</span>
+              <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
+                {{ contentRatingLabel[series.contentRating] }}
+              </span>
             </div>
           </div>
 
