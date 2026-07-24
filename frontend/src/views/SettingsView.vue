@@ -205,7 +205,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
         </div>
 
         <!-- Integrations: Providers + Trackers -->
-        <div v-else-if="active === 'integrations'" class="flex flex-col gap-8">
+        <div v-else-if="active === 'integrations'" class="grid items-start gap-6 lg:grid-cols-2">
           <section class="flex flex-col gap-3">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Metadata providers</h3>
             <div class="card bg-base-100">
@@ -287,7 +287,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
         </div>
 
         <!-- Preferences: Appearance + Reader -->
-        <div v-else-if="active === 'preferences'" class="flex flex-col gap-8">
+        <div v-else-if="active === 'preferences'" class="grid items-start gap-6 lg:grid-cols-2">
           <section class="flex flex-col gap-3">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Appearance</h3>
             <div class="card bg-base-100">
