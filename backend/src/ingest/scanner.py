@@ -15,6 +15,7 @@ containers, and multi-chapter archives.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -124,8 +125,17 @@ def _page_count(candidate: _Candidate) -> int | None:
         return None
 
 
-def scan_library(session: Session, library: Library) -> ScanSummary:
-    """Full scan of one library: reconcile its Series/Book/Chapter rows with disk."""
+def scan_library(
+    session: Session,
+    library: Library,
+    *,
+    on_progress: Callable[[int, str], None] | None = None,
+) -> ScanSummary:
+    """Full scan of one library: reconcile its Series/Book/Chapter rows with disk.
+
+    ``on_progress(percent, label)`` is called after each top-level entry so callers
+    can surface live progress (SSE).
+    """
     root = Path(library.path)
     if not root.is_dir():
         raise BadRequestError(f"library path not found: {root}")
@@ -139,7 +149,8 @@ def scan_library(session: Session, library: Library) -> ScanSummary:
     }
     seen: set[str] = set()
 
-    for entry in sorted(p for p in root.iterdir() if not p.name.startswith(".")):
+    entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".")]
+    for index, entry in enumerate(entries, start=1):
         if entry.is_dir():
             candidates = _resolve_books(entry, root)
             if candidates:
@@ -148,6 +159,8 @@ def scan_library(session: Session, library: Library) -> ScanSummary:
             title = Path(entry.name).stem
             oneshot = [_candidate(entry, root, root, kind)]
             _ingest_series(session, library, title, oneshot, existing, seen, summary)
+        if on_progress is not None:
+            on_progress(round(index / len(entries) * 100), entry.name)
 
     for path_rel, book in existing.items():
         if path_rel not in seen:

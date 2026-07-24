@@ -1,5 +1,6 @@
 """lychee backend — FastAPI application entrypoint."""
 
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -19,6 +20,8 @@ from src.health.router import router as health_router
 from src.integrations.router import router as integrations_router
 from src.library.router import router as library_router
 from src.progress.router import router as progress_router
+from src.tasks.events import broker
+from src.tasks.router import router as tasks_router
 from src.taxonomy.router import router as taxonomy_router
 
 configure_logging()
@@ -33,6 +36,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     from src.providers.mangadex import MangaDexProvider
 
     register_provider(MangaDexProvider())
+    broker.bind_loop(asyncio.get_running_loop())
     yield
     logger.info("application_shutdown")
 
@@ -66,6 +70,7 @@ app.include_router(progress_router)
 app.include_router(integrations_router)
 app.include_router(taxonomy_router)
 app.include_router(collections_router)
+app.include_router(tasks_router)
 app.include_router(downloads_router)
 
 
