@@ -14,6 +14,7 @@ from src.catalog.schema import (
     RecentUpdateOut,
     SeriesArtOut,
     SeriesOut,
+    SeriesUpdate,
     VolumeGroupOut,
 )
 from src.core.persistence.database import DbSession
@@ -77,6 +78,12 @@ def list_series(
 def get_series(db: DbSession, series_id: str) -> SeriesOut:
     """Full series detail."""
     return service.get_series(db, series_id)
+
+
+@router.patch("/series/{series_id}")
+def update_series(db: DbSession, series_id: str, data: SeriesUpdate) -> SeriesOut:
+    """Persist detail action-row edits: favorite / library status / personal rating."""
+    return service.update_series(db, series_id, data)
 
 
 @router.get("/series/{series_id}/chapters")
