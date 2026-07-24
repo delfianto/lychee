@@ -16,12 +16,17 @@ import {
   Settings,
   Sun,
 } from "lucide-vue-next";
-import { type Component, computed, ref } from "vue";
+import { type Component, computed, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import { connectTaskStream } from "../api/events";
+import { randomSeriesId } from "../api/queries";
+import ActivityIndicator from "../components/ActivityIndicator.vue";
 import Toaster from "../components/Toaster.vue";
 import { useTheme } from "../lib/theme";
-import { randomSeriesId } from "../api/queries";
+
+// Open the shared background-task stream once for the whole app.
+onMounted(connectTaskStream);
 
 const router = useRouter();
 const route = useRoute();
@@ -106,6 +111,7 @@ const nav: NavItem[] = [
             <Search class="size-4 opacity-60" />
             <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" @keyup.enter="goSearch" />
           </label>
+          <ActivityIndicator />
           <button class="btn btn-circle btn-ghost btn-sm" aria-label="Random series" @click="goRandom">
             <Dices class="size-5" />
           </button>
