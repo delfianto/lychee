@@ -190,6 +190,32 @@ export async function fetchArt(id: string): Promise<string[]> {
   return data.images;
 }
 
+// --- gallery -------------------------------------------------------------------
+
+/** All gallery-kind series (few enough to filter client-side + derive facets). */
+export async function fetchGalleries(): Promise<Series[]> {
+  const { data, error } = await api.GET("/api/series", {
+    params: { query: { kind: "gallery", limit: 100, sort: "recentlyAdded" } },
+  });
+  if (error || !data) return [];
+  return data.items.map(toSeries);
+}
+
+/** Every image URL of a gallery (follows the cursor to the end). */
+export async function fetchGalleryImages(id: string): Promise<string[]> {
+  const urls: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const { data, error } = await api.GET("/api/series/{series_id}/images", {
+      params: { path: { series_id: id }, query: { limit: 100, ...(cursor ? { cursor } : {}) } },
+    });
+    if (error || !data) break;
+    urls.push(...data.items);
+    cursor = data.nextCursor ?? undefined;
+  } while (cursor);
+  return urls;
+}
+
 const SORT_MAP: Record<string, string> = {
   "Recently Added": "recentlyAdded",
   "Recently Updated": "recentlyUpdated",

@@ -1,26 +1,37 @@
 <script setup lang="ts">
 import { Check, Heart, Images, ListPlus } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
+import { fetchGalleryImages, fetchSeries } from "../api/queries";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
 import { toast } from "../lib/toast";
-import { findSeries, galleryImages } from "../mocks/library";
 import { useCollections } from "../stores/collections";
-import type { Collection } from "../types";
+import type { Collection, Series } from "../types";
 
 const route = useRoute();
-const gallery = computed(() => findSeries(String(route.params.id)));
-const images = computed(() => galleryImages(gallery.value.id, gallery.value.imageCount ?? 24));
+const gallery = ref<Series | null>(null);
+const images = ref<string[]>([]);
+const favorite = ref(false);
+
+async function load(id: string): Promise<void> {
+  gallery.value = null;
+  const [g, imgs] = await Promise.all([fetchSeries(id), fetchGalleryImages(id)]);
+  gallery.value = g;
+  images.value = imgs;
+  favorite.value = g.favorite ?? false;
+}
+watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
 
 const collections = useCollections();
 function toggleList(l: Collection): void {
-  const wasIn = collections.hasSeries(l.id, gallery.value.id);
-  collections.toggleSeries(l.id, gallery.value.id);
+  if (!gallery.value) return;
+  const gid = gallery.value.id;
+  const wasIn = collections.hasSeries(l.id, gid);
+  collections.toggleSeries(l.id, gid);
   toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
 }
-const favorite = ref(gallery.value.favorite ?? false);
 
 // Lightbox
 const open = ref(false);
@@ -33,6 +44,10 @@ function openAt(i: number): void {
 
 <template>
   <div class="flex flex-col gap-6 p-4 sm:p-6">
+    <div v-if="!gallery" class="flex justify-center py-20">
+      <span class="loading loading-spinner loading-lg text-primary" />
+    </div>
+    <template v-else>
     <!-- Header -->
     <section class="flex flex-col gap-4 sm:flex-row sm:gap-6">
       <img
@@ -127,5 +142,6 @@ function openAt(i: number): void {
     </div>
 
     <Lightbox v-if="open" :images="images" :index="idx" @update:index="idx = $event" @close="open = false" />
+    </template>
   </div>
 </template>

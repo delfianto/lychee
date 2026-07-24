@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { Search } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
+import { fetchGalleries } from "../api/queries";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
-import { libraryFor } from "../mocks/library";
+import type { Series } from "../types";
 
 // Galleries are image sets, not chaptered reading — so this page is deliberately
 // different from the manga/comics library: always a large-image grid (no density
 // toggle), no shelf-status tabs or filter presets, and filtering by the things
-// that matter for artwork — artist/model and source series.
-const all = computed(() => libraryFor("gallery").series);
+// that matter for artwork — artist/model and source series. Galleries are few, so
+// we fetch them once and filter/derive facets client-side.
+const all = ref<Series[]>([]);
+onMounted(async () => {
+  all.value = await fetchGalleries();
+});
 
 const query = ref("");
 const artist = ref("");
