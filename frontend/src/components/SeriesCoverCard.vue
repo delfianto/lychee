@@ -10,7 +10,10 @@ const emit = defineEmits<{ remove: [] }>();
 </script>
 
 <template>
-  <RouterLink :to="`/series/${series.id}`" class="group relative block overflow-hidden rounded-box surface-border">
+  <RouterLink
+    :to="series.kind === 'gallery' ? `/gallery/${series.id}` : `/series/${series.id}`"
+    class="group relative block overflow-hidden rounded-box surface-border"
+  >
     <img
       :src="series.coverUrl"
       :alt="series.title"
@@ -32,7 +35,11 @@ const emit = defineEmits<{ remove: [] }>();
     </span>
     <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2 pt-8">
       <div class="flex items-start gap-1.5">
-        <CountryFlag v-if="series.originCountry" :cc="series.originCountry" class="mt-0.5 shadow" />
+        <CountryFlag
+          v-if="series.originCountry && series.kind !== 'gallery'"
+          :cc="series.originCountry"
+          class="mt-0.5 shadow"
+        />
         <h3 class="line-clamp-2 text-sm font-semibold text-white">{{ series.title }}</h3>
       </div>
     </div>

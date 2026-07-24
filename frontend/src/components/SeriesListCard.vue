@@ -15,7 +15,10 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
 </script>
 
 <template>
-  <RouterLink :to="`/series/${series.id}`" class="group block">
+  <RouterLink
+    :to="series.kind === 'gallery' ? `/gallery/${series.id}` : `/series/${series.id}`"
+    class="group block"
+  >
     <article class="flex gap-3 rounded-box surface-border bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4">
       <img
         :src="series.coverUrl"
@@ -31,7 +34,7 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
             class="flex min-w-0 items-center gap-1.5 font-semibold leading-tight"
             :class="compact ? 'text-sm' : 'text-base'"
           >
-            <CountryFlag v-if="series.originCountry" :cc="series.originCountry" />
+            <CountryFlag v-if="series.originCountry && series.kind !== 'gallery'" :cc="series.originCountry" />
             <span class="truncate group-hover:text-primary">{{ series.title }}</span>
           </h3>
           <div class="flex shrink-0 items-center gap-2">
@@ -43,6 +46,7 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
               :class="series.favorite ? 'fill-current text-error' : 'text-base-content/40'"
             />
             <span
+              v-if="series.kind !== 'gallery'"
               class="size-2.5 shrink-0 rounded-full"
               :class="statusColor[series.status]"
               :title="statusLabel[series.status]"
@@ -71,10 +75,13 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
 
         <!-- Meta footer -->
         <div class="mt-auto flex items-center gap-2 pt-0.5 text-xs text-base-content/60">
-          <span>{{ series.chapterCount }} chapters</span>
-          <span v-if="series.unreadCount > 0" class="badge badge-primary badge-sm">
-            {{ series.unreadCount }} unread
-          </span>
+          <span v-if="series.kind === 'gallery'">{{ series.imageCount }} images</span>
+          <template v-else>
+            <span>{{ series.chapterCount }} chapters</span>
+            <span v-if="series.unreadCount > 0" class="badge badge-primary badge-sm">
+              {{ series.unreadCount }} unread
+            </span>
+          </template>
         </div>
       </div>
     </article>

@@ -45,7 +45,12 @@ export interface Series {
   /** Community rating, 0–10. */
   rating?: number;
   favorite?: boolean;
-  kind?: "manga" | "comic";
+  kind?: "manga" | "comic" | "gallery";
+  /** Number of images, for gallery-kind items (which have images, not chapters). */
+  imageCount?: number;
+  /** Gallery-only metadata: the series the art depicts + depicted characters. */
+  source?: string;
+  characters?: string[];
   /** This user's shelf status (drives the library's status tabs). */
   libraryStatus?: LibraryStatus;
 }

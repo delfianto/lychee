@@ -50,6 +50,10 @@ const THEMES: Tag[] = [
   t("military", "Military", "theme"),
   t("revenge", "Revenge", "theme"),
   t("survival", "Survival", "theme"),
+  t("official", "Official", "theme"),
+  t("fan-art", "Fan Art", "theme"),
+  t("cosplay", "Cosplay", "theme"),
+  t("illustration", "Illustration", "theme"),
 ];
 const CONTENT: Tag[] = [
   t("gore", "Gore", "content"),
@@ -77,6 +81,10 @@ interface Seed {
   unread?: number;
   lib?: LibraryStatus;
   read?: number; // last-read chapter (marks it in-progress)
+  images?: number; // gallery image count (kind === "gallery")
+  artists?: string[]; // gallery: illustrators / cosplayers / photographers
+  characters?: string[]; // gallery: depicted characters
+  source?: string; // gallery: source series
 }
 
 const SEEDS: Seed[] = [
@@ -98,8 +106,16 @@ const SEEDS: Seed[] = [
   { title: "Omniscient Reader's Viewpoint", cc: "kr", kind: "manga", status: "ongoing", demographic: "none", rating: 8.9, content: "suggestive", tags: ["action", "fantasy", "drama"], year: 2020, chapters: 220, lib: "plan_to_read", desc: "The only reader who finished a long-dead web novel wakes to find its apocalypse coming true — and he alone knows how the story is supposed to go." },
   { title: "The Ravages of Time", cc: "cn", kind: "manga", status: "ongoing", demographic: "none", rating: 8.3, content: "safe", tags: ["historical", "action", "military"], year: 2001, chapters: 600, desc: "A cold retelling of the Three Kingdoms era from the shadows, where a secret band of strategists moves warlords like pieces across a bleeding board." },
   { title: "Saga", cc: "us", kind: "comic", status: "ongoing", demographic: "none", rating: 9.0, content: "mature", tags: ["sci-fi", "fantasy", "romance"], year: 2012, chapters: 66, fav: true, unread: 2, lib: "reading", read: 54, desc: "Two soldiers from opposite sides of a galactic war fall in love and flee with their newborn daughter, hunted across a strange and gorgeous universe." },
-  { title: "Watchmen", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.2, content: "mature", tags: ["superhero", "mystery", "drama"], year: 1986, chapters: 12, lib: "completed", desc: "In an alternate 1985, the murder of a costumed vigilante pulls a group of retired heroes into a conspiracy that questions the very idea of heroism." },
-  { title: "The Sandman", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.1, content: "mature", tags: ["fantasy", "horror", "drama"], year: 1989, chapters: 75, desc: "Freed after decades of captivity, Dream of the Endless sets out to rebuild his realm — a sprawling myth woven from history, folklore and nightmare." },
+  { title: "Watchmen", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.2, content: "mature", tags: ["superhero", "mystery", "drama"], year: 1986, chapters: 12, fav: true, lib: "completed", desc: "In an alternate 1985, the murder of a costumed vigilante pulls a group of retired heroes into a conspiracy that questions the very idea of heroism." },
+  { title: "The Sandman", cc: "us", kind: "comic", status: "completed", demographic: "none", rating: 9.1, content: "mature", tags: ["fantasy", "horror", "drama"], year: 1989, chapters: 75, fav: true, desc: "Freed after decades of captivity, Dream of the Endless sets out to rebuild his realm — a sprawling myth woven from history, folklore and nightmare." },
+
+  // --- Galleries (image sets: official art, fan art, cosplay) ---
+  { title: "Frieren — Official Illustrations", cc: "jp", kind: "gallery", status: "completed", demographic: "none", rating: 9.4, content: "safe", tags: ["fantasy", "art", "official", "illustration"], year: 2023, chapters: 0, images: 36, fav: true, artists: ["Tsukasa Abe"], characters: ["Frieren", "Fern", "Stark"], source: "Frieren: Beyond Journey's End", desc: "Official character art and promotional illustrations from the manga and anime." },
+  { title: "Chainsaw Man — Fan Art", cc: "jp", kind: "gallery", status: "completed", demographic: "none", rating: 8.9, content: "suggestive", tags: ["action", "fan-art", "art"], year: 2022, chapters: 0, images: 52, artists: ["Various artists"], characters: ["Denji", "Power", "Makima"], source: "Chainsaw Man", desc: "A community collection of fan illustrations of Denji, Power, Makima and the rest." },
+  { title: "Marin Kitagawa — Cosplay", cc: "jp", kind: "gallery", status: "completed", demographic: "none", rating: 8.6, content: "suggestive", tags: ["cosplay", "romance"], year: 2023, chapters: 0, images: 28, artists: ["Enako", "Shirogane Sama"], characters: ["Marin Kitagawa"], source: "My Dress-Up Darling", desc: "Cosplay photosets of My Dress-Up Darling's Marin, from various artists and events." },
+  { title: "Genshin Impact — Splash Art", cc: "cn", kind: "gallery", status: "completed", demographic: "none", rating: 9.0, content: "safe", tags: ["fantasy", "official", "art", "illustration"], year: 2020, chapters: 0, images: 44, fav: true, artists: ["HoYoverse"], characters: ["Raiden Shogun", "Zhongli", "Nahida"], source: "Genshin Impact", desc: "Character splash screens and key art from across the regions of Teyvat." },
+  { title: "Berserk — Miura Artworks", cc: "jp", kind: "gallery", status: "completed", demographic: "none", rating: 9.7, content: "mature", tags: ["fantasy", "art", "official"], year: 2019, chapters: 0, images: 60, artists: ["Kentaro Miura"], characters: ["Guts", "Griffith"], source: "Berserk", desc: "High-resolution scans of Kentaro Miura's cover paintings and colour spreads." },
+  { title: "Studio Ghibli — Background Art", cc: "jp", kind: "gallery", status: "completed", demographic: "none", rating: 9.2, content: "safe", tags: ["art", "official", "illustration"], year: 2021, chapters: 0, images: 40, artists: ["Kazuo Oga"], characters: [], source: "Studio Ghibli", desc: "Hand-painted background layouts and concept art across the studio's films." },
 ];
 
 let n = 0;
@@ -111,7 +127,7 @@ function fromSeed(s: Seed): Series {
     title: s.title,
     coverUrl: cover(id),
     authors: ["Author Name"],
-    artists: ["Artist Name"],
+    artists: s.artists ?? ["Artist Name"],
     status: s.status,
     contentRating: s.content,
     demographic: s.demographic,
@@ -124,6 +140,9 @@ function fromSeed(s: Seed): Series {
     rating: s.rating,
     favorite: s.fav ?? false,
     kind: s.kind,
+    imageCount: s.images,
+    source: s.source,
+    characters: s.characters,
     libraryStatus: s.lib ?? "none",
     ...(s.read !== undefined ? { lastReadChapter: s.read, totalChapters: s.chapters } : {}),
   };
@@ -135,8 +154,10 @@ export const continueReading: Series[] = librarySeries
   .filter((s) => s.lastReadChapter !== undefined)
   .slice(0, 6);
 
+// Chapter-based content only — galleries have images, not chapter updates.
+const chaptered = librarySeries.filter((s) => s.kind !== "gallery");
 export const recentUpdates: RecentUpdate[] = Array.from({ length: 24 }, (_, i) => {
-  const series = librarySeries[i % librarySeries.length];
+  const series = chaptered[i % chaptered.length];
   const chapNum = series.chapterCount - (i % 5);
   return {
     series,
@@ -198,6 +219,8 @@ export function libraryFor(key: string): LibraryDef {
       return { key, title: "Reading", series: librarySeries.filter((s) => s.libraryStatus === "reading") };
     case "comics":
       return { key, title: "Comics", series: librarySeries.filter((s) => s.kind === "comic") };
+    case "gallery":
+      return { key, title: "Gallery", series: librarySeries.filter((s) => s.kind === "gallery") };
     default:
       return { key: "manga", title: "Manga", series: librarySeries.filter((s) => s.kind === "manga") };
   }
@@ -214,7 +237,13 @@ export interface LibrarySummary {
 export const librarySummaries: LibrarySummary[] = [
   { key: "manga", title: "Manga", sizeGb: 18.6 },
   { key: "comics", title: "Comics", sizeGb: 4.3 },
+  { key: "gallery", title: "Gallery", sizeGb: 9.7 },
 ];
+
+/** Placeholder images for a gallery's detail grid + lightbox (kind === "gallery"). */
+export function galleryImages(id: string, count = 24): string[] {
+  return Array.from({ length: count }, (_, i) => `https://picsum.photos/seed/${id}-g${i}/800/1000`);
+}
 
 // --- Chapters (series detail) ----------------------------------------------
 let chapNo = 210;
