@@ -2,6 +2,7 @@
 import { Cherry, GripVertical, Plus, Search } from "lucide-vue-next";
 import { reactive, ref } from "vue";
 
+import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
 import { useTheme } from "../lib/theme";
 import { browseTagGroups } from "../mocks/library";
 import type { ContentRating } from "../types";
@@ -57,14 +58,20 @@ const trackers = reactive([
   { name: "MangaUpdates", connected: false, syncOnRead: false },
 ]);
 
-// --- Reader defaults (mock) ---
-const reader = reactive({ mode: "single", direction: "ltr", fit: "height", background: "dark" });
-const readerGroups = [
+// --- Reader defaults (shared with the reader) ---
+const reader = useReaderSettings();
+const readerGroups: { key: keyof ReaderSettings; label: string; opts: { v: string; l: string }[] }[] = [
   { key: "mode", label: "Reading mode", opts: [{ v: "single", l: "Single" }, { v: "double", l: "Double" }, { v: "longstrip", l: "Long strip" }] },
   { key: "direction", label: "Direction", opts: [{ v: "ltr", l: "L → R" }, { v: "rtl", l: "R → L" }] },
   { key: "fit", label: "Fit", opts: [{ v: "width", l: "Width" }, { v: "height", l: "Height" }, { v: "both", l: "Both" }, { v: "original", l: "Original" }] },
   { key: "background", label: "Background", opts: [{ v: "dark", l: "Dark" }, { v: "black", l: "Black" }, { v: "sepia", l: "Sepia" }] },
-] as const;
+];
+function readerValue(k: keyof ReaderSettings): string {
+  return reader[k];
+}
+function setReader(k: keyof ReaderSettings, v: string): void {
+  (reader as unknown as Record<string, string>)[k] = v;
+}
 
 // --- Appearance ---
 const DENSITY_KEY = "lychee.density";
@@ -245,8 +252,8 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                   v-for="o in grp.opts"
                   :key="o.v"
                   class="btn btn-sm join-item"
-                  :class="reader[grp.key] === o.v ? 'btn-primary' : 'btn-ghost'"
-                  @click="reader[grp.key] = o.v"
+                  :class="readerValue(grp.key) === o.v ? 'btn-primary' : 'btn-ghost'"
+                  @click="setReader(grp.key, o.v)"
                 >
                   {{ o.l }}
                 </button>

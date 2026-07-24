@@ -1,62 +1,64 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import {
+  type ReaderBackground,
+  type ReaderDirection,
+  type ReaderFit,
+  type ReaderMode,
+  useReaderSettings,
+} from "../lib/readerSettings";
 import { findSeries } from "../mocks/library";
-
-type Mode = "single" | "double" | "longstrip";
-type Direction = "ltr" | "rtl";
-type Fit = "width" | "height" | "both" | "original";
-type Background = "dark" | "black" | "sepia";
 
 const route = useRoute();
 const router = useRouter();
+const settings = useReaderSettings();
 
 // Mock chapter pages (seeded by the route id so chapters differ).
 const pages = Array.from(
   { length: 20 },
   (_, i) => `https://picsum.photos/seed/pg-${String(route.params.id)}-${i + 1}/800/1200`,
 );
-
 const series = findSeries(String(route.params.id));
 
 const currentPage = ref(1);
-const mode = ref<Mode>("single");
-const direction = ref<Direction>("ltr");
-const fit = ref<Fit>("height");
-const background = ref<Background>("dark");
 const controls = ref(true);
 const settingsOpen = ref(false);
 const showEnd = ref(false);
 
-const modes: { value: Mode; label: string }[] = [
+const modes: { value: ReaderMode; label: string }[] = [
   { value: "single", label: "Single" },
   { value: "double", label: "Double" },
   { value: "longstrip", label: "Long strip" },
 ];
-const directions: { value: Direction; label: string }[] = [
+const directions: { value: ReaderDirection; label: string }[] = [
   { value: "ltr", label: "L → R" },
   { value: "rtl", label: "R → L" },
 ];
-const fits: { value: Fit; label: string }[] = [
+const fits: { value: ReaderFit; label: string }[] = [
   { value: "width", label: "Width" },
   { value: "height", label: "Height" },
   { value: "both", label: "Both" },
   { value: "original", label: "Original" },
 ];
-const backgrounds: { value: Background; label: string }[] = [
+const backgrounds: { value: ReaderBackground; label: string }[] = [
   { value: "dark", label: "Dark" },
   { value: "black", label: "Black" },
   { value: "sepia", label: "Sepia" },
 ];
 
 const bgClass = computed(() =>
-  background.value === "black" ? "bg-black" : background.value === "sepia" ? "reader-sepia" : "bg-base-300",
+  settings.background === "black"
+    ? "bg-black"
+    : settings.background === "sepia"
+      ? "reader-sepia"
+      : "bg-base-300",
 );
 
 const fitClass = computed(() => {
-  switch (fit.value) {
+  switch (settings.fit) {
     case "width":
       return "w-full h-auto";
     case "height":
@@ -83,12 +85,33 @@ function nextChapter(): void {
   showEnd.value = false;
   currentPage.value = 1;
 }
+
+// Keyboard: ←/→ turn pages (direction-aware), Esc closes settings or exits.
+function onKey(e: KeyboardEvent): void {
+  if (e.key === "Escape") {
+    if (settingsOpen.value) settingsOpen.value = false;
+    else router.back();
+    return;
+  }
+  if (settings.mode === "longstrip") return;
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (settings.direction === "rtl") next();
+    else prev();
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    if (settings.direction === "rtl") prev();
+    else next();
+  }
+}
+onMounted(() => window.addEventListener("keydown", onKey));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
   <div class="relative h-dvh w-full overflow-hidden" :class="bgClass">
     <!-- Reading area -->
-    <div v-if="mode === 'longstrip'" class="h-full overflow-y-auto" @click="controls = !controls">
+    <div v-if="settings.mode === 'longstrip'" class="h-full overflow-y-auto" @click="controls = !controls">
       <div class="mx-auto flex max-w-3xl flex-col items-center">
         <img v-for="(p, i) in pages" :key="i" :src="p" :alt="`Page ${i + 1}`" class="w-full" />
       </div>
@@ -97,7 +120,7 @@ function nextChapter(): void {
       <div class="flex items-center gap-1">
         <img :src="pages[currentPage - 1]" :alt="`Page ${currentPage}`" class="mx-auto" :class="fitClass" />
         <img
-          v-if="mode === 'double' && currentPage < pages.length"
+          v-if="settings.mode === 'double' && currentPage < pages.length"
           :src="pages[currentPage]"
           :alt="`Page ${currentPage + 1}`"
           :class="fitClass"
@@ -106,16 +129,16 @@ function nextChapter(): void {
     </div>
 
     <!-- Page-turn click zones (paged modes) -->
-    <template v-if="mode !== 'longstrip'">
+    <template v-if="settings.mode !== 'longstrip'">
       <button
         class="absolute inset-y-0 left-0 w-1/4 cursor-pointer"
         aria-label="Previous page"
-        @click.stop="direction === 'rtl' ? next() : prev()"
+        @click.stop="settings.direction === 'rtl' ? next() : prev()"
       ></button>
       <button
         class="absolute inset-y-0 right-0 w-1/4 cursor-pointer"
         aria-label="Next page"
-        @click.stop="direction === 'rtl' ? prev() : next()"
+        @click.stop="settings.direction === 'rtl' ? prev() : next()"
       ></button>
     </template>
 
@@ -147,7 +170,7 @@ function nextChapter(): void {
 
     <!-- Bottom overlay bar (scrubber) — paged modes only -->
     <footer
-      v-show="controls && mode !== 'longstrip'"
+      v-show="controls && settings.mode !== 'longstrip'"
       class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-base-100/80 px-4 py-2 backdrop-blur"
     >
       <button class="btn btn-ghost btn-sm gap-1" @click="prev"><ChevronLeft class="size-4" />Prev</button>
@@ -182,8 +205,8 @@ function nextChapter(): void {
             v-for="m in modes"
             :key="m.value"
             class="btn join-item btn-sm"
-            :class="{ 'btn-active': mode === m.value }"
-            @click="mode = m.value"
+            :class="{ 'btn-active': settings.mode === m.value }"
+            @click="settings.mode = m.value"
           >
             {{ m.label }}
           </button>
@@ -197,8 +220,8 @@ function nextChapter(): void {
             v-for="d in directions"
             :key="d.value"
             class="btn join-item btn-sm"
-            :class="{ 'btn-active': direction === d.value }"
-            @click="direction = d.value"
+            :class="{ 'btn-active': settings.direction === d.value }"
+            @click="settings.direction = d.value"
           >
             {{ d.label }}
           </button>
@@ -212,8 +235,8 @@ function nextChapter(): void {
             v-for="f in fits"
             :key="f.value"
             class="btn join-item btn-sm"
-            :class="{ 'btn-active': fit === f.value }"
-            @click="fit = f.value"
+            :class="{ 'btn-active': settings.fit === f.value }"
+            @click="settings.fit = f.value"
           >
             {{ f.label }}
           </button>
@@ -227,13 +250,15 @@ function nextChapter(): void {
             v-for="b in backgrounds"
             :key="b.value"
             class="btn join-item btn-sm"
-            :class="{ 'btn-active': background === b.value }"
-            @click="background = b.value"
+            :class="{ 'btn-active': settings.background === b.value }"
+            @click="settings.background = b.value"
           >
             {{ b.label }}
           </button>
         </div>
       </div>
+
+      <p class="mt-auto text-xs text-base-content/50">Tip: ← / → turn pages, Esc exits.</p>
     </aside>
 
     <!-- End of chapter -->
