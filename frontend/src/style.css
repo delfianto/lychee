@@ -15,6 +15,12 @@
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
+
+  /* One token for every hairline border in the app. base-300 barely differs
+     from the base surfaces (and shadows vanish in dark mode), so borders lean
+     on base-content at a low alpha instead — the same trick that makes
+     badge-outline read in both themes. Tune the whole app's borders here. */
+  --surface-border: color-mix(in oklch, var(--color-base-content) 20%, transparent);
 }
 
 /* Accent color schemes — override only the accent trio (via Tailwind's color
@@ -66,6 +72,60 @@
   --color-secondary-content: var(--color-orange-50);
   --color-accent: var(--color-yellow-400);
   --color-accent-content: var(--color-yellow-950);
+}
+
+/* Every floating surface (cards, dropdown menus) shares the one border token,
+   and `surface-border` applies the same hairline to bespoke surfaces (list/
+   cover cards, rails, panels) — so nothing disagrees on border weight. */
+.card,
+.dropdown-content {
+  border: 1px solid var(--surface-border);
+}
+
+@utility surface-border {
+  border: 1px solid var(--surface-border);
+}
+
+/* Reusable segmented control — see components/SegmentedToggle.vue. Uses the
+   same hairline as the cards so a toggle never looks heavier/alien beside the
+   rest of the UI; the active segment is the only filled element. */
+.segmented {
+  display: inline-flex;
+  flex-shrink: 0; /* overflow-hidden would otherwise let a flex row squeeze it and clip labels */
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-field);
+}
+.segmented > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+  color: var(--color-base-content);
+  transition: background-color 0.15s ease;
+}
+.segmented > button + button {
+  border-left: 1px solid var(--surface-border);
+}
+.segmented > button:hover:not(.is-active) {
+  background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+.segmented > button.is-active {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}
+/* Full-width variant (equal segments) — used where the control owns its row,
+   e.g. the reader settings drawer. */
+.segmented.is-block {
+  display: flex;
+  width: 100%;
+}
+.segmented.is-block > button {
+  flex: 1 1 0;
+  justify-content: center;
 }
 
 /* Portrait 2:3 cover ratio, as a reusable utility so we never sprinkle

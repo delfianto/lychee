@@ -16,7 +16,7 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
 
 <template>
   <RouterLink :to="`/series/${series.id}`" class="group block">
-    <article class="flex gap-3 rounded-box bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4">
+    <article class="flex gap-3 rounded-box surface-border bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4">
       <img
         :src="series.coverUrl"
         :alt="series.title"

@@ -22,7 +22,7 @@ function progress(s: Series | undefined): number {
 </script>
 
 <template>
-  <section v-if="current" class="relative overflow-hidden rounded-box bg-base-100">
+  <section v-if="current" class="relative overflow-hidden rounded-box surface-border bg-base-100">
     <div class="flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
       <!-- Cover -->
       <img

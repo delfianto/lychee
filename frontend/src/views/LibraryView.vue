@@ -4,6 +4,7 @@ import { type Component, computed, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import FilterPanel from "../components/FilterPanel.vue";
+import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
 import { toast } from "../lib/toast";
@@ -197,7 +198,7 @@ watch(
       </label>
       <button
         class="btn btn-sm gap-1.5"
-        :class="showFilters || activeChips.length ? 'btn-primary' : 'btn-ghost'"
+        :class="showFilters || activeChips.length ? 'btn-primary' : 'btn-ghost surface-border'"
         @click="showFilters = !showFilters"
       >
         <SlidersHorizontal class="size-4" />Filters
@@ -205,18 +206,7 @@ watch(
       </button>
 
       <div class="ml-auto flex items-center gap-3">
-        <div class="join">
-          <button
-            v-for="d in densities"
-            :key="d.value"
-            class="btn btn-sm join-item"
-            :class="density === d.value ? 'btn-primary' : 'btn-ghost'"
-            :aria-label="d.label"
-            @click="density = d.value"
-          >
-            <component :is="d.icon" class="size-4" />
-          </button>
-        </div>
+        <SegmentedToggle v-model="density" :options="densities" aria-label="View density" />
         <label class="flex items-center gap-2 whitespace-nowrap text-xs text-base-content/60">
           Sort by
           <select v-model="sort" class="select select-bordered select-sm w-44">
@@ -227,7 +217,7 @@ watch(
     </div>
 
     <!-- Shelf-status tabs -->
-    <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto">
+    <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
       <a
         v-for="tab in statusTabs"
         :key="tab.value"
@@ -270,7 +260,7 @@ watch(
     </div>
 
     <!-- Foldable advanced filters -->
-    <div v-if="showFilters" class="flex flex-col gap-4 rounded-box bg-base-100 p-4">
+    <div v-if="showFilters" class="flex flex-col gap-4 rounded-box surface-border bg-base-100 p-4">
       <FilterPanel :filters="filters" />
       <div class="divider my-0"></div>
       <div class="flex flex-wrap items-center gap-2">

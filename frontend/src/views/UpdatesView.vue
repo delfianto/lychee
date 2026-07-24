@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { LayoutList, List } from "lucide-vue-next";
-import { ref } from "vue";
+import { type Component, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import CountryFlag from "../components/CountryFlag.vue";
+import SegmentedToggle from "../components/SegmentedToggle.vue";
 import { recentUpdates } from "../mocks/library";
 
 type UpdatesView = "list" | "thumb";
 const view = ref<UpdatesView>("thumb");
+const viewOptions: { value: UpdatesView; icon: Component; label: string }[] = [
+  { value: "list", icon: List, label: "List view" },
+  { value: "thumb", icon: LayoutList, label: "Thumbnail list view" },
+];
 </script>
 
 <template>
@@ -17,24 +22,7 @@ const view = ref<UpdatesView>("thumb");
         <h1 class="text-3xl font-bold">Recently updated</h1>
         <p class="text-sm text-base-content/60">{{ recentUpdates.length }} chapter updates</p>
       </div>
-      <div class="join">
-        <button
-          class="btn btn-sm join-item"
-          :class="view === 'list' ? 'btn-primary' : 'btn-ghost'"
-          aria-label="List view"
-          @click="view = 'list'"
-        >
-          <List class="size-4" />
-        </button>
-        <button
-          class="btn btn-sm join-item"
-          :class="view === 'thumb' ? 'btn-primary' : 'btn-ghost'"
-          aria-label="Thumbnail list view"
-          @click="view = 'thumb'"
-        >
-          <LayoutList class="size-4" />
-        </button>
-      </div>
+      <SegmentedToggle v-model="view" :options="viewOptions" aria-label="Update view" />
     </div>
 
     <!-- Update feed -->
@@ -43,7 +31,7 @@ const view = ref<UpdatesView>("thumb");
         v-for="(u, i) in recentUpdates"
         :key="i"
         :to="`/read/${u.series.id}`"
-        class="flex items-center gap-3 rounded-box bg-base-100 px-3 transition hover:bg-base-300/40"
+        class="flex items-center gap-3 rounded-box surface-border bg-base-100 px-3 transition hover:bg-base-300/40"
         :class="view === 'thumb' ? 'py-2' : 'py-2.5'"
       >
         <img

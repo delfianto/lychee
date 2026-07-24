@@ -2,6 +2,7 @@
 import { Grid2x2, LayoutGrid, List } from "lucide-vue-next";
 import { type Component, computed, ref, watch } from "vue";
 
+import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
 import { recentlyAdded } from "../mocks/library";
@@ -30,18 +31,7 @@ const sorted = computed(() => sortSeries(recentlyAdded, sort.value));
         <p class="text-sm text-base-content/60">{{ recentlyAdded.length }} series</p>
       </div>
       <div class="flex items-center gap-3">
-        <div class="join">
-          <button
-            v-for="d in densities"
-            :key="d.value"
-            class="btn btn-sm join-item"
-            :class="density === d.value ? 'btn-primary' : 'btn-ghost'"
-            :aria-label="d.label"
-            @click="density = d.value"
-          >
-            <component :is="d.icon" class="size-4" />
-          </button>
-        </div>
+        <SegmentedToggle v-model="density" :options="densities" aria-label="View density" />
         <label class="flex items-center gap-2 whitespace-nowrap text-xs text-base-content/60">
           Sort by
           <select v-model="sort" class="select select-bordered select-sm w-44">

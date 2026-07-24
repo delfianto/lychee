@@ -12,7 +12,7 @@ defineProps<{ updates: RecentUpdate[] }>();
       v-for="(u, i) in updates"
       :key="i"
       :to="`/series/${u.series.id}`"
-      class="flex items-center gap-3 rounded-box bg-base-100 p-2 transition hover:bg-base-300/40"
+      class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2 transition hover:bg-base-300/40"
     >
       <img :src="u.series.coverUrl" :alt="u.series.title" class="cover h-20 shrink-0 rounded object-cover" />
       <div class="flex min-w-0 grow flex-col gap-0.5">

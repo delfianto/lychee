@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import SegmentedToggle from "../components/SegmentedToggle.vue";
 import {
   type ReaderBackground,
   type ReaderDirection,
@@ -200,62 +201,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Reading mode</div>
-        <div class="join">
-          <button
-            v-for="m in modes"
-            :key="m.value"
-            class="btn join-item btn-sm"
-            :class="{ 'btn-active': settings.mode === m.value }"
-            @click="settings.mode = m.value"
-          >
-            {{ m.label }}
-          </button>
-        </div>
+        <SegmentedToggle v-model="settings.mode" :options="modes" aria-label="Reading mode" block />
       </div>
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Direction</div>
-        <div class="join">
-          <button
-            v-for="d in directions"
-            :key="d.value"
-            class="btn join-item btn-sm"
-            :class="{ 'btn-active': settings.direction === d.value }"
-            @click="settings.direction = d.value"
-          >
-            {{ d.label }}
-          </button>
-        </div>
+        <SegmentedToggle v-model="settings.direction" :options="directions" aria-label="Direction" block />
       </div>
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Fit</div>
-        <div class="join">
-          <button
-            v-for="f in fits"
-            :key="f.value"
-            class="btn join-item btn-sm"
-            :class="{ 'btn-active': settings.fit === f.value }"
-            @click="settings.fit = f.value"
-          >
-            {{ f.label }}
-          </button>
-        </div>
+        <SegmentedToggle v-model="settings.fit" :options="fits" aria-label="Fit" block />
       </div>
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Background</div>
-        <div class="join">
-          <button
-            v-for="b in backgrounds"
-            :key="b.value"
-            class="btn join-item btn-sm"
-            :class="{ 'btn-active': settings.background === b.value }"
-            @click="settings.background = b.value"
-          >
-            {{ b.label }}
-          </button>
-        </div>
+        <SegmentedToggle v-model="settings.background" :options="backgrounds" aria-label="Background" block />
       </div>
 
       <p class="mt-auto text-xs text-base-content/50">Tip: ← / → turn pages, Esc exits.</p>
