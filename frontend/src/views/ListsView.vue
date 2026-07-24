@@ -37,7 +37,7 @@ function covers(seriesIds: string[]): string[] {
     </div>
 
     <!-- Inline create -->
-    <div v-if="creating" class="flex flex-wrap items-center gap-2 rounded-box bg-base-100 p-3">
+    <div v-if="creating" class="flex flex-wrap items-center gap-2 rounded-box surface-border bg-base-100 p-3">
       <input
         v-model="newName"
         type="text"
@@ -57,7 +57,7 @@ function covers(seriesIds: string[]): string[] {
       <div v-for="l in collections.lists" :key="l.id" class="group relative">
         <RouterLink
           :to="`/lists/${l.id}`"
-          class="block overflow-hidden rounded-box bg-base-100 transition hover:shadow-md"
+          class="block overflow-hidden rounded-box surface-border bg-base-100 transition hover:shadow-md"
         >
           <div class="grid aspect-video grid-cols-2 grid-rows-2 gap-0.5 bg-base-300">
             <img v-for="(c, i) in covers(l.seriesIds)" :key="i" :src="c" alt="" class="h-full w-full object-cover" />

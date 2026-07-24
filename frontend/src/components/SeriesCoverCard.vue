@@ -10,7 +10,7 @@ const emit = defineEmits<{ remove: [] }>();
 </script>
 
 <template>
-  <RouterLink :to="`/series/${series.id}`" class="group relative block overflow-hidden rounded-box">
+  <RouterLink :to="`/series/${series.id}`" class="group relative block overflow-hidden rounded-box surface-border">
     <img
       :src="series.coverUrl"
       :alt="series.title"

@@ -22,12 +22,17 @@ import {
 } from "lucide-vue-next";
 import { type Component, reactive, ref } from "vue";
 
+import SegmentedToggle from "../components/SegmentedToggle.vue";
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
-import { COLOR_SCHEMES, useTheme } from "../lib/theme";
+import { COLOR_SCHEMES, type Mode, useTheme } from "../lib/theme";
 import { browseTagGroups } from "../mocks/library";
 import type { ContentRating } from "../types";
 
 const { mode, scheme, setMode, setScheme } = useTheme();
+const themeOptions: { value: Mode; label: string }[] = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+];
 
 // The card-form settings collapse onto one "General" page; the table-heavy
 // tag/rating management gets its own page, and About stays separate.
@@ -78,11 +83,11 @@ const trackers = reactive([
 
 // --- Reader defaults (shared with the reader) ---
 const reader = useReaderSettings();
-const readerGroups: { key: keyof ReaderSettings; label: string; desc: string; icon: Component; opts: { v: string; l: string }[] }[] = [
-  { key: "mode", label: "Reading mode", desc: "How pages are laid out", icon: BookOpen, opts: [{ v: "single", l: "Single" }, { v: "double", l: "Double" }, { v: "longstrip", l: "Long strip" }] },
-  { key: "direction", label: "Direction", desc: "Which way pages turn", icon: ArrowLeftRight, opts: [{ v: "ltr", l: "L → R" }, { v: "rtl", l: "R → L" }] },
-  { key: "fit", label: "Fit", desc: "How pages scale to fit", icon: Maximize2, opts: [{ v: "width", l: "Width" }, { v: "height", l: "Height" }, { v: "both", l: "Both" }, { v: "original", l: "Original" }] },
-  { key: "background", label: "Background", desc: "Reader page backdrop", icon: Palette, opts: [{ v: "dark", l: "Dark" }, { v: "black", l: "Black" }, { v: "sepia", l: "Sepia" }] },
+const readerGroups: { key: keyof ReaderSettings; label: string; desc: string; icon: Component; opts: { value: string; label: string }[] }[] = [
+  { key: "mode", label: "Reading mode", desc: "How pages are laid out", icon: BookOpen, opts: [{ value: "single", label: "Single" }, { value: "double", label: "Double" }, { value: "longstrip", label: "Long strip" }] },
+  { key: "direction", label: "Direction", desc: "Which way pages turn", icon: ArrowLeftRight, opts: [{ value: "ltr", label: "L → R" }, { value: "rtl", label: "R → L" }] },
+  { key: "fit", label: "Fit", desc: "How pages scale to fit", icon: Maximize2, opts: [{ value: "width", label: "Width" }, { value: "height", label: "Height" }, { value: "both", label: "Both" }, { value: "original", label: "Original" }] },
+  { key: "background", label: "Background", desc: "Reader page backdrop", icon: Palette, opts: [{ value: "dark", label: "Dark" }, { value: "black", label: "Black" }, { value: "sepia", label: "Sepia" }] },
 ];
 function readerValue(k: keyof ReaderSettings): string {
   return reader[k];
@@ -251,10 +256,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                         <div class="text-xs text-base-content/50">Dark or light interface</div>
                       </div>
                     </div>
-                    <div class="join">
-                      <button class="btn btn-sm join-item" :class="mode === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="setMode('dark')">Dark</button>
-                      <button class="btn btn-sm join-item" :class="mode === 'light' ? 'btn-primary' : 'btn-ghost'" @click="setMode('light')">Light</button>
-                    </div>
+                    <SegmentedToggle :model-value="mode" :options="themeOptions" aria-label="Theme" @update:model-value="setMode" />
                   </div>
                   <label class="flex items-center justify-between gap-4">
                     <div class="flex items-start gap-3">
@@ -304,17 +306,12 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                         <div class="text-xs text-base-content/50">{{ grp.desc }}</div>
                       </div>
                     </div>
-                    <div class="join">
-                      <button
-                        v-for="o in grp.opts"
-                        :key="o.v"
-                        class="btn btn-sm join-item"
-                        :class="readerValue(grp.key) === o.v ? 'btn-primary' : 'btn-ghost'"
-                        @click="setReader(grp.key, o.v)"
-                      >
-                        {{ o.l }}
-                      </button>
-                    </div>
+                    <SegmentedToggle
+                      :model-value="readerValue(grp.key)"
+                      :options="grp.opts"
+                      :aria-label="grp.label"
+                      @update:model-value="(v) => setReader(grp.key, v)"
+                    />
                   </div>
                 </div>
               </div>

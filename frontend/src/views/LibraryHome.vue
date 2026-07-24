@@ -16,7 +16,7 @@ const homeUpdates = recentUpdates.slice(0, 12);
 <template>
   <div class="flex flex-col gap-8 p-4 sm:p-6">
     <!-- At-a-glance stats -->
-    <div class="stats stats-vertical w-full bg-base-100 shadow-sm sm:stats-horizontal sm:w-auto sm:self-start">
+    <div class="stats stats-vertical w-full surface-border bg-base-100 shadow-sm sm:stats-horizontal sm:w-auto sm:self-start">
       <div class="stat">
         <div class="stat-figure text-primary"><Library class="size-7" /></div>
         <div class="stat-title">Series</div>
