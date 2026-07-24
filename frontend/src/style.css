@@ -148,3 +148,30 @@
   background-color: #f4ecd8;
   color: #4b3b2f;
 }
+
+/* Route transitions — a quick fade with a small upward drift on enter. Kept
+   deliberately subtle (short, out-in so pages never overlap) and disabled for
+   users who prefer reduced motion. Used by both <RouterView>s (see App.vue and
+   AppShell.vue). */
+.page-enter-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.page-leave-active {
+  transition: opacity 0.1s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition-duration: 1ms;
+  }
+  .page-enter-from {
+    transform: none;
+  }
+}

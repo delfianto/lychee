@@ -125,8 +125,14 @@ const nav: NavItem[] = [
         </div>
       </header>
 
-      <main class="grow overflow-x-hidden">
-        <RouterView />
+      <main class="grow overflow-x-clip">
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <!-- Key by path (not full path) so pages animate on navigation but
+                 not on query-only changes like ?view= / ?q=. -->
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
 
