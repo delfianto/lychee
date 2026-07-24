@@ -4,7 +4,6 @@ import {
   BookOpen,
   Cherry,
   Globe,
-  GripVertical,
   Image,
   Info,
   Languages,
@@ -20,13 +19,13 @@ import {
   Tag,
   Wand2,
 } from "lucide-vue-next";
-import { type Component, reactive, ref } from "vue";
+import { type Component, computed, reactive, ref, watch } from "vue";
 
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../lib/theme";
-import { browseTagGroups } from "../mocks/library";
-import type { ContentRating } from "../types";
+import { browseTagGroups, librarySeries } from "../mocks/library";
+import type { ContentRating, Demographic } from "../types";
 
 const { theme, mode, setTheme, setMode } = useTheme();
 const themeOptions: { value: Mode; label: string }[] = [
@@ -47,25 +46,68 @@ const sections: { key: string; label: string; icon: Component }[] = [
 ];
 const active = ref("general");
 
-// --- Tags (mock) ---
-const enabled = reactive<Record<string, boolean>>({});
-const usage = reactive<Record<string, number>>({});
-browseTagGroups.forEach((g) =>
-  g.tags.forEach((t, i) => {
-    enabled[t.id] = true;
-    usage[t.id] = (i + 2) * 13;
-  }),
-);
-
-// --- Content ratings (mock; top tier is "Mature") ---
-const ratings = reactive<{ key: ContentRating; label: string; level: number; enabled: boolean }[]>([
-  { key: "safe", label: "Safe", level: 0, enabled: true },
-  { key: "suggestive", label: "Suggestive", level: 1, enabled: true },
-  { key: "erotica", label: "Erotica", level: 2, enabled: true },
-  { key: "mature", label: "Mature", level: 3, enabled: true },
+// --- Content taxonomy: one table over tags, content ratings and demographics.
+// Each row has a parent category ("type"); usage counts are derived from the
+// library. (A real MangaDex-style taxonomy comes with the backend.) ---
+interface TaxRow {
+  id: string;
+  name: string;
+  category: string;
+  uses: number;
+  enabled: boolean;
+}
+const ratingTiers: { key: ContentRating; label: string }[] = [
+  { key: "safe", label: "Safe" },
+  { key: "suggestive", label: "Suggestive" },
+  { key: "erotica", label: "Erotica" },
+  { key: "mature", label: "Mature" },
+];
+const demoTiers: { key: Demographic; label: string }[] = [
+  { key: "shonen", label: "Shounen" },
+  { key: "shojo", label: "Shoujo" },
+  { key: "seinen", label: "Seinen" },
+  { key: "josei", label: "Josei" },
+];
+const tagUses = (id: string): number => librarySeries.filter((s) => s.tags.some((t) => t.id === id)).length;
+const taxonomy = reactive<TaxRow[]>([
+  ...browseTagGroups.flatMap((g) =>
+    g.tags.map((t) => ({ id: t.id, name: t.name, category: g.group, uses: tagUses(t.id), enabled: true })),
+  ),
+  ...ratingTiers.map((r) => ({
+    id: `cr-${r.key}`,
+    name: r.label,
+    category: "Content Rating",
+    uses: librarySeries.filter((s) => s.contentRating === r.key).length,
+    enabled: true,
+  })),
+  ...demoTiers.map((d) => ({
+    id: `demo-${d.key}`,
+    name: d.label,
+    category: "Demographic",
+    uses: librarySeries.filter((s) => s.demographic === d.key).length,
+    enabled: true,
+  })),
 ]);
-const levelWidths = ["w-1/4", "w-1/2", "w-3/4", "w-full"];
-const levelWidth = (level: number): string => levelWidths[level] ?? "w-full";
+const taxCategories = [...new Set(taxonomy.map((r) => r.category))].sort();
+const taxSearch = ref("");
+const taxCat = ref("");
+const taxPage = ref(0);
+const TAX_PAGE_SIZE = 20;
+const taxFiltered = computed(() => {
+  const q = taxSearch.value.trim().toLowerCase();
+  return taxonomy.filter(
+    (r) => (!q || r.name.toLowerCase().includes(q)) && (!taxCat.value || r.category === taxCat.value),
+  );
+});
+const taxPageCount = computed(() => Math.max(1, Math.ceil(taxFiltered.value.length / TAX_PAGE_SIZE)));
+const taxRows = computed(() =>
+  taxFiltered.value.slice(taxPage.value * TAX_PAGE_SIZE, taxPage.value * TAX_PAGE_SIZE + TAX_PAGE_SIZE),
+);
+watch([taxSearch, taxCat], () => (taxPage.value = 0));
+function removeTax(row: TaxRow): void {
+  const i = taxonomy.indexOf(row);
+  if (i >= 0) taxonomy.splice(i, 1);
+}
 
 // --- Libraries (mock) ---
 const libraries = reactive([
@@ -360,61 +402,73 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
           </section>
         </div>
 
-        <!-- Content: Tags + Content rating -->
-        <div v-else-if="active === 'content'" key="content" class="flex flex-col gap-8">
-          <section class="flex flex-col gap-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Tags</h3>
-              <div class="flex items-center gap-2">
-                <label class="input input-bordered input-sm flex items-center gap-2">
-                  <Search class="size-4 opacity-60" />
-                  <input type="search" class="grow" placeholder="Search tags…" />
-                </label>
-                <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add tag</button>
-              </div>
-            </div>
-            <div v-for="g in browseTagGroups" :key="g.group" class="card bg-base-100">
-              <div class="card-body gap-2 p-4">
-                <h4 class="text-sm font-semibold text-base-content/70">{{ g.group }}</h4>
-                <div class="overflow-x-auto">
-                  <table class="table table-sm">
-                    <tbody>
-                      <tr v-for="t in g.tags" :key="t.id">
-                        <td class="w-6 cursor-grab text-base-content/40"><GripVertical class="size-4" /></td>
-                        <td class="font-medium">{{ t.name }}</td>
-                        <td><span class="badge badge-ghost badge-sm">default</span></td>
-                        <td class="text-xs text-base-content/60">{{ usage[t.id] }} uses</td>
-                        <td>
-                          <input v-model="enabled[t.id]" type="checkbox" class="toggle toggle-primary toggle-sm" />
-                        </td>
-                        <td class="text-right">
-                          <button class="btn btn-ghost btn-xs">Edit</button>
-                          <button class="btn btn-ghost btn-xs text-error" disabled>Delete</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </section>
+        <!-- Content: one taxonomy table (tags · content ratings · demographics) -->
+        <div v-else-if="active === 'content'" key="content" class="flex flex-col gap-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Content taxonomy</h3>
+            <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add</button>
+          </div>
 
-          <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Content rating</h3>
-            <div class="card bg-base-100">
-              <div class="card-body gap-4 p-4">
-                <div v-for="r in ratings" :key="r.key" class="flex items-center gap-4">
-                  <span class="w-24 shrink-0 font-medium">{{ r.label }}</span>
-                  <div class="h-2 grow overflow-hidden rounded-full bg-base-300">
-                    <div class="h-2 rounded-full bg-primary" :class="levelWidth(r.level)"></div>
-                  </div>
-                  <span class="w-16 shrink-0 text-right text-xs text-base-content/60">level {{ r.level }}</span>
-                  <input v-model="r.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
-                </div>
+          <!-- Search + type filter -->
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
+              <Search class="size-4 opacity-60" />
+              <input v-model="taxSearch" type="search" class="grow" placeholder="Search name…" />
+            </label>
+            <select v-model="taxCat" class="select select-bordered select-sm" aria-label="Filter by type">
+              <option value="">All types</option>
+              <option v-for="c in taxCategories" :key="c">{{ c }}</option>
+            </select>
+          </div>
+
+          <!-- Unified table -->
+          <div class="card bg-base-100">
+            <div class="card-body p-0">
+              <div class="overflow-x-auto">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Uses</th>
+                      <th>Enabled</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in taxRows" :key="row.id" class="hover:bg-base-200/50">
+                      <td class="font-medium">{{ row.name }}</td>
+                      <td><span class="badge badge-ghost badge-sm whitespace-nowrap">{{ row.category }}</span></td>
+                      <td class="text-base-content/60">{{ row.uses }}</td>
+                      <td>
+                        <input v-model="row.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                      </td>
+                      <td class="whitespace-nowrap text-right">
+                        <button class="btn btn-ghost btn-xs">Edit</button>
+                        <button class="btn btn-ghost btn-xs text-error" @click="removeTax(row)">Delete</button>
+                      </td>
+                    </tr>
+                    <tr v-if="!taxRows.length">
+                      <td colspan="5" class="py-8 text-center text-sm text-base-content/50">No entries match.</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-            <p class="text-xs text-base-content/60">Higher level = more explicit. Drives per-library content filtering.</p>
-          </section>
+          </div>
+
+          <!-- Pagination -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-base-content/60">
+              {{ taxFiltered.length }} entries · page {{ taxPage + 1 }} of {{ taxPageCount }}
+            </span>
+            <div class="join">
+              <button class="btn btn-sm join-item" :disabled="taxPage === 0" @click="taxPage--">Prev</button>
+              <button class="btn btn-sm join-item" :disabled="taxPage >= taxPageCount - 1" @click="taxPage++">
+                Next
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- About -->
