@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { browseTagGroups } from "../mocks/library";
+import type { TagGroup } from "../api/queries";
 import type { BrowseFilters, ContentRating, Demographic, PublicationStatus } from "../types";
 
-const props = defineProps<{ filters: BrowseFilters }>();
+const props = withDefaults(
+  defineProps<{ filters: BrowseFilters; tagGroups?: TagGroup[] }>(),
+  { tagGroups: () => [] },
+);
 
 const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "mature"];
 const demographicOptions: Demographic[] = ["shonen", "shojo", "seinen", "josei"];
@@ -41,7 +44,7 @@ function toggle<T>(set: Set<T>, value: T): void {
           <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'or' }" @click="filters.tagMode = 'or'">OR</button>
         </div>
       </div>
-      <div v-for="g in browseTagGroups" :key="g.group" class="flex flex-col gap-1">
+      <div v-for="g in tagGroups" :key="g.group" class="flex flex-col gap-1">
         <span class="text-xs text-base-content/60">{{ g.group }}</span>
         <div class="flex flex-wrap gap-1">
           <button v-for="t in g.tags" :key="t.id" class="btn btn-xs" :class="tagClass(t.id)" @click="cycleTag(t.id)">

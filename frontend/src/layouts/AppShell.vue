@@ -21,7 +21,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import Toaster from "../components/Toaster.vue";
 import { useTheme } from "../lib/theme";
-import { randomSeriesId } from "../mocks/library";
+import { randomSeriesId } from "../api/queries";
 
 const router = useRouter();
 const route = useRoute();
@@ -34,9 +34,10 @@ function closeMobile(): void {
   mobileOpen.value = false;
 }
 
-function goRandom(): void {
+async function goRandom(): Promise<void> {
   mobileOpen.value = false;
-  void router.push(`/series/${randomSeriesId()}`);
+  const id = await randomSeriesId();
+  if (id) void router.push(`/series/${id}`);
 }
 
 const searchQuery = ref("");

@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-vue-next";
-import { type Component, computed, reactive, ref, watch } from "vue";
+import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
-import { buildLibraryQuery, useSeriesList } from "../api/queries";
+import { buildLibraryQuery, fetchTagGroups, type TagGroup, useSeriesList } from "../api/queries";
 import FilterPanel from "../components/FilterPanel.vue";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { toast } from "../lib/toast";
-import { allBrowseTags } from "../mocks/library";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
 
 const props = defineProps<{ libraryKey: string }>();
@@ -67,7 +66,17 @@ function resetFilters(): void {
   filters.readStates = new Set();
 }
 
-const tagName = (id: string): string => allBrowseTags.find((t) => t.id === id)?.name ?? id;
+const tagGroups = ref<TagGroup[]>([]);
+onMounted(async () => {
+  tagGroups.value = await fetchTagGroups();
+});
+function tagName(id: string): string {
+  for (const group of tagGroups.value) {
+    const tag = group.tags.find((t) => t.id === id);
+    if (tag) return tag.name;
+  }
+  return id;
+}
 
 const activeChips = computed(() => {
   const chips: { key: string; label: string; remove: () => void }[] = [];
@@ -257,7 +266,7 @@ watch(
 
     <!-- Foldable advanced filters -->
     <div v-if="showFilters" class="flex flex-col gap-4 rounded-box surface-border bg-base-100 p-4">
-      <FilterPanel :filters="filters" />
+      <FilterPanel :filters="filters" :tag-groups="tagGroups" />
       <div class="divider my-0"></div>
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-sm font-medium">Save as preset</span>
