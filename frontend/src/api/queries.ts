@@ -4,8 +4,13 @@
 
 import { computed, ref } from "vue";
 
-import type { BrowseFilters, RecentUpdate, Series } from "../types";
-import { type Series as ApiSeries, api, type RecentUpdate as ApiUpdate } from "./client";
+import type { BrowseFilters, Chapter, RecentUpdate, Series, VolumeGroup } from "../types";
+import {
+  type Chapter as ApiChapter,
+  type Series as ApiSeries,
+  api,
+  type RecentUpdate as ApiUpdate,
+} from "./client";
 import { relativeTime } from "./format";
 import type { paths } from "./schema";
 
@@ -19,6 +24,20 @@ function toUpdate(u: ApiUpdate): RecentUpdate {
     volume: u.volume,
     chapter: u.chapter,
     updatedAt: relativeTime(u.updatedAt),
+  };
+}
+
+function toChapter(c: ApiChapter): Chapter {
+  return {
+    id: c.id,
+    volume: c.volume,
+    number: c.number,
+    title: c.title ?? undefined,
+    group: c.group ?? undefined,
+    language: c.language,
+    uploadedAt: c.uploadedAt ? relativeTime(c.uploadedAt) : "",
+    read: c.read,
+    comments: c.comments,
   };
 }
 
@@ -92,6 +111,67 @@ export function useSeriesList() {
   }
 
   return { items, loading, hasMore: computed(() => !done.value), reload, loadMore };
+}
+
+// --- series detail -------------------------------------------------------------
+
+export async function fetchSeries(id: string): Promise<Series> {
+  const { data, error } = await api.GET("/api/series/{series_id}", {
+    params: { path: { series_id: id } },
+  });
+  if (error || !data) throw new Error("Series not found");
+  return toSeries(data);
+}
+
+export async function fetchChapters(id: string): Promise<VolumeGroup[]> {
+  const { data, error } = await api.GET("/api/series/{series_id}/chapters", {
+    params: { path: { series_id: id } },
+  });
+  if (error || !data) return [];
+  return data.map((group) => ({
+    volume: group.volume,
+    chapters: group.chapters.map(toChapter),
+  }));
+}
+
+export interface ChapterDetail {
+  id: string;
+  seriesId: string;
+  volume: number | null;
+  number: string;
+  title?: string;
+  pageCount: number;
+}
+
+export async function fetchChapterDetail(id: string): Promise<ChapterDetail> {
+  const { data, error } = await api.GET("/api/chapters/{chapter_id}", {
+    params: { path: { chapter_id: id } },
+  });
+  if (error || !data) throw new Error("Chapter not found");
+  return {
+    id: data.id,
+    seriesId: data.seriesId,
+    volume: data.volume,
+    number: data.number,
+    title: data.title ?? undefined,
+    pageCount: data.pageCount,
+  };
+}
+
+export async function fetchRelated(id: string): Promise<Series[]> {
+  const { data, error } = await api.GET("/api/series/{series_id}/related", {
+    params: { path: { series_id: id } },
+  });
+  if (error || !data) return [];
+  return data.map(toSeries);
+}
+
+export async function fetchArt(id: string): Promise<string[]> {
+  const { data, error } = await api.GET("/api/series/{series_id}/art", {
+    params: { path: { series_id: id } },
+  });
+  if (error || !data) return [];
+  return data.images;
 }
 
 const SORT_MAP: Record<string, string> = {

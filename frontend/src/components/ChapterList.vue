@@ -3,11 +3,13 @@ import { ChevronDown, MessageSquare } from "lucide-vue-next";
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
-import { librarySeries } from "../mocks/library";
-import type { VolumeGroup } from "../types";
+import type { Series, VolumeGroup } from "../types";
 import SeriesRail from "./SeriesRail.vue";
 
-defineProps<{ volumes: VolumeGroup[] }>();
+withDefaults(defineProps<{ volumes: VolumeGroup[]; related?: Series[]; artCovers?: string[] }>(), {
+  related: () => [],
+  artCovers: () => [],
+});
 
 const tabs = [
   { key: "chapters", label: "Chapters" },
@@ -15,10 +17,6 @@ const tabs = [
   { key: "art", label: "Art" },
 ] as const;
 const tab = ref<"chapters" | "related" | "art">("chapters");
-
-// Mock "related" + "art" until the API provides them.
-const related = librarySeries.slice(0, 10);
-const artCovers = librarySeries.slice(0, 12).map((s) => s.coverUrl);
 </script>
 
 <template>
@@ -74,11 +72,17 @@ const artCovers = librarySeries.slice(0, 12).map((s) => s.coverUrl);
     </template>
 
     <!-- Related -->
-    <SeriesRail v-else-if="tab === 'related'" :series="related" />
+    <template v-else-if="tab === 'related'">
+      <SeriesRail v-if="related.length" :series="related" />
+      <div v-else class="py-8 text-center text-sm text-base-content/60">No related series.</div>
+    </template>
 
     <!-- Art -->
-    <div v-else class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-      <img v-for="(c, i) in artCovers" :key="i" :src="c" alt="" class="cover w-full rounded-box object-cover" />
-    </div>
+    <template v-else>
+      <div v-if="artCovers.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+        <img v-for="(c, i) in artCovers" :key="i" :src="c" alt="" class="cover w-full rounded-box object-cover" />
+      </div>
+      <div v-else class="py-8 text-center text-sm text-base-content/60">No extra art.</div>
+    </template>
   </div>
 </template>
