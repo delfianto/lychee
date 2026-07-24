@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from src.main import app
 from src.tasks.events import broker
+from src.tasks.queue import queue
 
 
 def _scan_a_library(client: TestClient, tmp_path: Path) -> None:
@@ -22,6 +23,7 @@ def _scan_a_library(client: TestClient, tmp_path: Path) -> None:
         "/api/libraries", json={"name": "T", "path": str(tmp_path / "lib"), "kind": "manga"}
     )
     _ = client.post(f"/api/libraries/{created.json()['id']}/scan")
+    queue.wait_idle()  # scans run on a background worker now
 
 
 def test_scan_records_a_completed_task(client: TestClient, tmp_path: Path) -> None:
