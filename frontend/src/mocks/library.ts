@@ -146,6 +146,22 @@ export const recentUpdates: RecentUpdate[] = Array.from({ length: 24 }, (_, i) =
   };
 });
 
+/** Every unread chapter across the library (newest first per series) — for the
+    "Unread chapters" feed. Total matches the Home "Unread chapters" stat. */
+export const unreadChapters: RecentUpdate[] = librarySeries
+  .filter((s) => s.unreadCount > 0)
+  .flatMap((s) =>
+    Array.from({ length: s.unreadCount }, (_, k) => {
+      const chapNum = s.chapterCount - k;
+      return {
+        series: s,
+        volume: Math.max(1, Math.round(chapNum / 10)),
+        chapter: String(chapNum),
+        updatedAt: `${k + 1}d ago`,
+      };
+    }),
+  );
+
 /** Newest series first (reverse of insertion order) — for the Home "Recently added" rail. */
 export const recentlyAdded: Series[] = [...librarySeries].reverse();
 
@@ -178,7 +194,8 @@ export function libraryFor(key: string): LibraryDef {
     case "favorites":
       return { key, title: "Favorites", series: librarySeries.filter((s) => s.favorite) };
     case "reading":
-      return { key, title: "Reading", series: librarySeries.filter((s) => s.lastReadChapter !== undefined) };
+      // The reading shelf — manga + comics currently in "reading" status.
+      return { key, title: "Reading", series: librarySeries.filter((s) => s.libraryStatus === "reading") };
     case "comics":
       return { key, title: "Comics", series: librarySeries.filter((s) => s.kind === "comic") };
     default:

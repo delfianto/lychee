@@ -2,6 +2,7 @@
 import {
   ArrowLeft,
   Book,
+  BookOpen,
   Cherry,
   Dices,
   Heart,
@@ -52,6 +53,7 @@ interface NavItem {
 
 const nav: NavItem[] = [
   { label: "Home", icon: House, to: "/" },
+  { label: "Reading", icon: BookOpen, to: "/reading" },
   { label: "Favorites", icon: Heart, to: "/favorites" },
   { label: "Manga", icon: Book, to: "/manga" },
   { label: "Comics", icon: Images, to: "/comics" },
