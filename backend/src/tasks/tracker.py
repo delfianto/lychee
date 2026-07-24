@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from src.core.persistence.base_model import gen_id
 from src.tasks.events import broker
@@ -23,6 +24,7 @@ class TaskInfo:
     status: str = "running"  # running | done | failed
     progress: int = 0
     detail: str | None = None
+    result: dict[str, Any] | None = None
 
 
 class TaskTracker:
@@ -51,12 +53,15 @@ class TaskTracker:
             info.detail = detail
         self._publish(info, f"{info.kind}.progress")
 
-    def finish(self, info: TaskInfo, *, error: str | None = None) -> None:
+    def finish(
+        self, info: TaskInfo, *, error: str | None = None, result: dict[str, Any] | None = None
+    ) -> None:
         info.status = "failed" if error else "done"
         if error:
             info.detail = error
         else:
             info.progress = 100
+            info.result = result
         self._publish(info, f"{info.kind}.{info.status}")
 
     def snapshot(self) -> list[TaskInfo]:

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.ingest.scanner import ScanSummary, scan_library
-from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate, ScanResultOut
-from src.tasks.tracker import tracker
+from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.tasks.queue import Work, queue
+from src.tasks.schema import TaskOut
 
 _KINDS = {"manga", "comic", "gallery", "mixed"}
 
@@ -68,47 +71,47 @@ def delete_library(session: Session, library_id: str) -> None:
     session.commit()
 
 
-def _summary_out(summary: ScanSummary) -> ScanResultOut:
-    return ScanResultOut(
-        series_added=summary.series_added,
-        books_added=summary.books_added,
-        books_updated=summary.books_updated,
-        books_removed=summary.books_removed,
-    )
+def _summary_dict(summary: ScanSummary) -> dict[str, int]:
+    return {
+        "seriesAdded": summary.series_added,
+        "booksAdded": summary.books_added,
+        "booksUpdated": summary.books_updated,
+        "booksRemoved": summary.books_removed,
+    }
 
 
-def scan_one(session: Session, library_id: str) -> ScanResultOut:
-    library = _get(session, library_id)
-    task = tracker.start("scan", f"Scanning {library.name}")
-    try:
-        summary = scan_library(
-            session, library, on_progress=lambda pct, label: tracker.progress(task, pct, label)
-        )
-        session.commit()
-    except Exception as exc:  # noqa: BLE001 - record failure on the task, then re-raise
-        session.rollback()
-        tracker.finish(task, error=str(exc))
-        raise
-    tracker.finish(task)
-    return _summary_out(summary)
+def _scan_one_work(library_id: str) -> Work:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        library = _get(session, library_id)
+        summary = scan_library(session, library, on_progress=on_progress)
+        return _summary_dict(summary)
+
+    return work
 
 
-def scan_all(session: Session) -> ScanResultOut:
-    task = tracker.start("scan", "Scanning all libraries")
-    total = ScanSummary()
-    try:
+def _scan_all_work() -> Work:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        total = ScanSummary()
         libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
-        for i, library in enumerate(libraries, start=1):
+        for index, library in enumerate(libraries, start=1):
             summary = scan_library(session, library)
             total.series_added += summary.series_added
             total.books_added += summary.books_added
             total.books_updated += summary.books_updated
             total.books_removed += summary.books_removed
-            tracker.progress(task, round(i / len(libraries) * 100) if libraries else 100, library.name)
-        session.commit()
-    except Exception as exc:  # noqa: BLE001 - record failure on the task, then re-raise
-        session.rollback()
-        tracker.finish(task, error=str(exc))
-        raise
-    tracker.finish(task)
-    return _summary_out(total)
+            on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
+        return _summary_dict(total)
+
+    return work
+
+
+def enqueue_scan_one(session: Session, library_id: str) -> TaskOut:
+    """Validate the library exists (404 here), then run its scan on the task queue."""
+    library = _get(session, library_id)
+    task = queue.submit("scan", f"Scanning {library.name}", _scan_one_work(library_id))
+    return TaskOut.model_validate(task)
+
+
+def enqueue_scan_all(session: Session) -> TaskOut:
+    task = queue.submit("scan", "Scanning all libraries", _scan_all_work())
+    return TaskOut.model_validate(task)

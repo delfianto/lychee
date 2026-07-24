@@ -21,6 +21,7 @@ from src.integrations.router import router as integrations_router
 from src.library.router import router as library_router
 from src.progress.router import router as progress_router
 from src.tasks.events import broker
+from src.tasks.queue import queue
 from src.tasks.router import router as tasks_router
 from src.taxonomy.router import router as taxonomy_router
 
@@ -38,6 +39,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     register_provider(MangaDexProvider())
     broker.bind_loop(asyncio.get_running_loop())
     yield
+    queue.shutdown()
     logger.info("application_shutdown")
 
 

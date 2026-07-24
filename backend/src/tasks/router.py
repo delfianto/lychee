@@ -18,12 +18,7 @@ router = APIRouter(prefix="/api", tags=["tasks"])
 @router.get("/tasks")
 def list_tasks() -> list[TaskOut]:
     """Snapshot of recent/running tasks."""
-    return [
-        TaskOut(
-            id=t.id, kind=t.kind, label=t.label, status=t.status, progress=t.progress, detail=t.detail
-        )
-        for t in tracker.snapshot()
-    ]
+    return [TaskOut.model_validate(t) for t in tracker.snapshot()]
 
 
 @router.get("/events")

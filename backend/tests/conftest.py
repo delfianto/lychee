@@ -2,20 +2,22 @@
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import src.models  # noqa: F401  (register every model on Base.metadata)
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from src.catalog.deps import get_thumbnail_store
 from src.core.config import settings
 from src.core.persistence.base_model import Base
-from src.core.persistence.database import get_db
+from src.core.persistence.database import SessionLocal, get_db
 from src.downloads.deps import get_storage_root
 from src.main import app
 from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
+from src.tasks.queue import queue
 
 # Tests manage their own schema per fixture; never migrate/seed the real database.
 settings.auto_bootstrap = False
@@ -27,6 +29,16 @@ def db_engine(tmp_path: Path) -> Iterator[Engine]:
     engine = create_engine(
         f"sqlite:///{tmp_path}/test.db", connect_args={"check_same_thread": False}
     )
+
+    @event.listens_for(engine, "connect")
+    def _pragmas(dbapi_connection: Any, _record: Any) -> None:
+        # WAL lets the background task worker write while the request thread reads,
+        # matching production and avoiding cross-thread "database is locked".
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         seed_all(session)
@@ -57,6 +69,8 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(tmp_path / "thumbnails")
     app.dependency_overrides[get_storage_root] = lambda: tmp_path / "storage"
+    queue.configure(test_session)  # background workers use this test's temp DB
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    queue.configure(SessionLocal)
