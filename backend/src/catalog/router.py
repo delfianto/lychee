@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response, status
 
 from src.catalog import media, service
 from src.catalog.deps import ThumbnailStoreDep
@@ -19,6 +19,7 @@ from src.catalog.schema import (
 )
 from src.core.persistence.database import DbSession
 from src.core.schema import Page
+from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api", tags=["catalog"])
 
@@ -84,6 +85,12 @@ def get_series(db: DbSession, series_id: str) -> SeriesOut:
 def update_series(db: DbSession, series_id: str, data: SeriesUpdate) -> SeriesOut:
     """Persist detail action-row edits: favorite / library status / personal rating."""
     return service.update_series(db, series_id, data)
+
+
+@router.post("/series/{series_id}/refresh", status_code=status.HTTP_202_ACCEPTED)
+def refresh_series(db: DbSession, series_id: str) -> TaskOut:
+    """Re-fetch provider metadata in the background; returns the task to follow via SSE."""
+    return service.refresh_series(db, series_id)
 
 
 @router.get("/series/{series_id}/chapters")

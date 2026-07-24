@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlalchemy.orm import Session
 
 from src.catalog import repository as repo
+from src.catalog.metadata import apply_metadata
 from src.catalog.models import Series
 from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
 from src.catalog.schema import (
@@ -22,6 +25,10 @@ from src.catalog.schema import (
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+from src.downloads.provider import get_metadata_provider
+from src.integrations.models import Provider as ProviderConfig
+from src.tasks.queue import Work, queue
+from src.tasks.schema import TaskOut
 
 _LIBRARY_STATUSES = {
     "none",
@@ -36,7 +43,11 @@ _LIBRARY_STATUSES = {
 _MAX_LIMIT = 100
 
 
-def cover_url(series_id: str) -> str:
+def cover_url(series_id: str, cover_source: str | None = None) -> str:
+    # A remote provider cover (MangaDex) is hotlinked directly; local content is
+    # served (and thumbnailed) by our own cover endpoint.
+    if cover_source and cover_source.startswith("http"):
+        return cover_source
     return f"/api/series/{series_id}/cover"
 
 
@@ -58,7 +69,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
     return SeriesOut(
         id=s.id,
         title=s.title,
-        cover_url=cover_url(s.id),
+        cover_url=cover_url(s.id, s.cover_source),
         authors=[c.name for c in s.credits if c.role == "author"],
         artists=[c.name for c in s.credits if c.role == "artist"],
         status=s.status,
@@ -152,6 +163,38 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
     row = repo.get_series(session, series_id)
     assert row is not None  # just updated
     return to_series_out(row)
+
+
+def _refresh_work(series_id: str, provider_id: str, language: str, fetch_covers: bool) -> Work:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, str]:
+        series = session.get(Series, series_id)
+        if series is None or not series.provider_series_id:  # defensive (validated at enqueue)
+            raise NotFoundError(f"series {series_id!r} is no longer matched")
+        provider = get_metadata_provider(provider_id)
+        if provider is None:
+            raise BadRequestError(f"provider {provider_id!r} has no metadata support")
+        on_progress(20, series.title)
+        meta = provider.get_metadata(series.provider_series_id, language=language)
+        on_progress(70, "Applying metadata")
+        apply_metadata(session, series, meta, fetch_covers=fetch_covers)
+        return {"title": series.title}
+
+    return work
+
+
+def refresh_series(session: Session, series_id: str) -> TaskOut:
+    """Validate the series is matched, then re-fetch its provider metadata on the queue."""
+    series = session.get(Series, series_id)
+    if series is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    if not series.provider or not series.provider_series_id:
+        raise BadRequestError("series is not matched to a provider")
+    config = session.get(ProviderConfig, series.provider)
+    language = config.language if config else "en"
+    fetch_covers = config.fetch_covers if config else True
+    work = _refresh_work(series.id, series.provider, language, fetch_covers)
+    task = queue.submit("metadata", f"Refreshing {series.title}", work)
+    return TaskOut.model_validate(task)
 
 
 def to_chapter_out(row: ChapterRow) -> ChapterOut:

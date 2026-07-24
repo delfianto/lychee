@@ -68,6 +68,26 @@ export interface paths {
         patch: operations["update_series_api_series__series_id__patch"];
         trace?: never;
     };
+    "/api/series/{series_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Series
+         * @description Re-fetch provider metadata in the background; returns the task to follow via SSE.
+         */
+        post: operations["refresh_series_api_series__series_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{series_id}/chapters": {
         parameters: {
             query?: never;
@@ -1356,6 +1376,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_series_api_series__series_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */

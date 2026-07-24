@@ -6,6 +6,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from src.catalog.models import Series
 from src.tasks.queue import queue
 
 
@@ -89,6 +92,25 @@ def test_scan_soft_deletes_missing(client: TestClient, tmp_path: Path) -> None:
 
     series = {s["title"]: s for s in client.get("/api/series").json()["items"]}
     assert series["Berserk"]["chapterCount"] == 1
+
+
+def test_rescan_after_title_change_keeps_one_series(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    root = _make_library(tmp_path)
+    library_id, _ = _create_and_scan(client, root)
+    before = len(client.get("/api/series").json()["items"])
+
+    # Metadata (PART F/M1) may rename the display title; the folder path is the
+    # identity, so a rescan must update the same series, not create a duplicate.
+    series = db_session.scalars(select(Series).where(Series.title == "Berserk")).one()
+    series.title = "Berserk (Deluxe)"
+    db_session.commit()
+    _scan(client, library_id)
+
+    after = client.get("/api/series").json()["items"]
+    assert len(after) == before  # no duplicate "Berserk"
+    assert any(s["title"] == "Berserk (Deluxe)" for s in after)
 
 
 def test_library_list_reports_series_count(client: TestClient, tmp_path: Path) -> None:

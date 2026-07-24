@@ -105,6 +105,8 @@ class Series(BaseModel):
     # Provider linkage for refresh/sync (ADR 13).
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provider_series_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # External site ids from the provider (al, mal, mu, …) for tracker matching (ADR 16).
+    external_ids_json: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
 
     # Gallery-only extras.
     image_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
