@@ -357,7 +357,7 @@ export interface paths {
         put?: never;
         /**
          * Scan All
-         * @description Scan every enabled library.
+         * @description Scan every enabled library in the background; returns the task to follow via SSE.
          */
         post: operations["scan_all_api_libraries_scan_post"];
         delete?: never;
@@ -393,7 +393,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Scan Library */
+        /**
+         * Scan Library
+         * @description Scan one library in the background; returns the task to follow via /api/events.
+         */
         post: operations["scan_library_api_libraries__library_id__scan_post"];
         delete?: never;
         options?: never;
@@ -649,6 +652,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description Snapshot of recent/running tasks.
+         */
+        get: operations["list_tasks_api_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Events
+         * @description Server-Sent Events stream of task progress (scan/download/sync).
+         */
+        get: operations["events_api_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/downloads": {
         parameters: {
             query?: never;
@@ -661,7 +704,7 @@ export interface paths {
         put?: never;
         /**
          * Create Downloads
-         * @description Download a series' new chapters from its linked provider.
+         * @description Download a series' new chapters in the background; returns the task to follow via SSE.
          */
         post: operations["create_downloads_api_downloads_post"];
         delete?: never;
@@ -1007,17 +1050,6 @@ export interface components {
             /** Updatedat */
             updatedAt: string;
         };
-        /** ScanResultOut */
-        ScanResultOut: {
-            /** Seriesadded */
-            seriesAdded: number;
-            /** Booksadded */
-            booksAdded: number;
-            /** Booksupdated */
-            booksUpdated: number;
-            /** Booksremoved */
-            booksRemoved: number;
-        };
         /** SeriesArtOut */
         SeriesArtOut: {
             /** Images */
@@ -1108,6 +1140,25 @@ export interface components {
             name: string;
             /** Group */
             group: string;
+        };
+        /** TaskOut */
+        TaskOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Status */
+            status: string;
+            /** Progress */
+            progress: number;
+            /** Detail */
+            detail?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TaxonomyCreate */
         TaxonomyCreate: {
@@ -1775,12 +1826,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScanResultOut"];
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
         };
@@ -1861,12 +1912,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScanResultOut"];
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */
@@ -2489,6 +2540,46 @@ export interface operations {
             };
         };
     };
+    list_tasks_api_tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"][];
+                };
+            };
+        };
+    };
+    events_api_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     list_downloads_api_downloads_get: {
         parameters: {
             query?: never;
@@ -2523,12 +2614,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DownloadTaskOut"][];
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */
@@ -2572,12 +2663,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DownloadTaskOut"][];
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */

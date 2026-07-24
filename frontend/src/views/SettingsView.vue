@@ -28,9 +28,10 @@ import {
   Wand2,
   X,
 } from "lucide-vue-next";
-import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
+import { type Component, computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { api } from "../api/client";
+import { activeTasks, onTaskDone } from "../api/events";
 import { relativeTime } from "../api/format";
 import { fetchDashboard, fetchLibrarySummaries } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
@@ -194,7 +195,7 @@ async function syncNow(): Promise<void> {
 }
 async function retryDownload(d: DlRow): Promise<void> {
   await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: d.id } } });
-  await loadDownloads();
+  toast("Download queued"); // the list refreshes when the download.done event arrives
 }
 async function removeDownload(d: DlRow): Promise<void> {
   await api.DELETE("/api/downloads/{task_id}", { params: { path: { task_id: d.id } } });
@@ -214,6 +215,8 @@ interface LibraryRow {
   lastScan: string;
 }
 const libraries = ref<LibraryRow[]>([]);
+// A scan runs in the background; disable the triggers while one is in flight.
+const scanning = computed(() => activeTasks.value.some((t) => t.kind === "scan"));
 async function loadLibraries(): Promise<void> {
   const { data } = await api.GET("/api/libraries");
   libraries.value = (data ?? []).map((l) => ({
@@ -226,13 +229,11 @@ async function loadLibraries(): Promise<void> {
 }
 async function scanAll(): Promise<void> {
   await api.POST("/api/libraries/scan");
-  await loadLibraries();
-  toast("Scan complete");
+  toast("Scan started"); // libraries refresh when the scan.done event arrives
 }
 async function scanOne(id: string): Promise<void> {
   await api.POST("/api/libraries/{library_id}/scan", { params: { path: { library_id: id } } });
-  await loadLibraries();
-  toast("Scan complete");
+  toast("Scan started");
 }
 async function removeLibrary(id: string): Promise<void> {
   await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
@@ -371,6 +372,20 @@ async function loadAbout(): Promise<void> {
   ];
 }
 
+// Refetch the affected list when a background scan/download finishes (SSE).
+const disposeTaskListener = onTaskDone((task) => {
+  if (task.kind === "scan") {
+    void loadLibraries();
+    toast(
+      task.status === "done" ? "Scan complete" : "Scan failed",
+      task.status === "done" ? "success" : "error",
+    );
+  } else if (task.kind === "download") {
+    void loadDownloads();
+  }
+});
+onUnmounted(disposeTaskListener);
+
 onMounted(async () => {
   await Promise.all([
     loadLibraries(),
@@ -415,7 +430,9 @@ onMounted(async () => {
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
               <div class="flex gap-2">
-                <button class="btn btn-ghost btn-sm" @click="scanAll">Scan all</button>
+                <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
+                  <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
+                </button>
                 <button class="btn btn-primary btn-sm gap-1" @click="addLibrary"><Plus class="size-4" />Add library</button>
               </div>
             </div>
@@ -428,7 +445,7 @@ onMounted(async () => {
                     <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
                     <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
                   </div>
-                  <button class="btn btn-ghost btn-sm" @click="scanOne(lib.id)">Scan</button>
+                  <button class="btn btn-ghost btn-sm" :disabled="scanning" @click="scanOne(lib.id)">Scan</button>
                   <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">Remove</button>
                 </div>
               </div>
