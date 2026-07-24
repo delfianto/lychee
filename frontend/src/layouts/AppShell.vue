@@ -70,9 +70,11 @@ const nav: NavItem[] = [
           <label for="app-drawer" class="btn btn-square btn-ghost btn-sm lg:hidden" aria-label="Menu">
             <Menu class="size-5" />
           </label>
-          <RouterLink to="/" class="btn btn-ghost gap-2 px-2 text-xl font-bold">
+          <!-- Static brand — Home is always one click away in the nav, so the
+               logo doesn't double as a home link. -->
+          <div class="flex select-none items-center gap-2 px-2 text-xl font-bold">
             <Cherry class="size-6 shrink-0 text-primary" /><span class="hidden sm:inline">lychee</span>
-          </RouterLink>
+          </div>
           <!-- Desktop nav links -->
           <nav class="ml-1 hidden items-center gap-0.5 lg:flex">
             <template v-for="item in nav" :key="item.label">
