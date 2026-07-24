@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.catalog.router import router as catalog_router
 from src.core.config import settings
 from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
@@ -46,6 +47,7 @@ async def _domain_exception_handler(_request: Request, exc: LycheeError) -> JSON
 
 
 app.include_router(health_router)
+app.include_router(catalog_router)
 
 
 @app.get("/")
