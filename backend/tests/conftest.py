@@ -12,6 +12,7 @@ from src.catalog.deps import get_thumbnail_store
 from src.core.config import settings
 from src.core.persistence.base_model import Base
 from src.core.persistence.database import get_db
+from src.downloads.deps import get_storage_root
 from src.main import app
 from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
@@ -55,6 +56,7 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(tmp_path / "thumbnails")
+    app.dependency_overrides[get_storage_root] = lambda: tmp_path / "storage"
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
