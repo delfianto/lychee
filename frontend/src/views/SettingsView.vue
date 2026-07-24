@@ -22,11 +22,11 @@ import {
 import { type Component, reactive, ref } from "vue";
 
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
-import { useTheme } from "../lib/theme";
+import { COLOR_SCHEMES, useTheme } from "../lib/theme";
 import { browseTagGroups } from "../mocks/library";
 import type { ContentRating } from "../types";
 
-const { theme, toggle } = useTheme();
+const { theme, setTheme } = useTheme();
 
 // The card-form settings collapse onto one "General" page; the table-heavy
 // tag/rating management gets its own page, and About stays separate.
@@ -247,8 +247,8 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                       </div>
                     </div>
                     <div class="join">
-                      <button class="btn btn-sm join-item" :class="theme === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'dark' && toggle()">Dark</button>
-                      <button class="btn btn-sm join-item" :class="theme === 'light' ? 'btn-primary' : 'btn-ghost'" @click="theme !== 'light' && toggle()">Light</button>
+                      <button class="btn btn-sm join-item" :class="theme === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="setTheme('dark')">Dark</button>
+                      <button class="btn btn-sm join-item" :class="theme === 'light' ? 'btn-primary' : 'btn-ghost'" @click="setTheme('light')">Light</button>
                     </div>
                   </div>
                   <label class="flex items-center justify-between gap-4">
@@ -312,6 +312,36 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
               </div>
             </section>
           </div>
+
+          <!-- Color scheme -->
+          <section class="flex flex-col gap-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Color scheme</h3>
+            <div class="card bg-base-100">
+              <div class="card-body p-4">
+                <div class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+                  <button
+                    v-for="scheme in COLOR_SCHEMES"
+                    :key="scheme"
+                    class="flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition"
+                    :class="theme === scheme ? 'bg-base-200 ring-2 ring-primary' : 'hover:bg-base-200'"
+                    :aria-label="`Use ${scheme} theme`"
+                    @click="setTheme(scheme)"
+                  >
+                    <div
+                      :data-theme="scheme"
+                      class="grid size-11 grid-cols-2 grid-rows-2 overflow-hidden rounded-md border border-base-300"
+                    >
+                      <div class="bg-base-100"></div>
+                      <div class="bg-primary"></div>
+                      <div class="bg-secondary"></div>
+                      <div class="bg-accent"></div>
+                    </div>
+                    <span class="text-xs capitalize text-base-content/70">{{ scheme }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <!-- Content: Tags + Content rating -->

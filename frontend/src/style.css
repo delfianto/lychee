@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 @plugin "daisyui" {
-  themes: dark --default, light;
+  themes:
+    dark --default, light, cupcake, synthwave, retro, cyberpunk, valentine, dracula,
+    aqua, forest, night, coffee, nord, business, luxury, dim;
 }
 
 /* The status-dot colors live only in a TS map (lib/display.ts), so force-generate
