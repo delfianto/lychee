@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Search, X } from "lucide-vue-next";
 import { computed, reactive } from "vue";
 
 import FilterPanel from "../components/FilterPanel.vue";
@@ -49,7 +50,7 @@ const activeChips = computed(() => {
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex grow items-center gap-2">
-        <span class="opacity-60">⌕</span>
+        <Search class="size-4 opacity-60" />
         <input v-model="filters.query" type="search" class="grow" placeholder="Search title or author…" />
       </label>
       <select v-model="filters.sort" class="select select-bordered select-sm">
@@ -71,7 +72,7 @@ const activeChips = computed(() => {
             class="badge badge-sm gap-1 capitalize"
             @click="c.remove()"
           >
-            {{ c.label }} ✕
+            {{ c.label }}<X class="size-3" />
           </button>
         </div>
 
@@ -80,7 +81,7 @@ const activeChips = computed(() => {
           v-else
           class="flex flex-col items-center justify-center gap-2 py-16 text-center text-base-content/60"
         >
-          <span class="text-4xl">🔍</span>
+          <Search class="size-10 opacity-40" />
           <p>No results found.</p>
         </div>
       </div>
