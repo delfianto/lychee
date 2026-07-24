@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from src.catalog import service as catalog_service
 from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.ingest.scanner import ScanSummary, scan_library
@@ -84,6 +85,8 @@ def _scan_one_work(library_id: str) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         library = _get(session, library_id)
         summary = scan_library(session, library, on_progress=on_progress)
+        # Auto-match new series to a provider + fetch metadata (no-op unless enabled).
+        catalog_service.auto_match_library(session, library_id)
         return _summary_dict(summary)
 
     return work
@@ -99,6 +102,7 @@ def _scan_all_work() -> Work:
             total.books_added += summary.books_added
             total.books_updated += summary.books_updated
             total.books_removed += summary.books_removed
+            catalog_service.auto_match_library(session, library.id)
             on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
         return _summary_dict(total)
 

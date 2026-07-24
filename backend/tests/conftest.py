@@ -14,10 +14,34 @@ from src.core.config import settings
 from src.core.persistence.base_model import Base
 from src.core.persistence.database import SessionLocal, get_db
 from src.downloads.deps import get_storage_root
+from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata, register_provider
 from src.main import app
 from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
 from src.tasks.queue import queue
+
+
+class _OfflineProvider:
+    """Neutralises the network MangaDex provider in tests (e.g. scan auto-match)."""
+
+    id = "mangadex"
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        return []
+
+    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+        return []
+
+    def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:
+        return []
+
+    def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
+        raise NotImplementedError
+
+    def list_new_chapters(
+        self, provider_series_id: str, *, known: set[str], language: str = "en"
+    ) -> list[RemoteChapter]:
+        return []
 
 # Tests manage their own schema per fixture; never migrate/seed the real database.
 settings.auto_bootstrap = False
@@ -71,6 +95,7 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
     app.dependency_overrides[get_storage_root] = lambda: tmp_path / "storage"
     queue.configure(test_session)  # background workers use this test's temp DB
     with TestClient(app) as test_client:
+        register_provider(_OfflineProvider())  # startup registers the real one; neutralise it
         yield test_client
     app.dependency_overrides.clear()
     queue.configure(SessionLocal)

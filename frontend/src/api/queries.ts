@@ -169,6 +169,49 @@ export async function patchSeries(
   await api.PATCH("/api/series/{series_id}", { params: { path: { series_id: id } }, body });
 }
 
+export interface MatchCandidate {
+  providerSeriesId: string;
+  title: string;
+  year: number | null;
+  status: string | null;
+  coverUrl: string | null;
+}
+
+export async function fetchMatchCandidates(id: string, q?: string): Promise<MatchCandidate[]> {
+  const { data, error } = await api.GET("/api/series/{series_id}/match-candidates", {
+    params: { path: { series_id: id }, query: q ? { q } : {} },
+  });
+  if (error || !data) return [];
+  return data.map((d) => ({
+    providerSeriesId: d.providerSeriesId,
+    title: d.title,
+    year: d.year ?? null,
+    status: d.status ?? null,
+    coverUrl: d.coverUrl ?? null,
+  }));
+}
+
+/** Link a series to a provider entry (runs a background metadata fetch). */
+export async function matchSeries(
+  id: string,
+  providerSeriesId: string,
+  provider = "mangadex",
+): Promise<void> {
+  await api.POST("/api/series/{series_id}/match", {
+    params: { path: { series_id: id } },
+    body: { providerSeriesId, provider },
+  });
+}
+
+/** Re-fetch provider metadata for an already-matched series (background task). */
+export async function refreshSeries(id: string): Promise<void> {
+  await api.POST("/api/series/{series_id}/refresh", { params: { path: { series_id: id } } });
+}
+
+export async function unlinkMatch(id: string): Promise<void> {
+  await api.DELETE("/api/series/{series_id}/match", { params: { path: { series_id: id } } });
+}
+
 export async function fetchSeries(id: string): Promise<Series> {
   const { data, error } = await api.GET("/api/series/{series_id}", {
     params: { path: { series_id: id } },

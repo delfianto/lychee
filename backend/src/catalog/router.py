@@ -11,6 +11,8 @@ from src.catalog.schema import (
     ChapterDetailOut,
     DashboardOut,
     LibrarySummaryOut,
+    MangaMatchOut,
+    MatchRequest,
     RecentUpdateOut,
     SeriesArtOut,
     SeriesOut,
@@ -91,6 +93,26 @@ def update_series(db: DbSession, series_id: str, data: SeriesUpdate) -> SeriesOu
 def refresh_series(db: DbSession, series_id: str) -> TaskOut:
     """Re-fetch provider metadata in the background; returns the task to follow via SSE."""
     return service.refresh_series(db, series_id)
+
+
+@router.get("/series/{series_id}/match-candidates")
+def match_candidates(db: DbSession, series_id: str, q: str | None = Query(None)) -> list[MangaMatchOut]:
+    """Provider search hits for matching this series (defaults to its title)."""
+    return service.match_candidates(db, series_id, q=q)
+
+
+@router.post("/series/{series_id}/match", status_code=status.HTTP_202_ACCEPTED)
+def match_series(db: DbSession, series_id: str, data: MatchRequest) -> TaskOut:
+    """Link the series to a provider entry and fetch its metadata (returns the task)."""
+    return service.set_match(
+        db, series_id, provider_id=data.provider, provider_series_id=data.provider_series_id
+    )
+
+
+@router.delete("/series/{series_id}/match", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_series(db: DbSession, series_id: str) -> Response:
+    service.unlink_match(db, series_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/series/{series_id}/chapters")

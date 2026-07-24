@@ -13,8 +13,10 @@ from typing import Any
 
 import httpx
 
-from src.downloads.provider import RemoteChapter, SeriesMetadata
+from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata
 from src.providers.mangadex_client import MangaDexClient
+
+_CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
 _PAGE_LIMIT = 100
 _COVERS_BASE = "https://uploads.mangadex.org/covers"
@@ -98,6 +100,32 @@ class MangaDexProvider:
             if offset >= int(body.get("total", 0)):
                 break
         return chapters
+
+    def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:
+        response = self._api.get(
+            "/manga",
+            params={
+                "title": title,
+                "limit": limit,
+                "includes[]": ["cover_art"],
+                "contentRating[]": _CONTENT_RATINGS,
+                "order[relevance]": "desc",
+            },
+        )
+        matches: list[MangaMatch] = []
+        for data in response.json().get("data", []):
+            attributes: dict[str, Any] = data.get("attributes", {})
+            cover_file = _relationship_attr(data.get("relationships", []), "cover_art", "fileName")
+            matches.append(
+                MangaMatch(
+                    provider_series_id=data["id"],
+                    title=_localized(attributes.get("title"), "en") or data["id"],
+                    year=attributes.get("year"),
+                    status=attributes.get("status"),
+                    cover_url=f"{_COVERS_BASE}/{data['id']}/{cover_file}.256.jpg" if cover_file else None,
+                )
+            )
+        return matches
 
     def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
         response = self._api.get(

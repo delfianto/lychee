@@ -308,12 +308,15 @@ override.
       **Downloading + local thumbnailing deferred** (`get_cover` still generates from local pages).
 - [x] `POST /api/series/{id}/refresh` → enqueues a `metadata` task (queue + SSE); returns 202 + TaskOut.
 
-**M2 — Matching (auto + manual)**
-- [ ] `search(title, …)`: `GET /manga?title=&limit=5&includes[]=cover_art&contentRating[]=…` → candidates.
-- [ ] Auto-match after scan (when `provider.auto_match`): best-guess by normalised title + year → set
-      `provider` / `provider_series_id` → enqueue metadata fetch (its own **`match`** task).
-- [ ] Manual: `GET /api/series/{id}/match-candidates?q=` + `POST /api/series/{id}/match` + unlink; FE
-      match-picker modal (with covers) on SeriesDetail; a "Refresh metadata" action.
+**M2 — Matching (auto + manual)** — ✅ done
+- [x] `MangaDexProvider.search(title)`: `GET /manga?title=&includes[]=cover_art&contentRating[]=all&
+      order[relevance]=desc` → `MangaMatch` candidates.
+- [x] Auto-match runs inline at the end of a scan (gated by `provider.auto_match`): adopts a provider
+      entry only on an **exact normalised-title** match (conservative — otherwise left for manual),
+      then applies metadata. `SeriesOut.provider` exposes the matched state to the UI.
+- [x] Manual: `GET /api/series/{id}/match-candidates?q=`, `POST /api/series/{id}/match` (202 → metadata
+      task), `DELETE …/match` (unlink); FE match-picker modal (covers) + Refresh/Unlink menu on
+      SeriesDetail, reloading on the `metadata` task's `done` event.
 
 **M3 — Download enhancements** (pipeline on the queue; M0 added rate limiting + per-page reporting)
 - [ ] Feed: `contentRating[]` (all, filtered to the library's policy), `includes[]=scanlation_group`,
