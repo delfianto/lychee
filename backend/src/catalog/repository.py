@@ -422,3 +422,20 @@ def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRo
     """Title search (simple LIKE for now; FTS5 lands in B6)."""
     rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
     return rows
+
+
+def related_series(session: Session, series_id: str, *, limit: int = 12) -> list[SeriesRow]:
+    """Other series of the same kind, newest first (excludes the series itself)."""
+    series = session.get(Series, series_id)
+    if series is None:
+        return []
+    ids = list(
+        session.scalars(
+            select(Series.id)
+            .where(Series.kind == series.kind, Series.id != series_id)
+            .order_by(Series.created_at.desc(), Series.id.desc())
+            .limit(limit)
+        ).all()
+    )
+    rows = get_series_rows(session, ids)
+    return [rows[i] for i in ids if i in rows]

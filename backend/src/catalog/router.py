@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, Response
 
-from src.catalog import service
+from src.catalog import media, service
+from src.catalog.deps import ThumbnailStoreDep
+from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterDetailOut,
     DashboardOut,
     RecentUpdateOut,
+    SeriesArtOut,
     SeriesOut,
     VolumeGroupOut,
 )
@@ -16,6 +19,19 @@ from src.core.persistence.database import DbSession
 from src.core.schema import Page
 
 router = APIRouter(prefix="/api", tags=["catalog"])
+
+_IMAGE_CACHE_CONTROL = "public, max-age=86400"
+
+
+def _image_response(request: Request, served: Served) -> Response:
+    """Serve image bytes with an ETag, answering 304 on a matching If-None-Match."""
+    if request.headers.get("if-none-match") == served.etag:
+        return Response(status_code=304, headers={"ETag": served.etag})
+    return Response(
+        content=served.data,
+        media_type=served.media_type,
+        headers={"ETag": served.etag, "Cache-Control": _IMAGE_CACHE_CONTROL},
+    )
 
 
 @router.get("/series")
@@ -100,3 +116,43 @@ def dashboard(db: DbSession) -> DashboardOut:
 def search(db: DbSession, q: str = "", limit: int = 20) -> list[SeriesOut]:
     """Title search powering the navbar."""
     return service.search(db, q, limit=limit)
+
+
+@router.get("/series/{series_id}/related")
+def related(db: DbSession, series_id: str) -> list[SeriesOut]:
+    """Other series of the same kind (Related tab)."""
+    return service.related(db, series_id)
+
+
+@router.get("/series/{series_id}/art")
+def series_art(db: DbSession, series_id: str) -> SeriesArtOut:
+    """Extra art for a series (Art tab)."""
+    return service.series_art(db, series_id)
+
+
+@router.get("/series/{series_id}/images")
+def gallery_images(
+    db: DbSession, series_id: str, cursor: str | None = None, limit: int = 24
+) -> Page[str]:
+    """Cursor-paginated gallery image URLs (GalleryDetail grid + Lightbox)."""
+    return media.gallery_images(db, series_id, cursor=cursor, limit=limit)
+
+
+@router.get("/series/{series_id}/cover")
+def series_cover(
+    request: Request, db: DbSession, store: ThumbnailStoreDep, series_id: str, size: str = "cover"
+) -> Response:
+    """AVIF cover thumbnail (size = cover | detail)."""
+    return _image_response(request, media.get_cover(db, store, series_id, size))
+
+
+@router.get("/series/{series_id}/images/{index}")
+def gallery_image(request: Request, db: DbSession, series_id: str, index: int) -> Response:
+    """A single gallery image (AVIF or original bytes)."""
+    return _image_response(request, media.get_gallery_image(db, series_id, index))
+
+
+@router.get("/chapters/{chapter_id}/pages/{n}")
+def chapter_page(request: Request, db: DbSession, chapter_id: str, n: int) -> Response:
+    """A single chapter page (1-based); ETag + Cache-Control + 304."""
+    return _image_response(request, media.get_page(db, chapter_id, n))

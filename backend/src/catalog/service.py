@@ -13,6 +13,7 @@ from src.catalog.schema import (
     DashboardOut,
     DashboardStats,
     RecentUpdateOut,
+    SeriesArtOut,
     SeriesOut,
     TagOut,
     VolumeGroupOut,
@@ -214,3 +215,18 @@ def search(session: Session, q: str, *, limit: int = 20) -> list[SeriesOut]:
     if not q.strip():
         return []
     return [to_series_out(r) for r in repo.search_series(session, q.strip(), limit=limit)]
+
+
+def related(session: Session, series_id: str, *, limit: int = 12) -> list[SeriesOut]:
+    """Other series of the same kind (Related tab)."""
+    if session.get(Series, series_id) is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    rows = repo.related_series(session, series_id, limit=limit)
+    return [to_series_out(r) for r in rows]
+
+
+def series_art(session: Session, series_id: str) -> SeriesArtOut:
+    """Extra art for a series (Art tab). Empty until an art store exists (backlog)."""
+    if session.get(Series, series_id) is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    return SeriesArtOut(images=[])

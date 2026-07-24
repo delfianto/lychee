@@ -1,0 +1,125 @@
+"""Tests for binary media serving: covers, chapter pages, gallery images."""
+
+import io
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+from PIL import Image
+from sqlalchemy.orm import Session
+from src.catalog.models import Book, Chapter, Series
+
+from tests.support import ensure_library
+
+
+def _write_pages(directory: Path, count: int) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        buf = io.BytesIO()
+        Image.new("RGB", (40, 60), (10 * i, 20, 30)).save(buf, format="PNG")
+        _ = (directory / f"{i + 1:03d}.png").write_bytes(buf.getvalue())
+
+
+def _make_book_series(
+    session: Session, tmp_path: Path, *, kind: str, pages: int, with_chapter: bool
+) -> tuple[Series, Chapter | None]:
+    root = tmp_path / "lib"
+    library = ensure_library(session)
+    library.path = str(root)
+    series = Series(library_id=library.id, kind=kind, title="Media Series", sort_title="media")
+    session.add(series)
+    session.flush()
+
+    _write_pages(root / series.id, pages)
+    book = Book(
+        series_id=series.id,
+        library_id=library.id,
+        path_rel=series.id,
+        content_kind="image_dir",
+        page_count=pages,
+    )
+    session.add(book)
+    session.flush()
+
+    chapter: Chapter | None = None
+    if with_chapter:
+        chapter = Chapter(
+            series_id=series.id,
+            book_id=book.id,
+            number="1",
+            number_sort=1.0,
+            language="en",
+            page_start=0,
+            page_count=pages,
+        )
+        session.add(chapter)
+        session.flush()
+    session.commit()
+    return series, chapter
+
+
+def test_chapter_page_serving_and_304(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    _, chapter = _make_book_series(db_session, tmp_path, kind="manga", pages=3, with_chapter=True)
+    assert chapter is not None
+
+    resp = client.get(f"/api/chapters/{chapter.id}/pages/1")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+    etag = resp.headers["etag"]
+
+    cached = client.get(f"/api/chapters/{chapter.id}/pages/1", headers={"If-None-Match": etag})
+    assert cached.status_code == 304
+
+    assert client.get(f"/api/chapters/{chapter.id}/pages/9").status_code == 404
+
+
+def test_cover_is_generated_as_avif(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series, _ = _make_book_series(db_session, tmp_path, kind="manga", pages=2, with_chapter=True)
+
+    resp = client.get(f"/api/series/{series.id}/cover")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/avif"
+    assert b"ftyp" in resp.content[:16]
+    # Served again from the store (now cached on disk).
+    assert client.get(f"/api/series/{series.id}/cover").status_code == 200
+    assert client.get("/api/series/missing/cover").status_code == 404
+
+
+def test_gallery_images_list_and_serve(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series, _ = _make_book_series(db_session, tmp_path, kind="gallery", pages=4, with_chapter=False)
+
+    first = client.get(f"/api/series/{series.id}/images", params={"limit": 2}).json()
+    assert len(first["items"]) == 2
+    assert first["items"][0] == f"/api/series/{series.id}/images/0"
+    assert first["nextCursor"] is not None
+
+    second = client.get(
+        f"/api/series/{series.id}/images", params={"limit": 2, "cursor": first["nextCursor"]}
+    ).json()
+    assert len(second["items"]) == 2
+    assert second["nextCursor"] is None
+
+    img = client.get(f"/api/series/{series.id}/images/0")
+    assert img.status_code == 200
+    assert img.headers["content-type"] == "image/png"
+
+
+def test_related_and_art(client: TestClient, db_session: Session, tmp_path: Path) -> None:
+    series, _ = _make_book_series(db_session, tmp_path, kind="manga", pages=1, with_chapter=True)
+    other = Series(
+        library_id=series.library_id, kind="manga", title="Sibling", sort_title="sibling"
+    )
+    db_session.add(other)
+    db_session.commit()
+
+    related = client.get(f"/api/series/{series.id}/related").json()
+    assert series.id not in [s["id"] for s in related]
+    assert other.id in [s["id"] for s in related]
+
+    assert client.get(f"/api/series/{series.id}/art").json() == {"images": []}

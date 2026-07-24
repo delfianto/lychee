@@ -8,9 +8,11 @@ import src.models  # noqa: F401  (register every model on Base.metadata)
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from src.catalog.deps import get_thumbnail_store
 from src.core.persistence.base_model import Base
 from src.core.persistence.database import get_db
 from src.main import app
+from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
 
 
@@ -36,8 +38,8 @@ def db_session(db_engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(db_engine: Engine) -> Iterator[TestClient]:
-    """A TestClient whose ``get_db`` dependency is bound to the temp database."""
+def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
+    """A TestClient bound to the temp database and a temp thumbnail store."""
     test_session = sessionmaker(bind=db_engine)
 
     def _get_db() -> Iterator[Session]:
@@ -48,6 +50,7 @@ def client(db_engine: Engine) -> Iterator[TestClient]:
             session.close()
 
     app.dependency_overrides[get_db] = _get_db
+    app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(tmp_path / "thumbnails")
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
