@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from src.bootstrap import bootstrap
 from src.catalog.router import router as catalog_router
+from src.collections.router import router as collections_router
 from src.core.config import settings
 from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
@@ -59,6 +60,7 @@ app.include_router(library_router)
 app.include_router(progress_router)
 app.include_router(integrations_router)
 app.include_router(taxonomy_router)
+app.include_router(collections_router)
 
 
 @app.get("/")
