@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Bookmark, BookOpen, Heart, ListPlus, RefreshCw, Star } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
@@ -71,13 +72,16 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
           <!-- Action row: local controls (left) · upstream actions (right) -->
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
-              <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm">
+              <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
+                <BookOpen class="size-4" />
                 Start reading
               </RouterLink>
 
               <!-- Library status -->
               <div class="dropdown">
-                <div tabindex="0" role="button" class="btn btn-sm">🔖 {{ statusLabel }}</div>
+                <div tabindex="0" role="button" class="btn btn-sm gap-2">
+                  <Bookmark class="size-4" />{{ statusLabel }}
+                </div>
                 <ul
                   tabindex="0"
                   class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
@@ -92,17 +96,20 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
               <!-- Rating · Favorite · Add to list -->
               <div class="join">
-                <button class="btn btn-sm join-item">
-                  ★<span v-if="rating !== null" class="ml-1">{{ rating }}</span>
+                <button class="btn btn-sm join-item gap-1">
+                  <Star class="size-4" /><span v-if="rating !== null">{{ rating }}</span>
                 </button>
                 <button
-                  class="btn btn-sm join-item"
+                  class="btn btn-square btn-sm join-item"
                   :class="{ 'text-error': favorite }"
+                  aria-label="Favorite"
                   @click="favorite = !favorite"
                 >
-                  ♥
+                  <Heart class="size-4" :class="{ 'fill-current': favorite }" />
                 </button>
-                <button class="btn btn-square btn-sm join-item">☰</button>
+                <button class="btn btn-square btn-sm join-item" aria-label="Add to list">
+                  <ListPlus class="size-4" />
+                </button>
               </div>
             </div>
 
@@ -111,8 +118,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
               <button
                 class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
                 data-tip="Check MangaDex for updates"
+                aria-label="Check MangaDex for updates"
               >
-                ⟳
+                <RefreshCw class="size-4" />
               </button>
             </div>
           </div>

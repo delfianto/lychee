@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -124,7 +125,9 @@ function nextChapter(): void {
       class="navbar absolute inset-x-0 top-0 min-h-0 bg-base-100/80 py-1 backdrop-blur"
     >
       <div class="navbar-start gap-2">
-        <button class="btn btn-circle btn-ghost btn-sm" aria-label="Back" @click="router.back()">‹</button>
+        <button class="btn btn-circle btn-ghost btn-sm" aria-label="Back" @click="router.back()">
+          <ChevronLeft class="size-5" />
+        </button>
         <div class="flex flex-col leading-tight">
           <span class="text-sm font-medium">{{ series.title }}</span>
           <span class="text-xs text-base-content/60">Ch. 45 · Chapter title</span>
@@ -137,7 +140,7 @@ function nextChapter(): void {
           <option>Ch. 47</option>
         </select>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Settings" @click="settingsOpen = !settingsOpen">
-          ⚙
+          <Settings class="size-5" />
         </button>
       </div>
     </header>
@@ -147,7 +150,7 @@ function nextChapter(): void {
       v-show="controls && mode !== 'longstrip'"
       class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-base-100/80 px-4 py-2 backdrop-blur"
     >
-      <button class="btn btn-ghost btn-sm" @click="prev">‹ Prev</button>
+      <button class="btn btn-ghost btn-sm gap-1" @click="prev"><ChevronLeft class="size-4" />Prev</button>
       <input
         v-model.number="currentPage"
         type="range"
@@ -157,7 +160,7 @@ function nextChapter(): void {
         aria-label="Page"
       />
       <span class="w-14 shrink-0 text-center text-xs">{{ currentPage }} / {{ pages.length }}</span>
-      <button class="btn btn-ghost btn-sm" @click="next">Next ›</button>
+      <button class="btn btn-ghost btn-sm gap-1" @click="next">Next<ChevronRight class="size-4" /></button>
     </footer>
 
     <!-- Settings panel -->
@@ -167,7 +170,9 @@ function nextChapter(): void {
     >
       <div class="flex items-center justify-between">
         <h3 class="font-semibold">Reader settings</h3>
-        <button class="btn btn-circle btn-ghost btn-sm" @click="settingsOpen = false">✕</button>
+        <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="settingsOpen = false">
+          <X class="size-5" />
+        </button>
       </div>
 
       <div>

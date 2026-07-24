@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { GripVertical, Plus, Search } from "lucide-vue-next";
 import { computed, reactive, ref } from "vue";
 
 import { browseTagGroups } from "../mocks/library";
@@ -62,10 +63,10 @@ const levelWidth = (level: number): string => levelWidths[level] ?? "w-full";
           <h2 class="text-lg font-semibold">Tags</h2>
           <div class="flex items-center gap-2">
             <label class="input input-bordered input-sm flex items-center gap-2">
-              <span class="opacity-60">⌕</span>
+              <Search class="size-4 opacity-60" />
               <input type="search" class="grow" placeholder="Search tags…" />
             </label>
-            <button class="btn btn-primary btn-sm">+ Add tag</button>
+            <button class="btn btn-primary btn-sm gap-1"><Plus class="size-4" />Add tag</button>
           </div>
         </div>
 
@@ -76,7 +77,7 @@ const levelWidth = (level: number): string => levelWidths[level] ?? "w-full";
               <table class="table table-sm">
                 <tbody>
                   <tr v-for="t in g.tags" :key="t.id">
-                    <td class="w-6 cursor-grab text-base-content/40">⠿</td>
+                    <td class="w-6 cursor-grab text-base-content/40"><GripVertical class="size-4" /></td>
                     <td class="font-medium">{{ t.name }}</td>
                     <td><span class="badge badge-ghost badge-sm">default</span></td>
                     <td class="text-xs text-base-content/60">{{ usage[t.id] }} uses</td>

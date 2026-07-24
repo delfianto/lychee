@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronLeft, ChevronRight } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -64,11 +65,19 @@ function progress(s: Series | undefined): number {
     </div>
 
     <!-- Controls -->
-    <button class="btn btn-circle btn-ghost btn-sm absolute left-2 top-1/2 -translate-y-1/2" @click="go(-1)">
-      ‹
+    <button
+      class="btn btn-circle btn-ghost btn-sm absolute left-2 top-1/2 -translate-y-1/2"
+      aria-label="Previous"
+      @click="go(-1)"
+    >
+      <ChevronLeft class="size-5" />
     </button>
-    <button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-1/2 -translate-y-1/2" @click="go(1)">
-      ›
+    <button
+      class="btn btn-circle btn-ghost btn-sm absolute right-2 top-1/2 -translate-y-1/2"
+      aria-label="Next"
+      @click="go(1)"
+    >
+      <ChevronRight class="size-5" />
     </button>
     <div class="flex justify-center gap-1 pb-3">
       <button
@@ -76,6 +85,7 @@ function progress(s: Series | undefined): number {
         :key="i"
         class="h-2 w-2 rounded-full"
         :class="i === index ? 'bg-primary' : 'bg-base-300'"
+        :aria-label="`Go to slide ${i + 1}`"
         @click="index = i"
       ></button>
     </div>

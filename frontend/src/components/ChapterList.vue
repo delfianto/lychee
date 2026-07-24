@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronDown, MessageSquare } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
 
 import type { VolumeGroup } from "../types";
@@ -21,7 +22,7 @@ defineProps<{ volumes: VolumeGroup[] }>();
         <option>English</option>
         <option>All languages</option>
       </select>
-      <button class="btn btn-ghost btn-sm ml-auto">Newest ↓</button>
+      <button class="btn btn-ghost btn-sm ml-auto gap-1">Newest<ChevronDown class="size-4" /></button>
     </div>
 
     <!-- Volume groups -->
@@ -43,7 +44,9 @@ defineProps<{ volumes: VolumeGroup[] }>();
           <span class="hidden text-xs text-base-content/60 sm:inline">{{ c.group }}</span>
           <span class="badge badge-ghost badge-sm uppercase">{{ c.language }}</span>
           <span class="hidden w-16 shrink-0 text-right text-xs text-base-content/60 sm:inline">{{ c.uploadedAt }}</span>
-          <span class="hidden w-12 shrink-0 text-right text-xs text-base-content/50 md:inline">💬 {{ c.comments }}</span>
+          <span class="hidden w-12 shrink-0 items-center justify-end gap-1 text-xs text-base-content/50 md:inline-flex">
+            <MessageSquare class="size-3.5" />{{ c.comments }}
+          </span>
         </RouterLink>
       </div>
     </div>
