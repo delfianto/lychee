@@ -6,6 +6,7 @@ import { useRoute } from "vue-router";
 import FilterPanel from "../components/FilterPanel.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
+import { toast } from "../lib/toast";
 import { allBrowseTags, libraryFor } from "../mocks/library";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus, Series } from "../types";
 
@@ -120,6 +121,7 @@ function savePreset(): void {
   if (idx >= 0) presets.value[idx] = p;
   else presets.value.push(p);
   persistPresets();
+  toast(`Saved preset “${name}”`);
   presetName.value = "";
 }
 function applyPreset(p: Preset): void {
