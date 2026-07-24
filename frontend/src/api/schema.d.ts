@@ -61,7 +61,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Series
+         * @description Persist detail action-row edits: favorite / library status / personal rating.
+         */
+        patch: operations["update_series_api_series__series_id__patch"];
         trace?: never;
     };
     "/api/series/{series_id}/chapters": {
@@ -1055,6 +1059,8 @@ export interface components {
             originCountry?: string | null;
             /** Rating */
             rating?: number | null;
+            /** Userrating */
+            userRating?: number | null;
             /**
              * Favorite
              * @default false
@@ -1070,6 +1076,18 @@ export interface components {
             characters?: string[] | null;
             /** Librarystatus */
             libraryStatus?: string | null;
+        };
+        /**
+         * SeriesUpdate
+         * @description Detail action-row edits (all optional; absent fields are left unchanged).
+         */
+        SeriesUpdate: {
+            /** Favorite */
+            favorite?: boolean | null;
+            /** Librarystatus */
+            libraryStatus?: string | null;
+            /** Rating */
+            rating?: number | null;
         };
         /** SyncOut */
         SyncOut: {
@@ -1244,6 +1262,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_series_api_series__series_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

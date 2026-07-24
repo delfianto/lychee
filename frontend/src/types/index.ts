@@ -44,6 +44,8 @@ export interface Series {
   originCountry?: string;
   /** Community rating, 0–10. */
   rating?: number;
+  /** This user's personal rating, 1–10. */
+  userRating?: number;
   favorite?: boolean;
   kind?: "manga" | "comic" | "gallery";
   /** Number of images, for gallery-kind items (which have images, not chapters). */
