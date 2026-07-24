@@ -16,6 +16,7 @@ from src.health.router import router as health_router
 from src.integrations.router import router as integrations_router
 from src.library.router import router as library_router
 from src.progress.router import router as progress_router
+from src.taxonomy.router import router as taxonomy_router
 
 configure_logging()
 logger = get_logger(__name__)
@@ -57,6 +58,7 @@ app.include_router(catalog_router)
 app.include_router(library_router)
 app.include_router(progress_router)
 app.include_router(integrations_router)
+app.include_router(taxonomy_router)
 
 
 @app.get("/")
