@@ -204,6 +204,14 @@ export async function fetchArt(id: string): Promise<string[]> {
 // --- gallery -------------------------------------------------------------------
 
 /** All gallery-kind series (few enough to filter client-side + derive facets). */
+export async function fetchCollection(id: string): Promise<{ name: string; series: Series[] } | null> {
+  const { data, error } = await api.GET("/api/collections/{collection_id}", {
+    params: { path: { collection_id: id } },
+  });
+  if (error || !data) return null;
+  return { name: data.name, series: data.series.map(toSeries) };
+}
+
 export async function fetchGalleries(): Promise<Series[]> {
   const { data, error } = await api.GET("/api/series", {
     params: { query: { kind: "gallery", limit: 100, sort: "recentlyAdded" } },

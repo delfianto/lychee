@@ -1,69 +1,104 @@
-// User collections / reading lists. Backed by a Pinia store so create/rename/
-// delete/add/remove persist across navigation; mirrored to localStorage until
-// the real API exists (seeded from mocks on first run).
+// User collections / reading lists, backed by the API. Keeps a reactive in-memory
+// `lists` (so hasSeries stays synchronous for templates) and mutates optimistically
+// while persisting to the server.
 
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
-import { initialCollections } from "../mocks/library";
+import { api } from "../api/client";
 import type { Collection } from "../types";
 
-const KEY = "lychee.collections";
+interface ApiCollection {
+  id: string;
+  name: string;
+  description?: string | null;
+  seriesIds: string[];
+}
+
+function toCollection(c: ApiCollection): Collection {
+  return { id: c.id, name: c.name, description: c.description ?? undefined, seriesIds: c.seriesIds };
+}
 
 export const useCollections = defineStore("collections", () => {
-  function load(): Collection[] {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw) as Collection[];
-    } catch {
-      /* fall through to seed */
-    }
-    return initialCollections.map((c) => ({ ...c, seriesIds: [...c.seriesIds] }));
-  }
+  const lists = ref<Collection[]>([]);
 
-  const lists = ref<Collection[]>(load());
-
-  function persist(): void {
-    localStorage.setItem(KEY, JSON.stringify(lists.value));
+  async function refresh(): Promise<void> {
+    const { data } = await api.GET("/api/collections");
+    lists.value = (data ?? []).map(toCollection);
   }
+  void refresh();
 
   function getList(id: string): Collection | undefined {
     return lists.value.find((l) => l.id === id);
   }
-  function createList(name: string): Collection {
-    const c: Collection = { id: `l${Date.now()}`, name: name.trim() || "Untitled list", seriesIds: [] };
-    lists.value.push(c);
-    persist();
-    return c;
+
+  async function createList(name: string): Promise<Collection | undefined> {
+    const { data } = await api.POST("/api/collections", {
+      body: { name: name.trim() || "Untitled list" },
+    });
+    if (!data) return undefined;
+    const created = toCollection(data);
+    lists.value.push(created);
+    return created;
   }
-  function renameList(id: string, name: string): void {
-    const c = getList(id);
-    if (c && name.trim()) {
-      c.name = name.trim();
-      persist();
-    }
+
+  async function renameList(id: string, name: string): Promise<void> {
+    const list = getList(id);
+    if (!list || !name.trim()) return;
+    list.name = name.trim();
+    await api.PATCH("/api/collections/{collection_id}", {
+      params: { path: { collection_id: id } },
+      body: { name: list.name },
+    });
   }
-  function deleteList(id: string): void {
+
+  async function deleteList(id: string): Promise<void> {
     lists.value = lists.value.filter((l) => l.id !== id);
-    persist();
+    await api.DELETE("/api/collections/{collection_id}", {
+      params: { path: { collection_id: id } },
+    });
   }
+
   function hasSeries(listId: string, seriesId: string): boolean {
     return getList(listId)?.seriesIds.includes(seriesId) ?? false;
   }
-  function toggleSeries(listId: string, seriesId: string): void {
-    const c = getList(listId);
-    if (!c) return;
-    const i = c.seriesIds.indexOf(seriesId);
-    if (i >= 0) c.seriesIds.splice(i, 1);
-    else c.seriesIds.push(seriesId);
-    persist();
-  }
-  function removeSeries(listId: string, seriesId: string): void {
-    const c = getList(listId);
-    if (!c) return;
-    c.seriesIds = c.seriesIds.filter((s) => s !== seriesId);
-    persist();
+
+  async function toggleSeries(listId: string, seriesId: string): Promise<void> {
+    const list = getList(listId);
+    if (!list) return;
+    const index = list.seriesIds.indexOf(seriesId);
+    if (index >= 0) {
+      list.seriesIds.splice(index, 1);
+      await api.DELETE("/api/collections/{collection_id}/series/{series_id}", {
+        params: { path: { collection_id: listId, series_id: seriesId } },
+      });
+    } else {
+      list.seriesIds.push(seriesId);
+      await api.POST("/api/collections/{collection_id}/series", {
+        params: { path: { collection_id: listId } },
+        body: { seriesId },
+      });
+    }
   }
 
-  return { lists, getList, createList, renameList, deleteList, hasSeries, toggleSeries, removeSeries };
+  async function removeSeries(listId: string, seriesId: string): Promise<void> {
+    const list = getList(listId);
+    if (!list) return;
+    list.seriesIds = list.seriesIds.filter((s) => s !== seriesId);
+    await api.DELETE("/api/collections/{collection_id}/series/{series_id}", {
+      params: { path: { collection_id: listId, series_id: seriesId } },
+    });
+  }
+
+  return {
+    lists,
+    refresh,
+    getList,
+    createList,
+    renameList,
+    deleteList,
+    hasSeries,
+    toggleSeries,
+    removeSeries,
+  };
 });

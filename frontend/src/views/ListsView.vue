@@ -4,23 +4,22 @@ import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import { toast } from "../lib/toast";
-import { findSeries } from "../mocks/library";
 import { useCollections } from "../stores/collections";
 
 const collections = useCollections();
 const creating = ref(false);
 const newName = ref("");
 
-function create(): void {
+async function create(): Promise<void> {
   const name = newName.value.trim();
   if (!name) return;
-  collections.createList(name);
+  await collections.createList(name);
   toast(`Created “${name}”`);
   newName.value = "";
   creating.value = false;
 }
 function covers(seriesIds: string[]): string[] {
-  return seriesIds.slice(0, 4).map((id) => findSeries(id).coverUrl);
+  return seriesIds.slice(0, 4).map((id) => `/api/series/${id}/cover`);
 }
 </script>
 
