@@ -52,7 +52,8 @@ export interface Series {
 
 export interface RecentUpdate {
   series: Series;
-  chapterLabel: string; // e.g. "Ch. 120"
+  volume: number | null; // null = no volume (e.g. webtoons)
+  chapter: string; // display value, e.g. "127" or "45.5"
   updatedAt: string; // relative label, e.g. "2h ago"
 }
 
