@@ -186,6 +186,19 @@ export function libraryFor(key: string): LibraryDef {
   }
 }
 
+// --- Per-library storage (mock) --------------------------------------------
+/** Storage used per library, shown on the Home dashboard. Zero-size libraries
+    are hidden there so empty ones don't clutter the strip. */
+export interface LibrarySummary {
+  key: string; // route key → /manga, /comics
+  title: string;
+  sizeGb: number;
+}
+export const librarySummaries: LibrarySummary[] = [
+  { key: "manga", title: "Manga", sizeGb: 18.6 },
+  { key: "comics", title: "Comics", sizeGb: 4.3 },
+];
+
 // --- Chapters (series detail) ----------------------------------------------
 let chapNo = 210;
 function makeChapter(volume: number, i: number): Chapter {
