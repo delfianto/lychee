@@ -2,7 +2,12 @@
 import {
   ArrowLeftRight,
   BookOpen,
+  BookText,
+  Bug,
+  Check,
   Cherry,
+  Download,
+  Github,
   Globe,
   Image,
   Info,
@@ -12,19 +17,30 @@ import {
   Link2,
   Maximize2,
   Palette,
+  Pause,
+  Play,
   Plus,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   Sun,
   Tag,
   Wand2,
+  X,
 } from "lucide-vue-next";
 import { type Component, computed, reactive, ref, watch } from "vue";
 
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import { type ReaderSettings, useReaderSettings } from "../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../lib/theme";
-import { browseTagGroups, librarySeries } from "../mocks/library";
+import {
+  browseTagGroups,
+  type DownloadTask,
+  downloads,
+  librarySeries,
+  librarySummaries,
+  syncStatus,
+} from "../mocks/library";
 import type { ContentRating, Demographic } from "../types";
 
 const { theme, mode, setTheme, setMode } = useTheme();
@@ -42,6 +58,7 @@ const themeGroups = [
 const sections: { key: string; label: string; icon: Component }[] = [
   { key: "general", label: "General", icon: SlidersHorizontal },
   { key: "content", label: "Content", icon: Tag },
+  { key: "downloads", label: "Downloads", icon: Download },
   { key: "about", label: "About", icon: Info },
 ];
 const active = ref("general");
@@ -109,6 +126,43 @@ function removeTax(row: TaxRow): void {
   if (i >= 0) taxonomy.splice(i, 1);
 }
 
+// --- Downloads + MangaDex sync (mock) ---
+const dl = reactive<DownloadTask[]>(downloads.map((d) => ({ ...d })));
+const sync = reactive({ ...syncStatus, syncing: false });
+const dlLabel: Record<string, string> = {
+  downloading: "Downloading",
+  queued: "Queued",
+  paused: "Paused",
+  done: "Done",
+  failed: "Failed",
+};
+const dlBadge: Record<string, string> = {
+  downloading: "badge-primary",
+  queued: "badge-ghost",
+  paused: "badge-warning",
+  done: "badge-success",
+  failed: "badge-error",
+};
+const hasDone = computed(() => dl.some((d) => d.status === "done"));
+function syncNow(): void {
+  sync.syncing = true;
+  setTimeout(() => {
+    sync.syncing = false;
+    sync.lastSync = "just now";
+  }, 1500);
+}
+function retryDownload(d: DownloadTask): void {
+  d.status = "downloading";
+  d.progress = 0;
+}
+function removeDownload(d: DownloadTask): void {
+  const i = dl.indexOf(d);
+  if (i >= 0) dl.splice(i, 1);
+}
+function clearDone(): void {
+  for (let i = dl.length - 1; i >= 0; i--) if (dl[i].status === "done") dl.splice(i, 1);
+}
+
 // --- Libraries (mock) ---
 const libraries = reactive([
   { name: "Manga", path: "/data/manga", series: 128, lastScan: "2h ago" },
@@ -152,7 +206,29 @@ function setDensity(d: string): void {
 const language = ref("English");
 
 // --- About (mock) ---
-const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
+const about = {
+  version: "0.1.0-dev",
+  build: "a3efc06",
+  platform: "Linux · x86_64",
+  database: "SQLite · 84 MB",
+  uptime: "6d 14h",
+  started: "Jul 18, 2026",
+};
+const nonGallery = librarySeries.filter((s) => s.kind !== "gallery");
+const libStats = [
+  { label: "Series", value: nonGallery.length.toLocaleString() },
+  { label: "Chapters", value: nonGallery.reduce((n, s) => n + s.chapterCount, 0).toLocaleString() },
+  { label: "Galleries", value: librarySeries.filter((s) => s.kind === "gallery").length.toLocaleString() },
+  { label: "Storage", value: `${librarySummaries.reduce((n, l) => n + l.sizeGb, 0).toFixed(1)} GB` },
+];
+const serverInfo = [
+  { label: "Version", value: about.version },
+  { label: "Build", value: about.build },
+  { label: "Platform", value: about.platform },
+  { label: "Database", value: about.database },
+  { label: "Uptime", value: about.uptime },
+  { label: "Started", value: about.started },
+];
 </script>
 
 <template>
@@ -472,35 +548,158 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
         </div>
 
         <!-- About -->
-        <div v-else-if="active === 'about'" key="about" class="flex flex-col gap-3">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">About</h3>
+        <!-- Downloads + MangaDex sync -->
+        <div v-else-if="active === 'downloads'" key="downloads" class="flex flex-col gap-6">
+          <section class="flex flex-col gap-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sync</h3>
+            <div class="card bg-base-100">
+              <div class="card-body gap-3 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-start gap-3">
+                    <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
+                    <div>
+                      <div class="text-sm font-medium">MangaDex</div>
+                      <div class="text-xs text-base-content/60">
+                        <template v-if="sync.syncing">Checking for new chapters…</template>
+                        <template v-else>
+                          Last synced {{ sync.lastSync }} · {{ sync.newChapters }} new chapters · auto every
+                          {{ sync.autoEvery }}
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary btn-sm gap-2" :disabled="sync.syncing" @click="syncNow">
+                    <RefreshCw class="size-4" :class="{ 'animate-spin': sync.syncing }" />
+                    {{ sync.syncing ? "Syncing…" : "Sync now" }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Downloads</h3>
+              <button class="btn btn-ghost btn-sm" :disabled="!hasDone" @click="clearDone">Clear completed</button>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <div
+                v-for="d in dl"
+                :key="d.id"
+                class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2.5"
+              >
+                <img :src="d.series.coverUrl" :alt="d.series.title" class="cover h-12 shrink-0 rounded object-cover" />
+                <div class="min-w-0 grow">
+                  <div class="flex items-center gap-2">
+                    <span class="truncate text-sm font-medium">{{ d.series.title }}</span>
+                    <span class="shrink-0 text-xs text-base-content/60">{{ d.chapter }}</span>
+                  </div>
+                  <div class="mt-1 flex items-center gap-2 text-xs">
+                    <span class="badge badge-sm" :class="dlBadge[d.status]">
+                      {{ d.status === "downloading" ? `Downloading ${d.progress}%` : dlLabel[d.status] }}
+                    </span>
+                    <span class="text-base-content/50">{{ d.size }}</span>
+                  </div>
+                  <progress
+                    v-if="d.status === 'downloading' || d.status === 'paused'"
+                    class="progress progress-primary mt-1.5 h-1"
+                    :value="d.progress"
+                    max="100"
+                  ></progress>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                  <button
+                    v-if="d.status === 'downloading'"
+                    class="btn btn-square btn-ghost btn-xs"
+                    aria-label="Pause"
+                    @click="d.status = 'paused'"
+                  >
+                    <Pause class="size-4" />
+                  </button>
+                  <button
+                    v-else-if="d.status === 'paused'"
+                    class="btn btn-square btn-ghost btn-xs"
+                    aria-label="Resume"
+                    @click="d.status = 'downloading'"
+                  >
+                    <Play class="size-4" />
+                  </button>
+                  <button
+                    v-else-if="d.status === 'failed'"
+                    class="btn btn-square btn-ghost btn-xs"
+                    aria-label="Retry"
+                    @click="retryDownload(d)"
+                  >
+                    <RefreshCw class="size-4" />
+                  </button>
+                  <button class="btn btn-square btn-ghost btn-xs" aria-label="Remove" @click="removeDownload(d)">
+                    <X class="size-4" />
+                  </button>
+                </div>
+              </div>
+              <p v-if="!dl.length" class="py-8 text-center text-sm text-base-content/50">No downloads.</p>
+            </div>
+          </section>
+        </div>
+
+        <div v-else-if="active === 'about'" key="about" class="flex flex-col gap-6">
+          <!-- Brand -->
           <div class="card bg-base-100">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center gap-3">
-                <Cherry class="size-8 text-primary" />
-                <div>
-                  <div class="text-lg font-bold">lychee</div>
-                  <div class="text-xs text-base-content/60">v{{ about.version }}</div>
+            <div class="card-body gap-4 p-5">
+              <div class="flex flex-wrap items-center gap-4">
+                <div class="flex size-14 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+                  <Cherry class="size-8" />
+                </div>
+                <div class="min-w-0 grow">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-2xl font-bold">lychee</h2>
+                    <span class="badge badge-primary badge-sm">v{{ about.version }}</span>
+                  </div>
+                  <p class="text-sm text-base-content/60">Self-hosted manga, comic &amp; art-gallery server.</p>
+                </div>
+                <div class="flex flex-col items-end gap-1.5">
+                  <span class="flex items-center gap-1.5 text-xs font-medium text-success">
+                    <Check class="size-4" />Up to date
+                  </span>
+                  <button class="btn btn-ghost btn-sm gap-2 surface-border">
+                    <RefreshCw class="size-4" />Check for updates
+                  </button>
                 </div>
               </div>
               <div class="divider my-0"></div>
-              <div class="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div class="text-xs text-base-content/60">Storage used</div>
-                  <div>{{ about.storageUsed }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-base-content/60">Pages indexed</div>
-                  <div>{{ about.pages }}</div>
-                </div>
-              </div>
-              <div class="flex gap-2">
-                <a class="btn btn-ghost btn-sm" href="#">GitHub</a>
-                <a class="btn btn-ghost btn-sm" href="#">Docs</a>
+              <div class="flex flex-wrap gap-2">
+                <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><Github class="size-4" />GitHub</a>
+                <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><BookText class="size-4" />Docs</a>
+                <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><Bug class="size-4" />Report an issue</a>
               </div>
             </div>
           </div>
-          <p class="text-xs text-base-content/60">Self-hosted manga &amp; comic server.</p>
+
+          <!-- Library at a glance -->
+          <section class="flex flex-col gap-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Library</h3>
+            <div class="stats stats-vertical w-full surface-border bg-base-100 sm:stats-horizontal">
+              <div v-for="s in libStats" :key="s.label" class="stat">
+                <div class="stat-title">{{ s.label }}</div>
+                <div class="stat-value text-2xl">{{ s.value }}</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Server -->
+          <section class="flex flex-col gap-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Server</h3>
+            <div class="card bg-base-100">
+              <div class="card-body p-4">
+                <dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                  <div v-for="row in serverInfo" :key="row.label" class="flex items-center justify-between gap-4">
+                    <dt class="text-base-content/50">{{ row.label }}</dt>
+                    <dd class="font-medium">{{ row.value }}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </section>
         </div>
         </Transition>
       </div>

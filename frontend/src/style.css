@@ -369,6 +369,8 @@
 /* The status-dot colors live only in a TS map (lib/display.ts), so force-generate
    them — the class scanner would otherwise purge them as "unused". */
 @source inline("bg-{success,info,warning,error}");
+/* Download status badges come from a TS map (SettingsView) — force-generate. */
+@source inline("badge-{primary,ghost,warning,success,error}");
 
 /* One corner-radius language: buttons/inputs/tabs (field) and badges/tags
    (selector) share the same radius so they stop looking mismatched. */
