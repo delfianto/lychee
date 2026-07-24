@@ -16,11 +16,22 @@ from src.catalog.schema import (
     RecentUpdateOut,
     SeriesArtOut,
     SeriesOut,
+    SeriesUpdate,
     TagOut,
     VolumeGroupOut,
 )
-from src.core.exceptions import NotFoundError
+from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+
+_LIBRARY_STATUSES = {
+    "none",
+    "reading",
+    "on_hold",
+    "dropped",
+    "plan_to_read",
+    "completed",
+    "re_reading",
+}
 
 _MAX_LIMIT = 100
 
@@ -62,6 +73,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
         total_chapters=s.total_chapters,
         origin_country=s.origin_country,
         rating=s.rating,
+        user_rating=s.user_rating,
         favorite=s.favorite,
         kind=s.kind,
         image_count=s.image_count,
@@ -118,6 +130,27 @@ def get_series(session: Session, series_id: str) -> SeriesOut:
     row = repo.get_series(session, series_id)
     if row is None:
         raise NotFoundError(f"series {series_id!r} not found")
+    return to_series_out(row)
+
+
+def update_series(session: Session, series_id: str, data: SeriesUpdate) -> SeriesOut:
+    """Apply detail action-row edits (favorite / shelf status / personal rating)."""
+    series = session.get(Series, series_id)
+    if series is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    fields = data.model_dump(exclude_unset=True)
+    if "favorite" in fields:
+        series.favorite = bool(fields["favorite"])
+    if "library_status" in fields:
+        status = fields["library_status"]
+        if status not in _LIBRARY_STATUSES:
+            raise BadRequestError(f"invalid library status: {status!r}")
+        series.library_status = status
+    if "rating" in fields:
+        series.user_rating = fields["rating"]  # may be None to clear
+    session.commit()
+    row = repo.get_series(session, series_id)
+    assert row is not None  # just updated
     return to_series_out(row)
 
 

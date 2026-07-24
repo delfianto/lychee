@@ -34,12 +34,21 @@ class SeriesOut(CamelModel):
     total_chapters: int | None = None
     origin_country: str | None = None
     rating: float | None = None
+    user_rating: float | None = None
     favorite: bool = False
     kind: str | None = None
     image_count: int | None = None
     source: str | None = None
     characters: list[str] | None = None
     library_status: str | None = None
+
+
+class SeriesUpdate(CamelModel):
+    """Detail action-row edits (all optional; absent fields are left unchanged)."""
+
+    favorite: bool | None = None
+    library_status: str | None = None
+    rating: float | None = None  # the user's personal rating (→ Series.user_rating)
 
 
 class ChapterOut(CamelModel):

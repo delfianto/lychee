@@ -87,6 +87,7 @@ class Series(BaseModel):
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     origin_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)  # community 0–10
+    user_rating: Mapped[float | None] = mapped_column(Float, nullable=True)  # this user's 1–10
 
     # Per-user state (single-user v1).
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)

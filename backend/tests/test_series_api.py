@@ -98,3 +98,42 @@ def test_cursor_pagination_walks_all(client: TestClient, db_session: Session) ->
 
     assert len(seen) == 5
     assert len(set(seen)) == 5  # no dupes, no gaps
+
+
+def test_patch_series_persists_action_row(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="Berserk")
+    db_session.commit()
+
+    resp = client.patch(
+        f"/api/series/{series.id}",
+        json={"favorite": True, "libraryStatus": "reading", "rating": 8},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["favorite"] is True
+    assert body["libraryStatus"] == "reading"
+    assert body["userRating"] == 8
+
+    got = client.get(f"/api/series/{series.id}").json()
+    assert (got["favorite"], got["libraryStatus"], got["userRating"]) == (True, "reading", 8)
+
+
+def test_patch_series_partial_and_clear_rating(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="Frieren")
+    db_session.commit()
+
+    client.patch(f"/api/series/{series.id}", json={"rating": 9})
+    client.patch(f"/api/series/{series.id}", json={"favorite": True})  # rating untouched
+    got = client.get(f"/api/series/{series.id}").json()
+    assert got["favorite"] is True
+    assert got["userRating"] == 9
+
+    client.patch(f"/api/series/{series.id}", json={"rating": None})  # clear
+    assert client.get(f"/api/series/{series.id}").json()["userRating"] is None
+
+
+def test_patch_series_invalid_status_and_missing(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="Saga")
+    db_session.commit()
+    assert client.patch(f"/api/series/{series.id}", json={"libraryStatus": "bogus"}).status_code == 400
+    assert client.patch("/api/series/nope", json={"favorite": True}).status_code == 404
