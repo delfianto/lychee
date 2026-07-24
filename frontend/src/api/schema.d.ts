@@ -88,6 +88,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{series_id}/match-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match Candidates
+         * @description Provider search hits for matching this series (defaults to its title).
+         */
+        get: operations["match_candidates_api_series__series_id__match_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Series
+         * @description Link the series to a provider entry and fetch its metadata (returns the task).
+         */
+        post: operations["match_series_api_series__series_id__match_post"];
+        /** Unlink Series */
+        delete: operations["unlink_series_api_series__series_id__match_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{series_id}/chapters": {
         parameters: {
             query?: never;
@@ -995,6 +1036,32 @@ export interface components {
             /** Enabled */
             enabled?: boolean | null;
         };
+        /**
+         * MangaMatchOut
+         * @description A provider search candidate for matching a local series (PART F/M2).
+         */
+        MangaMatchOut: {
+            /** Providerseriesid */
+            providerSeriesId: string;
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+            /** Status */
+            status?: string | null;
+            /** Coverurl */
+            coverUrl?: string | null;
+        };
+        /** MatchRequest */
+        MatchRequest: {
+            /** Providerseriesid */
+            providerSeriesId: string;
+            /**
+             * Provider
+             * @default mangadex
+             */
+            provider: string;
+        };
         /** OffsetPage[TaxonomyItemOut] */
         OffsetPage_TaxonomyItemOut_: {
             /** Items */
@@ -1128,6 +1195,8 @@ export interface components {
             characters?: string[] | null;
             /** Librarystatus */
             libraryStatus?: string | null;
+            /** Provider */
+            provider?: string | null;
         };
         /**
          * SeriesUpdate
@@ -1408,6 +1477,103 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_candidates_api_series__series_id__match_candidates_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MangaMatchOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_series_api_series__series_id__match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_series_api_series__series_id__match_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -1,9 +1,21 @@
 <script setup lang="ts">
-import { Bookmark, BookOpen, Check, Heart, ListPlus, RefreshCw, Star } from "lucide-vue-next";
-import { computed, ref, watch } from "vue";
+import { Bookmark, BookOpen, Check, Heart, Link2, ListPlus, RefreshCw, Star, X } from "lucide-vue-next";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
-import { fetchArt, fetchChapters, fetchRelated, fetchSeries, patchSeries } from "../api/queries";
+import { onTaskDone } from "../api/events";
+import {
+  fetchArt,
+  fetchChapters,
+  fetchMatchCandidates,
+  fetchRelated,
+  fetchSeries,
+  type MatchCandidate,
+  matchSeries,
+  patchSeries,
+  refreshSeries,
+  unlinkMatch,
+} from "../api/queries";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
@@ -73,6 +85,50 @@ function clearRating(): void {
   userRating.value = null;
   void patchSeries(series.value.id, { rating: null });
 }
+
+// --- Metadata: match to MangaDex + refresh (PART F/M2) ---
+const isMatched = computed(() => !!series.value?.provider);
+const matchOpen = ref(false);
+const matchQuery = ref("");
+const matchLoading = ref(false);
+const matchResults = ref<MatchCandidate[]>([]);
+
+async function runMatchSearch(): Promise<void> {
+  if (!series.value) return;
+  matchLoading.value = true;
+  matchResults.value = await fetchMatchCandidates(series.value.id, matchQuery.value.trim() || undefined);
+  matchLoading.value = false;
+}
+function openMatch(): void {
+  if (!series.value) return;
+  matchQuery.value = series.value.title;
+  matchResults.value = [];
+  matchOpen.value = true;
+  void runMatchSearch();
+}
+async function pickMatch(c: MatchCandidate): Promise<void> {
+  if (!series.value) return;
+  await matchSeries(series.value.id, c.providerSeriesId);
+  matchOpen.value = false;
+  toast("Matched — fetching metadata…");
+}
+async function refreshMeta(): Promise<void> {
+  if (!series.value) return;
+  await refreshSeries(series.value.id);
+  toast("Refreshing metadata…");
+}
+async function unlinkMeta(): Promise<void> {
+  if (!series.value) return;
+  await unlinkMatch(series.value.id);
+  await load(series.value.id);
+  toast("Unlinked source", "info");
+}
+
+// Reload when the background metadata task finishes (match/refresh apply then).
+const disposeTask = onTaskDone((task) => {
+  if (task.kind === "metadata" && series.value) void load(series.value.id);
+});
+onUnmounted(disposeTask);
 
 const statuses: { value: LibraryStatus; label: string }[] = [
   { value: "none", label: "None" },
@@ -241,13 +297,26 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
             <div class="join">
               <button class="btn btn-sm join-item">Track</button>
-              <button
-                class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
-                data-tip="Check MangaDex for updates"
-                aria-label="Check MangaDex for updates"
-              >
-                <RefreshCw class="size-4" />
-              </button>
+              <div class="dropdown dropdown-end">
+                <div
+                  tabindex="0"
+                  role="button"
+                  class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
+                  data-tip="Metadata source"
+                  aria-label="Metadata source"
+                >
+                  <RefreshCw class="size-4" />
+                </div>
+                <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
+                  <li><a @click="openMatch"><Link2 class="size-4" />Match on MangaDex…</a></li>
+                  <li :class="{ 'menu-disabled': !isMatched }">
+                    <a @click="isMatched && refreshMeta()"><RefreshCw class="size-4" />Refresh metadata</a>
+                  </li>
+                  <li v-if="isMatched">
+                    <a class="text-error" @click="unlinkMeta"><X class="size-4" />Unlink source</a>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -261,6 +330,45 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
       </aside>
       <div class="min-w-0 grow">
         <ChapterList :volumes="volumes" :related="related" :art-covers="artCovers" />
+      </div>
+    </div>
+
+    <!-- Match-on-MangaDex modal -->
+    <div v-if="matchOpen" class="modal modal-open" @click.self="matchOpen = false">
+      <div class="modal-box max-w-2xl">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-bold">Match on MangaDex</h3>
+          <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="matchOpen = false">
+            <X class="size-4" />
+          </button>
+        </div>
+        <label class="input input-bordered flex items-center gap-2">
+          <input v-model="matchQuery" class="grow" placeholder="Search title…" @keyup.enter="runMatchSearch" />
+          <button class="btn btn-primary btn-sm" @click="runMatchSearch">Search</button>
+        </label>
+        <div v-if="matchLoading" class="flex justify-center py-8">
+          <span class="loading loading-spinner text-primary" />
+        </div>
+        <ul v-else class="mt-4 max-h-96 space-y-2 overflow-y-auto">
+          <li v-for="c in matchResults" :key="c.providerSeriesId">
+            <button
+              class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-200"
+              @click="pickMatch(c)"
+            >
+              <img v-if="c.coverUrl" :src="c.coverUrl" alt="" class="h-16 w-12 shrink-0 rounded object-cover" />
+              <div v-else class="h-16 w-12 shrink-0 rounded bg-base-300" />
+              <div class="min-w-0">
+                <div class="truncate font-medium">{{ c.title }}</div>
+                <div class="text-xs text-base-content/60">
+                  {{ [c.year, c.status].filter(Boolean).join(" · ") || "—" }}
+                </div>
+              </div>
+            </button>
+          </li>
+          <li v-if="!matchResults.length" class="py-8 text-center text-sm text-base-content/50">
+            No matches found
+          </li>
+        </ul>
       </div>
     </div>
     </template>

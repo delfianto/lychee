@@ -41,6 +41,7 @@ class SeriesOut(CamelModel):
     source: str | None = None
     characters: list[str] | None = None
     library_status: str | None = None
+    provider: str | None = None  # matched metadata provider slug, or null if unmatched
 
 
 class SeriesUpdate(CamelModel):
@@ -49,6 +50,21 @@ class SeriesUpdate(CamelModel):
     favorite: bool | None = None
     library_status: str | None = None
     rating: float | None = None  # the user's personal rating (→ Series.user_rating)
+
+
+class MangaMatchOut(CamelModel):
+    """A provider search candidate for matching a local series (PART F/M2)."""
+
+    provider_series_id: str
+    title: str
+    year: int | None = None
+    status: str | None = None
+    cover_url: str | None = None
+
+
+class MatchRequest(CamelModel):
+    provider_series_id: str
+    provider: str = "mangadex"
 
 
 class ChapterOut(CamelModel):

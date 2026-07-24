@@ -55,6 +55,8 @@ export interface Series {
   characters?: string[];
   /** This user's shelf status (drives the library's status tabs). */
   libraryStatus?: LibraryStatus;
+  /** Matched metadata provider slug (e.g. "mangadex"), or absent if unmatched. */
+  provider?: string | null;
 }
 
 export interface RecentUpdate {
