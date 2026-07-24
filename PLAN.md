@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs. **79 pytest, ruff + basedpyright clean.**
+  Settings/collections/taxonomy/integrations APIs. **86 pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
@@ -22,10 +22,11 @@
          b6a9fd5d added `user_rating`; SeriesDetail + GalleryDetail wired). ✅ done.
    - [ ] Download `pause`/`resume` endpoints (FE toggles status locally); `PUT /api/collections/{id}/series` reorder.
 2. **Larger features (genuinely new work):**
-   - [ ] MangaDex **metadata match/import** + `POST /api/series/{id}/refresh` + cover fetch (only chapter
-         download of an already-linked series works today).
-   - [ ] **Tracker OAuth + outbound sync** (connect is a stub; nothing pushes read status).
-   - [ ] **Real sync** — `/api/sync` is a stub; check MangaDex for new chapters.
+   - [ ] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
+         enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
+         **Planned in detail in PART F below.**
+   - [ ] **Tracker OAuth + outbound sync** for AniList/MangaUpdates/MAL (connect is a stub; nothing
+         pushes read status) — distinct from MangaDex; MangaDex `links` (PART F/M1) feed the match.
    - [x] **SSE** `/api/events` + `/api/tasks` + task tracker — scans emit live progress events. ✅ done.
    - [x] **Background execution queue** — `src/tasks/queue.py` runs scans + downloads on a worker
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress
@@ -216,13 +217,123 @@
 4. [x] **Read-only API slice + client + FE swap of every read view.**
 5. [x] **B4 ingest** — parser + scan + library API; scans run on the background queue (`202`, SSE
        progress). (RAR/PDF/EPUB, content-sniff, FTS deferred.)
-6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider;
-       downloads run on the background queue with SSE progress. (Metadata match/import, real sync,
-       pause/resume deferred.)
+6. [~] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
+       ✅; downloads run on the background queue with SSE progress. **Full MangaDex metadata / match /
+       auth / sync planned in PART F below.** (pause/resume deferred.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
        sync/about/taxonomy/collections APIs, SSE + task tracker + **background queue + FE SSE
        consumption**, FE Lists + Settings swapped.
-       **Remaining: tracker OAuth + outbound sync, real sync + MangaDex import, FTS5, extra containers.**
+       **Remaining: MangaDex full integration (PART F), tracker (AniList/MU/MAL) OAuth, FTS5, extra
+       containers.**
+
+---
+
+# PART F — MangaDex API (full integration)
+
+Use the MangaDex API for **metadata fetch + matching**, **chapter download** (already partial), and
+**sync** (new-chapter checks + account import). Grounded in the official docs:
+- Reference expansion — https://api.mangadex.org/docs/01-concepts/reference-expansion/
+- Manga (search / get / aggregate / covers) — https://api.mangadex.org/docs/03-manga/
+- Retrieving a chapter's images (at-home) — https://api.mangadex.org/docs/04-chapter/retrieving-chapter/
+- Limitations & rate limits — https://api.mangadex.org/docs/2-limitations/
+- Swagger — https://api.mangadex.org/docs/swagger.html
+
+**Decisions (2026-07-25):** sync = read-only new-chapter checks **plus** OAuth2 account login to
+import follows + reading status; new chapters are **flagged as available** (not auto-downloaded);
+series **auto-match after scan** (honors `provider.auto_match` + `locked_fields_json`) with manual
+override.
+
+### Key API facts to honor
+- **Auth:** metadata / feed / at-home / cover / tag are **public** (no token). Account ops (follows,
+  reading status) use an **OAuth2 personal client** (Keycloak): one-time `client_id` / `client_secret`
+  + username/password via the `password` grant at
+  `https://auth.mangadex.org/realms/mangadex/protocol/openid-connect/token`, then `refresh_token`
+  grant (access token ~15 min). Store the refresh token + client secret **encrypted at rest**.
+- **Rate limits:** global ~5 req/s/IP → HTTP 429 (respect `X-RateLimit-Limit/Remaining/Retry-After`;
+  Retry-After is a UNIX ts); persistent abuse → 403 IP ban. Endpoint caps: at-home **40/min**, chapter
+  reads 300/10min, manga writes 10/60min. Pagination: `limit` ≤ 100 (feed ≤ 500), `offset+limit ≤ 10000`.
+  A non-spoofed `User-Agent` is **required**; the `Via` header is forbidden.
+- **At-home download:** `GET /at-home/server/{chapterId}` → `{baseUrl, chapter:{hash, data[],
+  dataSaver[]}}`; page URL `{baseUrl}/{data|data-saver}/{hash}/{filename}`. `baseUrl` valid ~15 min; on
+  403 re-fetch. **Never** send auth headers to at-home nodes. **Mandatory** best-effort report per image
+  to `https://api.mangadex.network/report` `{url, success, bytes, duration, cached}`.
+- **Reference expansion:** `includes[]=cover_art&includes[]=author&includes[]=artist` (and
+  `scanlation_group` on feed) inlines related attributes into `relationships[]`.
+- **Covers:** `cover_art` relationship → `attributes.fileName`; URL
+  `https://uploads.mangadex.org/covers/{mangaId}/{fileName}` (`.512.jpg` / `.256.jpg` thumbs).
+
+### Field / enum mapping (MangaDex → lychee)
+| MangaDex | lychee |
+|---|---|
+| `title` (prefer provider language → `en` → original) | `Series.title` + primary `TitleVariant` |
+| `altTitles[]` | `TitleVariant` (language-tagged) |
+| `description{lang}` | `Series.description` |
+| `status` ongoing/completed/hiatus/cancelled | `Series.status` |
+| `year` | `Series.year` |
+| `contentRating` safe/suggestive/erotica/pornographic | `Series.content_rating` |
+| `publicationDemographic` shounen/shoujo/josei/seinen | `Series.demographic` |
+| `originalLanguage` (ja→jp, ko→kr, zh→cn) | `Series.origin_country` |
+| `tags[]` (group genre/theme/format/content) | `Tag` (reconcile with taxonomy) |
+| `author` / `artist` relationships | `SeriesCredit` (name, role) |
+| `cover_art.fileName` | `Series.cover_source` / downloaded cover |
+| `lastChapter` / aggregate count | `Series.total_chapters` |
+| `GET /statistics/manga/{id}` `rating.average` | `Series.rating` (community) |
+| `links` (al, mal, mu, ap, kt, …) | `Series.external_ids_json` (**new column**) → tracker match |
+| reading status reading/on_hold/plan_to_read/dropped/re_reading/completed | `Series.library_status` |
+| feed `scanlation_group.name`, `publishAt` | `Chapter.group_name`, `Chapter.source_uploaded_at` |
+
+### Phases
+
+**M0 — Client foundation** (shared infra)
+- [ ] Rate-limited `httpx` client: token bucket ~5 req/s global + a separate 40/min at-home bucket;
+      429 / `Retry-After` backoff; required `User-Agent`; retries + jitter on 429/5xx.
+- [ ] MangaDex@Home report client (POST `.network/report`; best-effort — never fails a download).
+- [ ] Extend the provider abstraction: a `MetadataProvider` protocol (`search`, `get_metadata`,
+      `list_new_chapters`) alongside the download methods; the MangaDex impl satisfies both.
+- [ ] Provider config: add a `data_saver` (quality) option (migration or `options_json`).
+
+**M1 — Metadata fetch + mapping**
+- [ ] `get_metadata(id)`: `GET /manga/{id}?includes[]=cover_art,author,artist` + `/statistics` +
+      `/aggregate`; normalise to a DTO.
+- [ ] Mapper DTO → `Series` / `TitleVariant` / `SeriesCredit` / `Tag`, honouring `locked_fields_json`
+      + language preference. Migration: add `Series.external_ids_json`.
+- [ ] Tag reconciliation: cache `GET /manga/tag`; map to the seeded taxonomy by group→category; create
+      any missing tags.
+- [ ] Cover: if `fetch_covers`, download `.512.jpg` into the cover/thumbnail store; else store the URL.
+- [ ] `POST /api/series/{id}/refresh` → enqueue a **`metadata`** task (background queue, SSE progress).
+
+**M2 — Matching (auto + manual)**
+- [ ] `search(title, …)`: `GET /manga?title=&limit=5&includes[]=cover_art&contentRating[]=…` → candidates.
+- [ ] Auto-match after scan (when `provider.auto_match`): best-guess by normalised title + year → set
+      `provider` / `provider_series_id` → enqueue metadata fetch (its own **`match`** task).
+- [ ] Manual: `GET /api/series/{id}/match-candidates?q=` + `POST /api/series/{id}/match` + unlink; FE
+      match-picker modal (with covers) on SeriesDetail; a "Refresh metadata" action.
+
+**M3 — Download enhancements** (pipeline already on the queue with per-page progress)
+- [ ] Feed: `contentRating[]` (all, filtered to the library's policy), `includes[]=scanlation_group`,
+      capture `publishAt`→`source_uploaded_at`, title, volume; feed `limit=500`; respect the offset cap.
+- [ ] `fetch_pages`: quality from config (`data` / `data-saver`); mandatory per-page report; 403 →
+      re-fetch at-home; 40/min bucket; no auth headers to nodes.
+
+**M4 — Account auth (OAuth2) + follows / status import**
+- [ ] OAuth2 personal-client flow (password → refresh grant); encrypted token store (Provider columns
+      or a `mangadex_account` row); auto-refresh inside the client.
+- [ ] `POST /api/providers/mangadex/connect {clientId, clientSecret, username, password}` / `DELETE`.
+- [ ] Import follows: `GET /user/follows/manga` (paged) → create/link `Series` + fetch metadata;
+      `GET /manga/status` → map reading status → `library_status`.
+
+**M5 — Sync (new-chapter checks; "flag as available")**
+- [ ] Real `POST /api/sync` → enqueue a **`sync`** task (queue + SSE). For matched series, compare
+      remote (`latestUploadedChapter` / `aggregate` / `feed`, or authed `GET /user/follows/manga/feed`
+      for a bulk check) vs local → count new; persist availability (a lightweight `remote_chapter`
+      table or the updates feed) → `SyncState.new_chapters` + a per-series badge + an updates-feed
+      "download" affordance (reuses the existing download flow, which skips already-present chapters).
+- [ ] Scheduler honouring `SyncState.auto_every_minutes` (periodic asyncio task / APScheduler).
+- [ ] FE: wire the Settings → Sync card to real results; SeriesDetail "new chapters" badge; updates markers.
+
+**Testing:** all via `httpx.MockTransport` with canned fixtures per endpoint (search / get / feed /
+at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
+(locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
 ## Handy commands
 - Backend: `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates+seeds).
