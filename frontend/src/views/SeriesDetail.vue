@@ -7,13 +7,20 @@ import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
+import { toast } from "../lib/toast";
 import { findSeries, mockVolumes } from "../mocks/library";
 import { useCollections } from "../stores/collections";
-import type { LibraryStatus } from "../types";
+import type { Collection, LibraryStatus } from "../types";
 
 const route = useRoute();
 const series = computed(() => findSeries(String(route.params.id)));
 const collections = useCollections();
+
+function toggleList(l: Collection): void {
+  const wasIn = collections.hasSeries(l.id, series.value.id);
+  collections.toggleSeries(l.id, series.value.id);
+  toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
+}
 
 const expanded = ref(false);
 const favorite = ref(true);
@@ -130,7 +137,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
                   <li class="menu-title">Add to list</li>
                   <li v-for="l in collections.lists" :key="l.id">
-                    <a @click="collections.toggleSeries(l.id, series.id)">
+                    <a @click="toggleList(l)">
                       <Check
                         class="size-4"
                         :class="collections.hasSeries(l.id, series.id) ? 'opacity-100' : 'opacity-0'"

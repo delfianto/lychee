@@ -17,6 +17,7 @@ import {
 import { type Component, computed, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import Toaster from "../components/Toaster.vue";
 import { useTheme } from "../lib/theme";
 import { randomSeriesId } from "../mocks/library";
 
@@ -154,5 +155,7 @@ const nav: NavItem[] = [
         </ul>
       </aside>
     </div>
+
+    <Toaster />
   </div>
 </template>

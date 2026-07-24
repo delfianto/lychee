@@ -3,6 +3,7 @@ import { Layers, Plus, Trash2 } from "lucide-vue-next";
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import { toast } from "../lib/toast";
 import { findSeries } from "../mocks/library";
 import { useCollections } from "../stores/collections";
 
@@ -11,8 +12,10 @@ const creating = ref(false);
 const newName = ref("");
 
 function create(): void {
-  if (!newName.value.trim()) return;
-  collections.createList(newName.value);
+  const name = newName.value.trim();
+  if (!name) return;
+  collections.createList(name);
+  toast(`Created “${name}”`);
   newName.value = "";
   creating.value = false;
 }
