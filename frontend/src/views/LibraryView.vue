@@ -141,6 +141,8 @@ function deletePreset(name: string): void {
 
 // --- Filtering -----------------------------------------------------------
 const lib = computed(() => libraryFor(props.libraryKey));
+// "reading" is a fixed-status shelf, so the shelf-status tabs are hidden there.
+const showTabs = computed(() => props.libraryKey !== "reading");
 
 function matchesTags(s: Series): boolean {
   const entries = Object.entries(filters.tags);
@@ -217,7 +219,7 @@ watch(
     </div>
 
     <!-- Shelf-status tabs -->
-    <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
+    <div v-if="showTabs" role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
       <a
         v-for="tab in statusTabs"
         :key="tab.value"

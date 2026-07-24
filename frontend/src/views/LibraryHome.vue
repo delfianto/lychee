@@ -9,7 +9,7 @@ import { continueReading, librarySeries, librarySummaries, recentlyAdded, recent
 
 const totalSeries = librarySeries.length;
 const unreadTotal = librarySeries.reduce((sum, s) => sum + s.unreadCount, 0);
-const readingCount = librarySeries.filter((s) => s.lastReadChapter !== undefined).length;
+const readingCount = librarySeries.filter((s) => s.libraryStatus === "reading").length;
 const homeUpdates = recentUpdates.slice(0, 12);
 // Storage per library — hide empty (0 GB) ones so the strip stays uncluttered.
 const storageLibs = librarySummaries.filter((l) => l.sizeGb > 0);
@@ -24,12 +24,12 @@ const storageLibs = librarySummaries.filter((l) => l.sizeGb > 0);
         <div class="stat-title">Series</div>
         <div class="stat-value text-2xl">{{ totalSeries }}</div>
       </RouterLink>
-      <RouterLink to="/manga" class="stat transition hover:bg-base-200">
+      <RouterLink to="/unread" class="stat transition hover:bg-base-200">
         <div class="stat-figure text-primary"><BookOpen class="size-7" /></div>
         <div class="stat-title">Unread chapters</div>
         <div class="stat-value text-2xl">{{ unreadTotal }}</div>
       </RouterLink>
-      <RouterLink to="/manga" class="stat transition hover:bg-base-200">
+      <RouterLink to="/reading" class="stat transition hover:bg-base-200">
         <div class="stat-figure text-primary"><BookMarked class="size-7" /></div>
         <div class="stat-title">Reading</div>
         <div class="stat-value text-2xl">{{ readingCount }}</div>

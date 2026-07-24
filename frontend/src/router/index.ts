@@ -11,6 +11,7 @@ import ReaderView from "../views/ReaderView.vue";
 import SearchView from "../views/SearchView.vue";
 import SeriesDetail from "../views/SeriesDetail.vue";
 import SettingsView from "../views/SettingsView.vue";
+import UnreadView from "../views/UnreadView.vue";
 import UpdatesView from "../views/UpdatesView.vue";
 
 export const router = createRouter({
@@ -24,9 +25,11 @@ export const router = createRouter({
         { path: "series/:id", name: "series", component: SeriesDetail },
         { path: "settings", name: "settings", component: SettingsView },
         { path: "favorites", name: "favorites", component: LibraryView, props: { libraryKey: "favorites" } },
+        { path: "reading", name: "reading", component: LibraryView, props: { libraryKey: "reading" } },
         { path: "manga", name: "manga", component: LibraryView, props: { libraryKey: "manga" } },
         { path: "comics", name: "comics", component: LibraryView, props: { libraryKey: "comics" } },
         { path: "updates", name: "updates", component: UpdatesView },
+        { path: "unread", name: "unread", component: UnreadView },
         { path: "added", name: "added", component: AddedView },
         { path: "lists", name: "lists", component: ListsView },
         { path: "lists/:id", name: "list-detail", component: ListDetailView },
