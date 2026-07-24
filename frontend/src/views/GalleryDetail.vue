@@ -56,21 +56,21 @@ function openAt(i: number): void {
 
         <dl class="flex flex-col gap-1.5 text-sm">
           <div v-if="gallery.artists.length" class="flex gap-2">
-            <dt class="w-24 shrink-0 text-base-content/50">Artists / models</dt>
+            <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Artists / Models</dt>
             <dd>{{ gallery.artists.join(", ") }}</dd>
           </div>
           <div v-if="gallery.source" class="flex gap-2">
-            <dt class="w-24 shrink-0 text-base-content/50">Series</dt>
+            <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Series</dt>
             <dd>{{ gallery.source }}</dd>
           </div>
           <div v-if="gallery.characters?.length" class="flex gap-2">
-            <dt class="w-24 shrink-0 text-base-content/50">Characters</dt>
+            <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Characters</dt>
             <dd class="flex flex-wrap gap-1">
               <span v-for="c in gallery.characters" :key="c" class="badge badge-ghost badge-sm">{{ c }}</span>
             </dd>
           </div>
           <div v-if="gallery.tags.length" class="flex gap-2">
-            <dt class="w-24 shrink-0 text-base-content/50">Tags</dt>
+            <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Tags</dt>
             <dd class="flex flex-wrap gap-1">
               <span v-for="tg in gallery.tags" :key="tg.id" class="badge badge-outline badge-sm">{{ tg.name }}</span>
             </dd>
