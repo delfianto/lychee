@@ -82,6 +82,10 @@ class RecentUpdateOut(CamelModel):
     updated_at: datetime
 
 
+class SeriesArtOut(CamelModel):
+    images: list[str]
+
+
 class DashboardStats(CamelModel):
     series: int
     unread_chapters: int
