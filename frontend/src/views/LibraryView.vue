@@ -3,13 +3,13 @@ import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-
 import { type Component, computed, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
+import { buildLibraryQuery, useSeriesList } from "../api/queries";
 import FilterPanel from "../components/FilterPanel.vue";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
-import { sortSeries } from "../lib/sort";
 import { toast } from "../lib/toast";
-import { allBrowseTags, libraryFor } from "../mocks/library";
-import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus, Series } from "../types";
+import { allBrowseTags } from "../mocks/library";
+import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
 
 const props = defineProps<{ libraryKey: string }>();
 const route = useRoute();
@@ -139,40 +139,34 @@ function deletePreset(name: string): void {
   persistPresets();
 }
 
-// --- Filtering -----------------------------------------------------------
-const lib = computed(() => libraryFor(props.libraryKey));
+// --- Data (server-filtered + cursor-paginated) ---------------------------
+const TITLES: Record<string, string> = {
+  manga: "Manga",
+  comics: "Comics",
+  favorites: "Favorites",
+  reading: "Reading",
+  gallery: "Gallery",
+};
+const title = computed(() => TITLES[props.libraryKey] ?? "Library");
 // "reading" is a fixed-status shelf, so the shelf-status tabs are hidden there.
 const showTabs = computed(() => props.libraryKey !== "reading");
 
-function matchesTags(s: Series): boolean {
-  const entries = Object.entries(filters.tags);
-  const include = entries.filter(([, v]) => v === "include").map(([k]) => k);
-  const exclude = entries.filter(([, v]) => v === "exclude").map(([k]) => k);
-  const ids = new Set(s.tags.map((t) => t.id));
-  if (exclude.some((id) => ids.has(id))) return false;
-  if (include.length === 0) return true;
-  return filters.tagMode === "and" ? include.every((id) => ids.has(id)) : include.some((id) => ids.has(id));
-}
-function readState(s: Series): string {
-  if (s.lastReadChapter === undefined) return "unread";
-  return s.unreadCount > 0 ? "in_progress" : "read";
-}
+const { items: results, loading, hasMore, reload, loadMore } = useSeriesList();
 
-const filtered = computed(() => {
-  let list = lib.value.series;
-  if (activeTab.value !== "all") list = list.filter((s) => s.libraryStatus === activeTab.value);
-  const q = filters.query.trim().toLowerCase();
-  if (q)
-    list = list.filter(
-      (s) => s.title.toLowerCase().includes(q) || s.authors.some((a) => a.toLowerCase().includes(q)),
-    );
-  if (Object.keys(filters.tags).length) list = list.filter(matchesTags);
-  if (filters.ratings.size) list = list.filter((s) => filters.ratings.has(s.contentRating));
-  if (filters.demographics.size) list = list.filter((s) => filters.demographics.has(s.demographic));
-  if (filters.statuses.size) list = list.filter((s) => filters.statuses.has(s.status));
-  if (filters.readStates.size) list = list.filter((s) => filters.readStates.has(readState(s)));
-  return sortSeries(list, sort.value);
-});
+const queryParams = computed(() =>
+  buildLibraryQuery(props.libraryKey, { activeTab: activeTab.value, filters, sort: sort.value }),
+);
+
+// Refetch (debounced) whenever the library, tab, filters, or sort change.
+let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  queryParams,
+  (q) => {
+    if (reloadTimer) clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => void reload(q), 200);
+  },
+  { immediate: true },
+);
 
 // Reset tab + filters when switching libraries.
 watch(
@@ -188,8 +182,8 @@ watch(
   <div class="flex flex-col gap-4 p-4 sm:p-6">
     <!-- Title -->
     <div>
-      <h1 class="text-3xl font-bold">{{ lib.title }}</h1>
-      <p class="text-sm text-base-content/60">{{ filtered.length }} series</p>
+      <h1 class="text-3xl font-bold">{{ title }}</h1>
+      <p class="text-sm text-base-content/60">{{ results.length }} series</p>
     </div>
 
     <!-- Toolbar: search + filters · density + sort -->
@@ -280,6 +274,13 @@ watch(
     </div>
 
     <!-- Results -->
-    <SeriesCollection :series="filtered" :density="density" empty-text="No series match these filters." />
+    <SeriesCollection
+      :series="results"
+      :density="density"
+      :has-more="hasMore"
+      :loading="loading"
+      empty-text="No series match these filters."
+      @load-more="loadMore"
+    />
   </div>
 </template>
