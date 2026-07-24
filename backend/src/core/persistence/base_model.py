@@ -1,4 +1,4 @@
-"""Declarative base and the shared model mixin (id + timestamps)."""
+"""Declarative base and the shared model mixins (timestamps, id)."""
 
 from datetime import UTC, datetime
 
@@ -21,15 +21,24 @@ class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
 
 
-class BaseModel(Base):
-    """Abstract base: short id + created/updated timestamps."""
+class TimestampMixin:
+    """`created_at` / `updated_at` columns for any mapped class.
 
-    __abstract__ = True
+    Used directly by entities with a natural (slug) primary key, and folded into
+    :class:`BaseModel` for the common nanoid-id case.
+    """
 
-    id: Mapped[str] = mapped_column(String(12), primary_key=True, default=gen_id)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
+
+
+class BaseModel(Base, TimestampMixin):
+    """Abstract base: short nanoid id + created/updated timestamps."""
+
+    __abstract__ = True
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True, default=gen_id)

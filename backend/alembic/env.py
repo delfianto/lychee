@@ -4,17 +4,15 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# `src.models` import registers every domain model so autogenerate sees the full schema.
+import src.models  # noqa: E402, F401
 from src.core.config import settings  # noqa: E402
 from src.core.persistence.base_model import Base  # noqa: E402
-
-# Import domain models here so `alembic revision --autogenerate` sees them, e.g.:
-#   from src.library.models import *  # noqa
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
