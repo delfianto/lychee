@@ -244,3 +244,181 @@ def get_series(session: Session, series_id: str) -> SeriesRow | None:
     if row is None:
         return None
     return SeriesRow(series=row[0], chapter_count=row[1], unread_count=row[2], last_read=row[3])
+
+
+def get_series_rows(session: Session, series_ids: list[str]) -> dict[str, SeriesRow]:
+    """Fetch several series with derived counts, keyed by id (for feeds/dashboard)."""
+    if not series_ids:
+        return {}
+    agg = _aggregates()
+    stmt = (
+        select(
+            Series,
+            agg.chapter_count.label("chapter_count"),
+            agg.unread_count.label("unread_count"),
+            agg.last_read.label("last_read"),
+        )
+        .where(Series.id.in_(series_ids))
+        .options(selectinload(Series.tags), selectinload(Series.credits))
+    )
+    return {
+        r[0].id: SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        for r in session.execute(stmt).all()
+    }
+
+
+# --- chapters -------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class ChapterRow:
+    """A chapter plus whether it's been read."""
+
+    chapter: Chapter
+    read: bool
+
+
+def _read_exists() -> ColumnElement[bool]:
+    return exists().where(
+        ReadingProgress.chapter_id == Chapter.id, ReadingProgress.completed.is_(True)
+    )
+
+
+def list_chapters(
+    session: Session, series_id: str, *, language: str | None = None, descending: bool = True
+) -> list[ChapterRow]:
+    """All chapters of a series (optionally one language), ordered by number."""
+    stmt = select(Chapter, _read_exists().label("read")).where(Chapter.series_id == series_id)
+    if language:
+        stmt = stmt.where(Chapter.language == language)
+    stmt = stmt.order_by(
+        Chapter.number_sort.desc() if descending else Chapter.number_sort.asc(),
+        Chapter.id.desc() if descending else Chapter.id.asc(),
+    )
+    return [ChapterRow(chapter=r[0], read=bool(r[1])) for r in session.execute(stmt).all()]
+
+
+def get_chapter(session: Session, chapter_id: str) -> ChapterRow | None:
+    row = session.execute(
+        select(Chapter, _read_exists().label("read")).where(Chapter.id == chapter_id)
+    ).first()
+    return ChapterRow(chapter=row[0], read=bool(row[1])) if row is not None else None
+
+
+# --- update feeds ---------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class UpdateRow:
+    """A chapter update (chapter + effective timestamp) for the update feeds."""
+
+    chapter: Chapter
+    updated_at: datetime
+
+
+def recent_updates(
+    session: Session,
+    *,
+    unread_only: bool = False,
+    cursor: str | None = None,
+    limit: int = 24,
+) -> tuple[list[UpdateRow], str | None]:
+    """Chapter updates across chaptered series, newest first, keyset-paginated."""
+    updated = func.coalesce(Chapter.source_uploaded_at, Chapter.created_at)
+    stmt = (
+        select(Chapter, updated.label("updated"))
+        .join(Series, Series.id == Chapter.series_id)
+        .where(Series.kind != "gallery")
+    )
+    if unread_only:
+        stmt = stmt.where(~_read_exists())
+    if cursor is not None:
+        data = decode_cursor(cursor)
+        value = datetime.fromisoformat(data["v"])
+        last_id: str = data["id"]
+        stmt = stmt.where(or_(updated < value, and_(updated == value, Chapter.id < last_id)))
+    stmt = stmt.order_by(updated.desc(), Chapter.id.desc()).limit(limit + 1)
+
+    rows = [UpdateRow(chapter=r[0], updated_at=r[1]) for r in session.execute(stmt).all()]
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = encode_cursor({"v": last.updated_at.isoformat(), "id": last.chapter.id})
+    return rows, next_cursor
+
+
+# --- dashboard ------------------------------------------------------------------
+
+
+def dashboard_counts(session: Session) -> tuple[int, int, int]:
+    """(total series, total unread chapters, series currently reading) — chaptered only."""
+    series_count = (
+        session.scalar(select(func.count(Series.id)).where(Series.kind != "gallery")) or 0
+    )
+    unread_chapters = (
+        session.scalar(
+            select(func.count(Chapter.id))
+            .join(Series, Series.id == Chapter.series_id)
+            .where(Series.kind != "gallery", ~_read_exists())
+        )
+        or 0
+    )
+    reading = (
+        session.scalar(select(func.count(Series.id)).where(Series.library_status == "reading"))
+        or 0
+    )
+    return series_count, unread_chapters, reading
+
+
+def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
+    """Series with progress and something still unread, most-recently-read first."""
+    agg = _aggregates()
+    last_progress = (
+        select(func.max(ReadingProgress.updated_at))
+        .where(ReadingProgress.series_id == Series.id)
+        .correlate(Series)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(
+            Series,
+            agg.chapter_count.label("chapter_count"),
+            agg.unread_count.label("unread_count"),
+            agg.last_read.label("last_read"),
+        )
+        .where(exists().where(ReadingProgress.series_id == Series.id), agg.unread_count > 0)
+        .options(selectinload(Series.tags), selectinload(Series.credits))
+        .order_by(last_progress.desc(), Series.id.desc())
+        .limit(limit)
+    )
+    return [
+        SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        for r in session.execute(stmt).all()
+    ]
+
+
+def recently_added(session: Session, *, limit: int = 12) -> list[SeriesRow]:
+    """Newest series first (all kinds), for the dashboard rail."""
+    agg = _aggregates()
+    stmt = (
+        select(
+            Series,
+            agg.chapter_count.label("chapter_count"),
+            agg.unread_count.label("unread_count"),
+            agg.last_read.label("last_read"),
+        )
+        .options(selectinload(Series.tags), selectinload(Series.credits))
+        .order_by(Series.created_at.desc(), Series.id.desc())
+        .limit(limit)
+    )
+    return [
+        SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        for r in session.execute(stmt).all()
+    ]
+
+
+def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRow]:
+    """Title search (simple LIKE for now; FTS5 lands in B6)."""
+    rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
+    return rows

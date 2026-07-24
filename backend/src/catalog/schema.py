@@ -56,6 +56,20 @@ class ChapterOut(CamelModel):
     comments: int
 
 
+class ChapterDetailOut(CamelModel):
+    id: str
+    series_id: str
+    volume: int | None
+    number: str
+    title: str | None = None
+    group: str | None = None
+    language: str
+    page_count: int
+    comments: int
+    read: bool
+    uploaded_at: datetime | None = None
+
+
 class VolumeGroupOut(CamelModel):
     volume: int | None
     chapters: list[ChapterOut]
