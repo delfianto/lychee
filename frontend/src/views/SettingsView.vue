@@ -10,6 +10,7 @@ import {
   Languages,
   Library,
   LayoutGrid,
+  Link2,
   Maximize2,
   Palette,
   Plus,
@@ -26,7 +27,7 @@ import { COLOR_SCHEMES, useTheme } from "../lib/theme";
 import { browseTagGroups } from "../mocks/library";
 import type { ContentRating } from "../types";
 
-const { theme, setTheme } = useTheme();
+const { mode, scheme, setMode, setScheme } = useTheme();
 
 // The card-form settings collapse onto one "General" page; the table-heavy
 // tag/rating management gets its own page, and About stays separate.
@@ -72,15 +73,16 @@ const trackers = reactive([
   { name: "AniList", connected: true, syncOnRead: true },
   { name: "MyAnimeList", connected: false, syncOnRead: false },
   { name: "MangaUpdates", connected: false, syncOnRead: false },
+  { name: "NovelUpdates", connected: false, syncOnRead: false },
 ]);
 
 // --- Reader defaults (shared with the reader) ---
 const reader = useReaderSettings();
-const readerGroups: { key: keyof ReaderSettings; label: string; icon: Component; opts: { v: string; l: string }[] }[] = [
-  { key: "mode", label: "Reading mode", icon: BookOpen, opts: [{ v: "single", l: "Single" }, { v: "double", l: "Double" }, { v: "longstrip", l: "Long strip" }] },
-  { key: "direction", label: "Direction", icon: ArrowLeftRight, opts: [{ v: "ltr", l: "L → R" }, { v: "rtl", l: "R → L" }] },
-  { key: "fit", label: "Fit", icon: Maximize2, opts: [{ v: "width", l: "Width" }, { v: "height", l: "Height" }, { v: "both", l: "Both" }, { v: "original", l: "Original" }] },
-  { key: "background", label: "Background", icon: Palette, opts: [{ v: "dark", l: "Dark" }, { v: "black", l: "Black" }, { v: "sepia", l: "Sepia" }] },
+const readerGroups: { key: keyof ReaderSettings; label: string; desc: string; icon: Component; opts: { v: string; l: string }[] }[] = [
+  { key: "mode", label: "Reading mode", desc: "How pages are laid out", icon: BookOpen, opts: [{ v: "single", l: "Single" }, { v: "double", l: "Double" }, { v: "longstrip", l: "Long strip" }] },
+  { key: "direction", label: "Direction", desc: "Which way pages turn", icon: ArrowLeftRight, opts: [{ v: "ltr", l: "L → R" }, { v: "rtl", l: "R → L" }] },
+  { key: "fit", label: "Fit", desc: "How pages scale to fit", icon: Maximize2, opts: [{ v: "width", l: "Width" }, { v: "height", l: "Height" }, { v: "both", l: "Both" }, { v: "original", l: "Original" }] },
+  { key: "background", label: "Background", desc: "Reader page backdrop", icon: Palette, opts: [{ v: "dark", l: "Dark" }, { v: "black", l: "Black" }, { v: "sepia", l: "Sepia" }] },
 ];
 function readerValue(k: keyof ReaderSettings): string {
   return reader[k];
@@ -151,10 +153,10 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
           </section>
 
           <!-- Providers + Trackers side by side -->
-          <div class="grid items-start gap-6 lg:grid-cols-2">
+          <div class="grid gap-6 lg:grid-cols-2">
             <section class="flex flex-col gap-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Metadata providers</h3>
-              <div class="card bg-base-100">
+              <div class="card grow bg-base-100">
                 <div class="card-body gap-4 p-4">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex items-start gap-3">
@@ -164,14 +166,14 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                         <div class="text-xs text-base-content/50">Primary metadata source &amp; optional chapter downloader</div>
                       </div>
                     </div>
-                    <input v-model="provider.enabled" type="checkbox" class="toggle toggle-primary" />
+                    <input v-model="provider.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
                   </div>
                   <label class="flex items-center justify-between gap-4">
                     <div class="flex items-start gap-3">
                       <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
                       <div>
                         <div class="text-sm font-medium">Preferred language</div>
-                        <div class="text-xs text-base-content/50">Fetch metadata &amp; chapters in this language when available</div>
+                        <div class="text-xs text-base-content/50">Fetch metadata &amp; chapters in this language</div>
                       </div>
                     </div>
                     <select v-model="provider.language" class="select select-bordered select-sm w-28">
@@ -204,13 +206,16 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
 
             <section class="flex flex-col gap-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Trackers</h3>
-              <div class="card bg-base-100">
+              <div class="card grow bg-base-100">
                 <div class="card-body gap-4 p-4">
-                  <div v-for="t in trackers" :key="t.name" class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div class="text-sm font-medium">{{ t.name }}</div>
-                      <div class="text-xs" :class="t.connected ? 'text-success' : 'text-base-content/50'">
-                        {{ t.connected ? "Connected" : "Not connected" }}
+                  <div v-for="t in trackers" :key="t.name" class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Link2 class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">{{ t.name }}</div>
+                        <div class="text-xs" :class="t.connected ? 'text-success' : 'text-base-content/50'">
+                          {{ t.connected ? "Connected" : "Not connected" }}
+                        </div>
                       </div>
                     </div>
                     <div class="flex items-center gap-3">
@@ -233,10 +238,10 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
           </div>
 
           <!-- Appearance + Reader side by side -->
-          <div class="grid items-start gap-6 lg:grid-cols-2">
+          <div class="grid gap-6 lg:grid-cols-2">
             <section class="flex flex-col gap-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Appearance</h3>
-              <div class="card bg-base-100">
+              <div class="card grow bg-base-100">
                 <div class="card-body gap-4 p-4">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex items-start gap-3">
@@ -247,8 +252,8 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                       </div>
                     </div>
                     <div class="join">
-                      <button class="btn btn-sm join-item" :class="theme === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="setTheme('dark')">Dark</button>
-                      <button class="btn btn-sm join-item" :class="theme === 'light' ? 'btn-primary' : 'btn-ghost'" @click="setTheme('light')">Light</button>
+                      <button class="btn btn-sm join-item" :class="mode === 'dark' ? 'btn-primary' : 'btn-ghost'" @click="setMode('dark')">Dark</button>
+                      <button class="btn btn-sm join-item" :class="mode === 'light' ? 'btn-primary' : 'btn-ghost'" @click="setMode('light')">Light</button>
                     </div>
                   </div>
                   <label class="flex items-center justify-between gap-4">
@@ -289,12 +294,15 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
 
             <section class="flex flex-col gap-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader defaults</h3>
-              <div class="card bg-base-100">
+              <div class="card grow bg-base-100">
                 <div class="card-body gap-4 p-4">
-                  <div v-for="grp in readerGroups" :key="grp.key" class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex items-center gap-3">
-                      <component :is="grp.icon" class="size-5 shrink-0 text-primary" />
-                      <span class="text-sm font-medium">{{ grp.label }}</span>
+                  <div v-for="grp in readerGroups" :key="grp.key" class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <component :is="grp.icon" class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">{{ grp.label }}</div>
+                        <div class="text-xs text-base-content/50">{{ grp.desc }}</div>
+                      </div>
                     </div>
                     <div class="join">
                       <button
@@ -313,22 +321,23 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
             </section>
           </div>
 
-          <!-- Color scheme -->
+          <!-- Color scheme (accent palette — independent of the light/dark mode above) -->
           <section class="flex flex-col gap-3">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Color scheme</h3>
             <div class="card bg-base-100">
-              <div class="card-body p-4">
+              <div class="card-body gap-3 p-4">
+                <p class="text-xs text-base-content/50">Accent palette. Works with both the light and dark mode.</p>
                 <div class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
                   <button
-                    v-for="scheme in COLOR_SCHEMES"
-                    :key="scheme"
+                    v-for="s in COLOR_SCHEMES"
+                    :key="s"
                     class="flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition"
-                    :class="theme === scheme ? 'bg-base-200 ring-2 ring-primary' : 'hover:bg-base-200'"
-                    :aria-label="`Use ${scheme} theme`"
-                    @click="setTheme(scheme)"
+                    :class="scheme === s ? 'bg-base-200 ring-2 ring-primary' : 'hover:bg-base-200'"
+                    :aria-label="`Use ${s} color scheme`"
+                    @click="setScheme(s)"
                   >
                     <div
-                      :data-theme="scheme"
+                      :data-scheme="s"
                       class="grid size-11 grid-cols-2 grid-rows-2 overflow-hidden rounded-md border border-base-300"
                     >
                       <div class="bg-base-100"></div>
@@ -336,7 +345,7 @@ const about = { version: "0.1.0-dev", storageUsed: "12.4 GB", pages: "48,120" };
                       <div class="bg-secondary"></div>
                       <div class="bg-accent"></div>
                     </div>
-                    <span class="text-xs capitalize text-base-content/70">{{ scheme }}</span>
+                    <span class="text-xs capitalize text-base-content/70">{{ s }}</span>
                   </button>
                 </div>
               </div>

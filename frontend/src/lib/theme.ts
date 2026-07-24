@@ -1,52 +1,50 @@
-// App theme as a shared module singleton: persisted to localStorage and mirrored
-// onto <html data-theme>. Supports any of the enabled DaisyUI color schemes.
+// Theme = mode (light/dark base surfaces) × color scheme (accent palette),
+// kept as two independent axes like TBM. Both persist and are mirrored onto
+// <html data-theme> (mode) and <html data-scheme> (accent, see style.css).
 
 import { ref } from "vue";
 
-// Curated set of popular DaisyUI themes (must match the `themes:` list in style.css).
-export const COLOR_SCHEMES = [
-  "dark",
-  "light",
-  "cupcake",
-  "synthwave",
-  "retro",
-  "cyberpunk",
-  "valentine",
-  "dracula",
-  "aqua",
-  "forest",
-  "night",
-  "coffee",
-  "nord",
-  "business",
-  "luxury",
-  "dim",
-] as const;
-export type Theme = (typeof COLOR_SCHEMES)[number];
+export type Mode = "light" | "dark";
 
-const KEY = "lychee.theme";
+// Accent schemes — each works in both light and dark. "default" = DaisyUI's own.
+export const COLOR_SCHEMES = ["default", "emerald", "teal", "sky", "violet", "rose", "amber"] as const;
+export type Scheme = (typeof COLOR_SCHEMES)[number];
 
-function isTheme(v: string | null): v is Theme {
-  return v !== null && (COLOR_SCHEMES as readonly string[]).includes(v);
+const MODE_KEY = "lychee.mode";
+const SCHEME_KEY = "lychee.scheme";
+
+function loadMode(): Mode {
+  const s = localStorage.getItem(MODE_KEY);
+  return s === "light" || s === "dark" ? s : "dark";
+}
+function loadScheme(): Scheme {
+  const s = localStorage.getItem(SCHEME_KEY) ?? "";
+  return (COLOR_SCHEMES as readonly string[]).includes(s) ? (s as Scheme) : "default";
 }
 
-const stored = localStorage.getItem(KEY);
-const theme = ref<Theme>(isTheme(stored) ? stored : "dark");
+const mode = ref<Mode>(loadMode());
+const scheme = ref<Scheme>(loadScheme());
 
-function apply(t: Theme): void {
-  document.documentElement.setAttribute("data-theme", t);
+function apply(): void {
+  const el = document.documentElement;
+  el.setAttribute("data-theme", mode.value);
+  el.setAttribute("data-scheme", scheme.value);
 }
-apply(theme.value); // set on first import, before the shell mounts
+apply(); // set on first import, before the shell mounts
 
 export function useTheme() {
-  function setTheme(t: Theme): void {
-    theme.value = t;
-    localStorage.setItem(KEY, t);
-    apply(t);
+  function setMode(m: Mode): void {
+    mode.value = m;
+    localStorage.setItem(MODE_KEY, m);
+    apply();
   }
-  // Navbar quick light/dark switch (colored schemes fall back to light).
-  function toggle(): void {
-    setTheme(theme.value === "light" ? "dark" : "light");
+  function toggleMode(): void {
+    setMode(mode.value === "dark" ? "light" : "dark");
   }
-  return { theme, setTheme, toggle };
+  function setScheme(s: Scheme): void {
+    scheme.value = s;
+    localStorage.setItem(SCHEME_KEY, s);
+    apply();
+  }
+  return { mode, scheme, setMode, toggleMode, setScheme };
 }

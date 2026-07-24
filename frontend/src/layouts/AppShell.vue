@@ -23,7 +23,7 @@ import { randomSeriesId } from "../mocks/library";
 
 const router = useRouter();
 const route = useRoute();
-const { theme, toggle } = useTheme();
+const { mode, toggleMode } = useTheme();
 
 const isSettings = computed(() => route.path === "/settings");
 const mobileOpen = ref(false); // mobile: off-canvas nav drawer
@@ -102,10 +102,10 @@ const nav: NavItem[] = [
           </button>
           <button
             class="btn btn-circle btn-ghost btn-sm"
-            :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-            @click="toggle"
+            :aria-label="mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+            @click="toggleMode"
           >
-            <Sun v-if="theme === 'dark'" class="size-5" />
+            <Sun v-if="mode === 'dark'" class="size-5" />
             <Moon v-else class="size-5" />
           </button>
           <RouterLink
