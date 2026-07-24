@@ -8,6 +8,7 @@ from src.core.persistence.database import DbSession
 from src.downloads import service
 from src.downloads.deps import StorageRootDep
 from src.downloads.schema import DownloadCreate, DownloadTaskOut
+from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -17,11 +18,9 @@ def list_downloads(db: DbSession) -> list[DownloadTaskOut]:
     return service.list_downloads(db)
 
 
-@router.post("")
-def create_downloads(
-    db: DbSession, storage: StorageRootDep, data: DownloadCreate
-) -> list[DownloadTaskOut]:
-    """Download a series' new chapters from its linked provider."""
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
+def create_downloads(db: DbSession, storage: StorageRootDep, data: DownloadCreate) -> TaskOut:
+    """Download a series' new chapters in the background; returns the task to follow via SSE."""
     return service.create_downloads(db, data.series_id, storage)
 
 
@@ -31,10 +30,8 @@ def clear_completed(db: DbSession) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{task_id}/retry")
-def retry_download(
-    db: DbSession, storage: StorageRootDep, task_id: str
-) -> list[DownloadTaskOut]:
+@router.post("/{task_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+def retry_download(db: DbSession, storage: StorageRootDep, task_id: str) -> TaskOut:
     return service.retry_download(db, task_id, storage)
 
 
