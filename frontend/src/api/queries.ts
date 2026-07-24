@@ -174,6 +174,17 @@ export async function fetchChapterDetail(id: string): Promise<ChapterDetail> {
   };
 }
 
+export async function putProgress(
+  chapterId: string,
+  page: number,
+  completed?: boolean,
+): Promise<void> {
+  await api.PUT("/api/chapters/{chapter_id}/progress", {
+    params: { path: { chapter_id: chapterId } },
+    body: { page, completed },
+  });
+}
+
 export async function fetchRelated(id: string): Promise<Series[]> {
   const { data, error } = await api.GET("/api/series/{series_id}/related", {
     params: { path: { series_id: id } },
