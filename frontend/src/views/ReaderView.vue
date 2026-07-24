@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { fetchChapterDetail, fetchChapters, fetchSeries } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import {
   type ReaderBackground,
@@ -11,23 +12,50 @@ import {
   type ReaderMode,
   useReaderSettings,
 } from "../lib/readerSettings";
-import { findSeries } from "../mocks/library";
 
 const route = useRoute();
 const router = useRouter();
 const settings = useReaderSettings();
 
-// Mock chapter pages (seeded by the route id so chapters differ).
-const pages = Array.from(
-  { length: 20 },
-  (_, i) => `https://picsum.photos/seed/pg-${String(route.params.id)}-${i + 1}/800/1200`,
-);
-const series = findSeries(String(route.params.id));
+const chapterId = computed(() => String(route.params.id));
+const seriesId = ref("");
+const seriesTitle = ref("");
+const chapterLabel = ref("");
+const pages = ref<string[]>([]);
+const chapterOptions = ref<{ id: string; label: string }[]>([]);
+const orderedIds = ref<string[]>([]);
 
 const currentPage = ref(1);
 const controls = ref(true);
 const settingsOpen = ref(false);
 const showEnd = ref(false);
+
+async function load(id: string): Promise<void> {
+  const detail = await fetchChapterDetail(id);
+  seriesId.value = detail.seriesId;
+  chapterLabel.value = detail.title ? `Ch. ${detail.number} · ${detail.title}` : `Ch. ${detail.number}`;
+  pages.value = Array.from(
+    { length: detail.pageCount },
+    (_, i) => `/api/chapters/${id}/pages/${i + 1}`,
+  );
+  currentPage.value = 1;
+  showEnd.value = false;
+  const [s, vols] = await Promise.all([fetchSeries(detail.seriesId), fetchChapters(detail.seriesId)]);
+  seriesTitle.value = s.title;
+  const ascending = vols.flatMap((v) => v.chapters).reverse(); // reading order
+  orderedIds.value = ascending.map((c) => c.id);
+  chapterOptions.value = ascending.map((c) => ({ id: c.id, label: `Ch. ${c.number}` }));
+}
+watch(chapterId, (id) => void load(id), { immediate: true });
+
+const nextChapterId = computed(() => {
+  const idx = orderedIds.value.indexOf(chapterId.value);
+  return idx >= 0 ? orderedIds.value[idx + 1] : undefined;
+});
+function goToChapter(id: string | undefined): void {
+  if (id) void router.push(`/read/${id}`);
+  else void router.push(seriesId.value ? `/series/${seriesId.value}` : "/");
+}
 
 const modes: { value: ReaderMode; label: string }[] = [
   { value: "single", label: "Single" },
@@ -72,7 +100,7 @@ const fitClass = computed(() => {
 });
 
 function next(): void {
-  if (currentPage.value >= pages.length) {
+  if (currentPage.value >= pages.value.length) {
     showEnd.value = true;
     return;
   }
@@ -84,7 +112,7 @@ function prev(): void {
 }
 function nextChapter(): void {
   showEnd.value = false;
-  currentPage.value = 1;
+  goToChapter(nextChapterId.value);
 }
 
 // Keyboard: ←/→ turn pages (direction-aware), Esc closes settings or exits.
@@ -112,7 +140,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 <template>
   <div class="relative h-dvh w-full overflow-hidden" :class="bgClass">
     <!-- Reading area -->
-    <div v-if="settings.mode === 'longstrip'" class="h-full overflow-y-auto" @click="controls = !controls">
+    <div v-if="!pages.length" class="flex h-full items-center justify-center">
+      <span class="loading loading-spinner loading-lg text-base-content/50" />
+    </div>
+    <div
+      v-else-if="settings.mode === 'longstrip'"
+      class="h-full overflow-y-auto"
+      @click="controls = !controls"
+    >
       <div class="mx-auto flex max-w-3xl flex-col items-center">
         <img v-for="(p, i) in pages" :key="i" :src="p" :alt="`Page ${i + 1}`" class="w-full" />
       </div>
@@ -153,15 +188,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           <ChevronLeft class="size-5" />
         </button>
         <div class="flex flex-col leading-tight">
-          <span class="text-sm font-medium">{{ series.title }}</span>
-          <span class="text-xs text-base-content/60">Ch. 45 · Chapter title</span>
+          <span class="text-sm font-medium">{{ seriesTitle }}</span>
+          <span class="text-xs text-base-content/60">{{ chapterLabel }}</span>
         </div>
       </div>
       <div class="navbar-end gap-1">
-        <select class="select select-sm w-36" aria-label="Chapter">
-          <option>Ch. 45</option>
-          <option>Ch. 46</option>
-          <option>Ch. 47</option>
+        <select
+          class="select select-sm w-36"
+          aria-label="Chapter"
+          :value="chapterId"
+          @change="goToChapter(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="c in chapterOptions" :key="c.id" :value="c.id">{{ c.label }}</option>
         </select>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Settings" @click="settingsOpen = !settingsOpen">
           <Settings class="size-5" />
@@ -227,10 +265,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       <div class="card w-80 bg-base-100 shadow-xl">
         <div class="card-body items-center gap-3 text-center">
           <h3 class="card-title">End of chapter</h3>
-          <p class="text-sm text-base-content/70">Next: Ch. 46</p>
+          <p class="text-sm text-base-content/70">
+            {{ nextChapterId ? "Ready for the next chapter?" : "That was the last chapter." }}
+          </p>
           <div class="flex gap-2">
-            <button class="btn btn-primary btn-sm" @click="nextChapter">Next chapter</button>
-            <button class="btn btn-ghost btn-sm" @click="router.back()">Back to series</button>
+            <button v-if="nextChapterId" class="btn btn-primary btn-sm" @click="nextChapter">
+              Next chapter
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="goToChapter(undefined)">Back to series</button>
           </div>
         </div>
       </div>

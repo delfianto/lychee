@@ -1,34 +1,57 @@
 <script setup lang="ts">
 import { Bookmark, BookOpen, Check, Heart, ListPlus, RefreshCw, Star } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import { fetchArt, fetchChapters, fetchRelated, fetchSeries } from "../api/queries";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
 import { toast } from "../lib/toast";
-import { findSeries, mockVolumes } from "../mocks/library";
 import { useCollections } from "../stores/collections";
-import type { Collection, LibraryStatus } from "../types";
+import type { Collection, LibraryStatus, Series, VolumeGroup } from "../types";
 
 const route = useRoute();
-const series = computed(() => findSeries(String(route.params.id)));
 const collections = useCollections();
 
-function toggleList(l: Collection): void {
-  const wasIn = collections.hasSeries(l.id, series.value.id);
-  collections.toggleSeries(l.id, series.value.id);
-  toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
-}
+const series = ref<Series | null>(null);
+const volumes = ref<VolumeGroup[]>([]);
+const related = ref<Series[]>([]);
+const artCovers = ref<string[]>([]);
 
 const expanded = ref(false);
-const favorite = ref(true);
-const libraryStatus = ref<LibraryStatus>("reading");
-
+const favorite = ref(false);
+const libraryStatus = ref<LibraryStatus>("none");
 // Your personal rating (1–10, integer). The community score is series.rating (decimal).
 const userRating = ref<number | null>(null);
 const hoverRating = ref(0);
+
+async function load(id: string): Promise<void> {
+  series.value = null;
+  const [s, vols, rel, art] = await Promise.all([
+    fetchSeries(id),
+    fetchChapters(id),
+    fetchRelated(id),
+    fetchArt(id),
+  ]);
+  series.value = s;
+  volumes.value = vols;
+  related.value = rel;
+  artCovers.value = art;
+  favorite.value = s.favorite ?? false;
+  libraryStatus.value = s.libraryStatus ?? "none";
+}
+watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
+
+function toggleList(l: Collection): void {
+  if (!series.value) return;
+  const sid = series.value.id;
+  const wasIn = collections.hasSeries(l.id, sid);
+  collections.toggleSeries(l.id, sid);
+  toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
+}
+
 function setRating(n: number): void {
   userRating.value = n;
 }
@@ -50,6 +73,10 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 <template>
   <div class="flex flex-col gap-6">
+    <div v-if="!series" class="flex justify-center py-20">
+      <span class="loading loading-spinner loading-lg text-primary" />
+    </div>
+    <template v-else>
     <!-- HERO -->
     <section class="relative">
       <!-- Blurred backdrop, clipped here so it can't bleed but the dropdowns above still overflow. -->
@@ -215,8 +242,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
         <SeriesInfoPanel :series="series" />
       </aside>
       <div class="min-w-0 grow">
-        <ChapterList :volumes="mockVolumes" />
+        <ChapterList :volumes="volumes" :related="related" :art-covers="artCovers" />
       </div>
     </div>
+    </template>
   </div>
 </template>
