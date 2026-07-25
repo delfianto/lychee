@@ -1,4 +1,4 @@
-"""AVIF thumbnail store — content-addressed and sharded (ADR 09 §3/§4 → AVIF).
+"""AVIF thumbnail store — content-addressed and sharded.
 
 Layout: ``<root>/<id[:2]>/<id>.<variant>.avif``. Two sizes keyed by the longest
 edge — ``cover`` (~320px, grids) and ``detail`` (~640px, series/gallery hero).

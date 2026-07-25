@@ -1,4 +1,4 @@
-"""Content-aware AVIF encoding (ADR 19, amending ADR 09).
+"""Content-aware AVIF encoding.
 
 lychee serves images as AVIF. The right chroma handling depends on the content —
 line art, color art with text, and photographs each compress best differently:

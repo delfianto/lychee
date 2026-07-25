@@ -1,4 +1,4 @@
-"""Library scan pipeline (ADR 07) — walk → resolve → diff → reconcile.
+"""Library scan pipeline — walk → resolve → diff → reconcile.
 
 v1 does a periodic/manual full scan of a library root. First-level directories are
 **Series**; archives and image-only folders beneath are **Books**; a loose archive
@@ -8,7 +8,7 @@ book + its full page range). Move/rename safety comes from soft-delete + a
 request, so no thumbnail job is enqueued here.
 
 Deferred (follow-ups): filesystem watcher, content-type sniffing (extension only
-for now), embedded ComicInfo/OPF metadata, FTS sync (B6), RAR/7z/PDF/EPUB
+for now), embedded ComicInfo/OPF metadata, FTS sync, RAR/7z/PDF/EPUB
 containers, and multi-chapter archives.
 """
 
@@ -92,7 +92,7 @@ def _candidate(item: Path, root: Path, series_dir: Path, kind: str) -> _Candidat
 
 
 def _resolve_books(series_dir: Path, root: Path) -> list[_Candidate]:
-    """Walk a series folder (ADR 05 hybrid rule): image-only dir → book; archive →
+    """Walk a series folder (hybrid rule): image-only dir → book; archive →
     book; a folder holding archives/sub-folders is a grouping level (recurse)."""
     found: list[_Candidate] = []
 
@@ -165,8 +165,8 @@ def scan_library(
     for path_rel, book in existing.items():
         if path_rel not in seen:
             book.deleted_at = utc_now()
-            # Drop the derived chapters (progress on them cascades away). Proper
-            # progress migration on restore is a follow-up (ADR 07 tryRestore).
+            # Drop the derived chapters (progress on them cascades away); a later
+            # restore of a moved book does not migrate that reading progress.
             _ = session.execute(delete(Chapter).where(Chapter.book_id == book.id))
             summary.books_removed += 1
 
@@ -185,8 +185,8 @@ def _ingest_series(
     summary: ScanSummary,
 ) -> None:
     kind = _series_kind(library)
-    # Match on the folder-derived path (stable identity), not the title — metadata
-    # (PART F/M1) may rename the title, and rescans must not then create a duplicate.
+    # Match on the folder-derived path (stable identity), not the title — provider
+    # metadata may rename the title, and rescans must not then create a duplicate.
     series = session.scalar(
         select(Series).where(Series.library_id == library.id, Series.path_rel == title)
     )
@@ -292,7 +292,7 @@ def _sync_chapter(
 
 def _order_chapters(chapters: list[Chapter]) -> None:
     """Assign a number_sort to chapters that lacked one (base-less specials, volume
-    -only books), placing them after their sorted neighbours (ADR 06 §6 / ADR 07)."""
+    -only books), placing them after their sorted neighbours."""
     ordered = sorted(chapters, key=lambda c: (c.number_sort is None, c.number_sort or 0.0))
     running = 0.0
     for chapter in ordered:

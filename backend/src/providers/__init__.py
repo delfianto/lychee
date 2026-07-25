@@ -1,1 +1,1 @@
-"""Metadata/content providers (MangaDex, …) — ADR 13."""
+"""Metadata/content providers (MangaDex, …)"""

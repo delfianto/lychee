@@ -1,1 +1,1 @@
-"""Reading progress (ADR 11)."""
+"""Reading progress."""

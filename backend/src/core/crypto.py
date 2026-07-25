@@ -1,4 +1,4 @@
-"""Symmetric encryption for provider secrets at rest (PART F/M4).
+"""Symmetric encryption for provider secrets at rest.
 
 The OAuth client secret + refresh token are encrypted with Fernet using a key
 derived from ``settings.secret_key`` (env ``LYCHEE_SECRET_KEY``). With no key

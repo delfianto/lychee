@@ -1,4 +1,4 @@
-"""Reading-tracker abstraction + registry (AniList / MyAnimeList / … ) — PART F.
+"""Reading-tracker abstraction + registry (AniList / MyAnimeList / …)
 
 A tracker connects via OAuth2 (authorization-code) and can later push read
 progress. This module defines the contract + a registry; concrete trackers

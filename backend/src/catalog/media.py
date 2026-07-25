@@ -1,9 +1,9 @@
-"""Binary media serving: covers, chapter pages, and gallery images (ADR 09 / 19).
+"""Binary media serving: covers, chapter pages, and gallery images.
 
 Covers are AVIF thumbnails: served from the store, and lazily generated from the
 first page of the series' first book on a miss. Pages and gallery images are read
 straight from their book container (downloaded content is already AVIF; scanned
-originals are served as-is per ADR 09). Every response carries a content-hash ETag.
+originals are served as-is). Every response carries a content-hash ETag.
 """
 
 from __future__ import annotations

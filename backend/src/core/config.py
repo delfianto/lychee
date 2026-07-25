@@ -14,13 +14,13 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "production"] = "development"
 
-    # Database — SQLite by default (see ../notes/decisions/04-database-sqlite.md).
+    # Database — SQLite by default.
     database_url: str = "sqlite:///./lychee.db"
 
     # Storage root for generated binary files (thumbnails, etc.).
     storage_path: str = "./storage"
 
-    # Passphrase used to encrypt stored provider secrets at rest (PART F/M4).
+    # Passphrase used to encrypt stored provider secrets at rest.
     # Unset ⇒ connecting a MangaDex account is refused (no plaintext secrets).
     secret_key: str | None = Field(default=None, validation_alias="LYCHEE_SECRET_KEY")
 

@@ -1,4 +1,4 @@
-"""Rate-limited, retrying HTTP client for the MangaDex API (ADR 13, PART F/M0).
+"""Rate-limited, retrying HTTP client for the MangaDex API.
 
 Wraps one ``httpx.Client`` with: a global ~5 req/s token bucket + a 40/min bucket
 for the at-home server endpoint; 429 handling that honours ``X-RateLimit-Retry-
@@ -8,7 +8,7 @@ hosts and aren't counted against the api.mangadex.org buckets. ``report`` posts 
 mandatory MangaDex@Home usage report best-effort — it never raises, so it can't
 fail a download.
 
-Note: never attach account auth (PART F/M4) to node or report requests — the
+Note: never attach account auth to node or report requests — the
 at-home network is third-party. Today no auth is set, so one client is safe;
 when auth lands it must be applied per-request to api.mangadex.org calls only.
 """

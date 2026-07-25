@@ -1,10 +1,10 @@
-"""AniList tracker — OAuth2 authorization-code + a GraphQL viewer lookup (PART F).
+"""AniList tracker — OAuth2 authorization-code, viewer lookup, and progress push.
 
 Connect flow: build ``authorize_url`` → the user authorises in-browser → AniList
 redirects back with a ``code`` → ``exchange_code`` swaps it for an access token
 (long-lived, ~1 year; AniList issues no refresh token). ``account_name`` confirms
-the token via the GraphQL ``Viewer`` query. Outbound progress push (SaveMedia
-ListEntry) is a follow-up. The httpx client is injectable for tests.
+the token via the GraphQL ``Viewer`` query, and ``push`` writes read status +
+progress with the ``SaveMediaListEntry`` mutation. The httpx client is injectable.
 """
 
 from __future__ import annotations

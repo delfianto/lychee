@@ -8,7 +8,7 @@ Creates a "Demo Library" of manga/comics/galleries mirroring the frontend mock,
 generating placeholder page images (PNG) under ``<storage>/demo-library`` so covers
 (lazy AVIF), the reader, and gallery grids all render real content. Idempotent:
 if the demo library already exists it does nothing. This is NOT production data —
-real content comes from the scanner (B4) and downloader (B5).
+real content comes from the scanner and downloader.
 """
 
 from __future__ import annotations

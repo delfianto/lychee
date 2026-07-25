@@ -1,4 +1,4 @@
-"""Map provider metadata onto the Series model (PART F/M1).
+"""Map provider metadata onto the Series model.
 
 Overwrites catalog fields from a provider's ``SeriesMetadata``, except any listed
 in ``series.locked_fields_json`` (user edits win). Reconciles authors/artists into

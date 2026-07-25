@@ -1,4 +1,4 @@
-"""Background task queue — runs long work off the request thread (ADR 08/15).
+"""Background task queue — runs long work off the request thread.
 
 Scans, downloads, and syncs are submitted here and run on a worker thread with
 its own DB session; lifecycle + progress flow through the ``TaskTracker`` (→ SSE).

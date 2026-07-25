@@ -1,4 +1,4 @@
-"""Taxonomy models (ADR 10).
+"""Taxonomy models.
 
 One unified ``Tag`` table backs the whole Settings → Content table. ``group``
 spans the four series-linked groups (``genre|theme|content|format``, joined to

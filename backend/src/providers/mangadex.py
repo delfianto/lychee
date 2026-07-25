@@ -1,9 +1,9 @@
-"""MangaDex provider (ADR 13, PART F) — chapter listing + page download.
+"""MangaDex provider — chapter listing, page download, metadata fetch, and search.
 
 Runs over the rate-limited ``MangaDexClient`` (global 5 req/s + at-home 40/min,
-429/retry handling, mandatory MangaDex@Home reporting). Metadata fetch, matching,
-and sync (``search`` / ``get_metadata`` / ``list_new_chapters``) land in PART F
-M1–M5; the ``MetadataProvider`` contract they satisfy lives in downloads/provider.
+429/retry handling, mandatory MangaDex@Home reporting). Implements both the
+download ``Provider`` and the ``MetadataProvider`` contract from downloads/provider
+(``search`` / ``get_metadata`` / ``list_new_chapters``), plus authed follows/status.
 """
 
 from __future__ import annotations

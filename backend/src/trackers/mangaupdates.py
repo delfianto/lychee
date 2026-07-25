@@ -1,4 +1,4 @@
-"""MangaUpdates tracker — password login (session token) + list updates (PART F).
+"""MangaUpdates tracker — password login (session token) + list updates.
 
 MangaUpdates isn't OAuth: ``PUT /v1/account/login`` with username/password returns
 a session token used as a Bearer. Progress is pushed by placing the series in the
