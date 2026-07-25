@@ -16,8 +16,8 @@
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
   (ADR 01–19).
-- **Next (planned, spec'd not built):** PART H — on-disk `Cover.avif` storage + gallery
-  artist/model two-level scan. See PART H below.
+- **PART H — ✅ done:** on-disk `Cover.avif` storage (canonical source + derived grid) + gallery
+  artist/model two-level scan (artist folder → `SeriesCredit` + auto `Collection`). See PART H below.
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -515,7 +515,7 @@ override; integration-test import end-to-end (tmp CBZ/folder → served AVIF + g
 GET/PATCH — all offline, building real archives in `tmp_path` like `test_scan_api.py`. **New deps: none**
 (Pillow AVIF + stdlib `zipfile` cover it).
 
-# PART H — Cover.avif storage + gallery artist/model scan — planned (H0–H1)
+# PART H — Cover.avif storage + gallery artist/model scan — ✅ done (H0–H1)
 
 > Decided 2026-07-25: covers become an on-disk **`Cover.avif`** (the canonical source of
 > truth) with the small grid thumbnail still derived from it; **gallery** libraries scan
@@ -565,7 +565,7 @@ storage/thumbnails/<id[:2]>/<series_id>.cover.avif   ← derived 320px (grids on
 dir — a volume's cover is its cbz's first page (served on demand). Series-level `Cover.avif` is the
 scope here; per-book `<series>/<book>.cover.avif` can come later if wanted.
 
-## H1 — Gallery libraries: artist/model → gallery two-level scan
+## H1 — Gallery libraries: artist/model → gallery two-level scan — ✅ done
 
 **Today:** every kind uses one scan rule — first-level dir under the root = Series. For gallery
 libraries that makes `Root/GalleryName/imgs` → `GalleryName` the gallery; artists are metadata only
@@ -581,23 +581,23 @@ subfolder/cbz below = its own gallery.
     Set B.cbz               → Series (kind=gallery)   [cbz]
   Loose Gallery.cbz         → Series (kind=gallery), no artist (root one-shot)
 ```
-- [ ] **Kind-specific resolution** (`scanner.py`): gallery libraries iterate first-level dirs as
-      **artist groups**; within each, every image-dir / archive below is a gallery Series (reuse
-      `resolve_books` one level down). A loose archive/image-dir directly under the root stays a
-      one-shot gallery with no artist. Manga/comic rule unchanged.
-- [ ] **Artist wiring:** the artist folder name → `SeriesCredit(role="artist")` on each gallery Series
-      beneath it (deduped, like the importer). The existing artist filter/facets light up for free.
-- [ ] **Collection wiring:** get-or-create a `Collection` named after the artist and add each gallery
-      Series (ordered) — so the artist is browsable as a unit via `/api/collections` + the Lists UI.
-      Idempotent on re-scan.
-- [ ] **Series identity:** `path_rel` = the gallery's path relative to the library root
-      (`Artist Name/Set A`), so moves/renames + move-restore keep working. `image_count` as today.
-- [ ] **FE:** galleries already come from `/api/series?kind=gallery`; the grouping surfaces via credits
-      + the auto Collection. Confirm `GalleryView`/`GalleryDetail` show the artist + link the collection
-      (small wiring, no new screens).
-- [ ] **Tests:** `Artist/SetA` + `Artist/SetB.cbz` → two gallery Series, both credited "Artist", both
-      in Collection "Artist"; a root-level loose gallery → one Series, no artist; re-scan idempotent (no
-      dup credits/collections); a manga library is unaffected by the new rule.
+- [x] **Kind-specific resolution** (`scanner.py`): gallery libraries iterate first-level dirs via
+      `_ingest_artist` — each is an artist/model; every image-dir / archive below is a gallery Series
+      (`_ingest_entry` → `resolve_books` one level down). An artist folder that *directly* holds images
+      is itself a single gallery (flat libraries still work). Loose root archive/dir → one-shot gallery,
+      no artist. Manga/comic rule unchanged (`_ingest_entry` with `artist=None`).
+- [x] **Artist wiring:** `_credit_artist()` adds `SeriesCredit(role="artist")` per gallery (deduped).
+      The existing `GalleryView` artist filter (`g.artists`) lights up for free.
+- [x] **Collection wiring:** `_credit_artist()` get-or-creates a `Collection` named after the artist and
+      appends each gallery (ordered) — browsable via `/api/collections` + the Lists UI. Idempotent.
+- [x] **Series identity:** `path_rel` = the gallery's path relative to the root (`Artist Name/Set A`,
+      archives suffix-stripped), so it's unique across artists + move-restore keeps working. `image_count`
+      as today. (`_ingest_entry` unifies the identity for manga folders + loose archives too.)
+- [x] **FE:** no change needed — `GalleryView` already filters/searches by `g.artists`, and the auto
+      Collection appears in the Lists UI. Both consume the now-populated data directly.
+- [x] **Tests:** `Artist/SetA` + `Artist/SetB.cbz` → two gallery Series, both credited "Artist", both in
+      Collection "Artist"; loose root gallery → one Series, no artist; re-scan idempotent (no dup credits
+      / collection membership). Manga scan tests unchanged (unaffected). **+2 → 185.**
 
 **Testing (both):** offline, building real dirs/CBZs in `tmp_path` like `test_scan_api.py` /
 `test_import_api.py`. New deps: none (Pillow AVIF + stdlib `zipfile`).

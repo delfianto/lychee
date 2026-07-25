@@ -3,9 +3,11 @@
 v1 does a periodic/manual full scan of a library root. First-level directories are
 **Series**; archives and image-only folders beneath are **Books**; a loose archive
 directly under the root is a one-shot Series. Each Book yields one **Chapter** (the
-book + its full page range). Move/rename safety comes from soft-delete + a
-``(file_size, partial_hash)`` restore hint. Covers are generated lazily on first
-request, so no thumbnail job is enqueued here.
+book + its full page range). For **gallery** libraries the top level is instead the
+**artist/model** and each folder/archive beneath is its own gallery Series (credited to
+the artist + grouped into a Collection named after them). Move/rename safety comes from
+soft-delete + a ``(file_size, partial_hash)`` restore hint. Covers are generated lazily
+on first request, so no thumbnail job is enqueued here.
 
 Deferred (follow-ups): filesystem watcher, embedded ComicInfo/OPF metadata, and
 multi-chapter archives. (Extra container formats + content-sniffing are not
@@ -20,10 +22,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import xxhash
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from src.catalog.models import Book, Chapter, Library, Series
+from src.catalog.models import Book, Chapter, Library, Series, SeriesCredit
+from src.collections.models import Collection, CollectionSeries
 from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
@@ -154,16 +157,13 @@ def scan_library(
     }
     seen: set[str] = set()
 
+    gallery = _series_kind(library) == "gallery"
     entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".")]
     for index, entry in enumerate(entries, start=1):
-        if entry.is_dir():
-            candidates = resolve_books(entry, root)
-            if candidates:
-                _ingest_series(session, library, entry.name, candidates, existing, seen, summary)
-        elif entry.is_file() and (kind := _archive_kind(entry.name)):
-            title = Path(entry.name).stem
-            oneshot = [_candidate(entry, root, root, kind)]
-            _ingest_series(session, library, title, oneshot, existing, seen, summary)
+        if gallery and entry.is_dir():
+            _ingest_artist(session, library, entry, root, existing, seen, summary)
+        else:
+            _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
         if on_progress is not None:
             on_progress(round(index / len(entries) * 100), entry.name)
 
@@ -181,20 +181,79 @@ def scan_library(
     return summary
 
 
+def _ingest_entry(
+    session: Session,
+    library: Library,
+    entry: Path,
+    root: Path,
+    existing: dict[str, Book],
+    seen: set[str],
+    summary: ScanSummary,
+    *,
+    artist: str | None,
+) -> None:
+    """One series from a top-level (or per-artist) entry: a folder of books, or a loose
+    archive. ``artist`` credits a gallery to its artist/model folder (+ Collection)."""
+    if entry.is_dir():
+        candidates = resolve_books(entry, root)
+        if not candidates:
+            return
+        path_rel, title = str(entry.relative_to(root)), entry.name
+    elif entry.is_file() and (kind := _archive_kind(entry.name)):
+        candidates = [_candidate(entry, root, entry.parent, kind)]
+        path_rel, title = str(entry.relative_to(root).with_suffix("")), entry.stem
+    else:
+        return
+    _ingest_series(
+        session,
+        library,
+        path_rel=path_rel,
+        title=title,
+        candidates=candidates,
+        existing=existing,
+        seen=seen,
+        summary=summary,
+        artist=artist,
+    )
+
+
+def _ingest_artist(
+    session: Session,
+    library: Library,
+    artist_dir: Path,
+    root: Path,
+    existing: dict[str, Book],
+    seen: set[str],
+    summary: ScanSummary,
+) -> None:
+    """A gallery library's top folder is an artist/model: each child folder/archive is its
+    own gallery series. If the folder *directly* holds page images it's a single gallery
+    with no artist level (so flat gallery libraries keep working)."""
+    children = [p for p in sorted(artist_dir.iterdir()) if not p.name.startswith(".")]
+    if any(p.is_file() and _is_image(p.name) and not is_cover_file(p.name) for p in children):
+        _ingest_entry(session, library, artist_dir, root, existing, seen, summary, artist=None)
+        return
+    for child in children:
+        _ingest_entry(session, library, child, root, existing, seen, summary, artist=artist_dir.name)
+
+
 def _ingest_series(
     session: Session,
     library: Library,
+    *,
+    path_rel: str,
     title: str,
     candidates: list[Candidate],
     existing: dict[str, Book],
     seen: set[str],
     summary: ScanSummary,
+    artist: str | None = None,
 ) -> None:
     kind = _series_kind(library)
     # Match on the folder-derived path (stable identity), not the title — provider
     # metadata may rename the title, and rescans must not then create a duplicate.
     series = session.scalar(
-        select(Series).where(Series.library_id == library.id, Series.path_rel == title)
+        select(Series).where(Series.library_id == library.id, Series.path_rel == path_rel)
     )
     if series is None:
         series = Series(
@@ -202,7 +261,7 @@ def _ingest_series(
             kind=kind,
             title=title,
             sort_title=title.lower(),
-            path_rel=title,
+            path_rel=path_rel,
         )
         session.add(series)
         session.flush()
@@ -220,6 +279,48 @@ def _ingest_series(
 
     if chapters:
         order_chapters(chapters)
+
+    if artist:
+        _credit_artist(session, series, artist)
+
+
+def _credit_artist(session: Session, series: Series, artist: str) -> None:
+    """Credit a gallery series to its artist/model folder + group it into a Collection
+    named after them. Idempotent (deduped), so re-scans don't pile up rows."""
+    has_credit = session.scalar(
+        select(SeriesCredit.id).where(
+            SeriesCredit.series_id == series.id,
+            SeriesCredit.name == artist,
+            SeriesCredit.role == "artist",
+        )
+    )
+    if has_credit is None:
+        session.add(SeriesCredit(series_id=series.id, name=artist, role="artist"))
+
+    collection = session.scalar(select(Collection).where(Collection.name == artist))
+    if collection is None:
+        collection = Collection(name=artist)
+        session.add(collection)
+        session.flush()
+    member = session.scalar(
+        select(CollectionSeries.series_id).where(
+            CollectionSeries.collection_id == collection.id,
+            CollectionSeries.series_id == series.id,
+        )
+    )
+    if member is None:
+        next_pos = session.scalar(
+            select(func.max(CollectionSeries.position)).where(
+                CollectionSeries.collection_id == collection.id
+            )
+        )
+        session.add(
+            CollectionSeries(
+                collection_id=collection.id,
+                series_id=series.id,
+                position=(next_pos or 0) + 1,
+            )
+        )
 
 
 def _reconcile_book(
