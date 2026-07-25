@@ -20,16 +20,15 @@ dependencies = [
     # ID generation
     "nanoid==2.0.0",
     # Media / images — AVIF encode + decode/resize. Native AVIF ships in the
-    # Pillow ≥11.3 wheels (bundled libavif), so no system libs. See ADR 09 (amended
-    # by ADR 19 — AVIF storage policy).
+    # Pillow ≥11.3 wheels (bundled libavif), so no system libs.
     "pillow==12.3.0",
-    # Providers/trackers — HTTP client for MangaDex/AniList/… (ADR 13, 16).
+    # Providers / trackers — HTTP client for MangaDex / AniList / ….
     "httpx==0.28.1",
-    # NOTE: remaining media/domain deps (rarfile/libarchive-c, pymupdf, ebooklib,
-    # python-magic, xxhash, natsort, APScheduler, tenacity, …) are added per the
-    # relevant ADR as those features land — see ../notes/decisions/.
+    # Secrets encryption at rest (provider/tracker tokens).
     "cryptography>=49.0.0",
+    # File uploads (local import).
     "python-multipart>=0.0.32",
+    # Fast content-hash fingerprints for scan reconcile / restore.
     "xxhash>=3.8.1",
 ]
 
