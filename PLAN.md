@@ -326,8 +326,11 @@ override.
       40/min at-home bucket are already done in M0.)
 
 **M4 — Account auth (OAuth2) + follows / status import**
-- [ ] OAuth2 personal-client flow (password → refresh grant); encrypted token store (Provider columns
-      or a `mangadex_account` row); auto-refresh inside the client.
+- [ ] OAuth2 personal-client flow (password → refresh grant); auto-refresh inside the client.
+- [ ] **Secret storage (decided 2026-07-25): encrypt at rest with an app key.** Add a
+      `LYCHEE_SECRET_KEY` setting; encrypt the client secret + refresh token with Fernet (adds a
+      `cryptography` dep) before writing to SQLite (Provider columns or a `mangadex_account` row).
+      Losing the key just means re-connecting.
 - [ ] `POST /api/providers/mangadex/connect {clientId, clientSecret, username, password}` / `DELETE`.
 - [ ] Import follows: `GET /user/follows/manga` (paged) → create/link `Series` + fetch metadata;
       `GET /manga/status` → map reading status → `library_status`.
