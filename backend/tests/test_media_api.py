@@ -91,6 +91,17 @@ def test_cover_is_generated_as_avif(
     assert client.get("/api/series/missing/cover").status_code == 404
 
 
+def test_cover_detail_serves_canonical_avif(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series, _ = _make_book_series(db_session, tmp_path, kind="manga", pages=2, with_chapter=True)
+    # ?size=detail serves the canonical cover bytes directly (not a store variant).
+    resp = client.get(f"/api/series/{series.id}/cover", params={"size": "detail"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/avif"
+    assert b"ftyp" in resp.content[:16]
+
+
 def test_gallery_images_list_and_serve(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:

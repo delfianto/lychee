@@ -36,6 +36,16 @@ def _is_image(name: str) -> bool:
     return Path(name).suffix.lower() in IMAGE_EXTS
 
 
+_COVER_STEMS = frozenset({"cover", "folder"})
+
+
+def is_cover_file(name: str) -> bool:
+    """A conventional cover image (``Cover.avif`` / ``cover.jpg`` / ``folder.png``) — a
+    series/book cover, never a readable page. Excluded from page lists + scan detection."""
+    path = Path(name)
+    return path.suffix.lower() in IMAGE_EXTS and path.stem.lower() in _COVER_STEMS
+
+
 class BookContainer(ABC):
     """An ordered, 0-indexed collection of page images."""
 
@@ -69,7 +79,11 @@ def _dir_page_names(path_str: str, _mtime: float) -> tuple[str, ...]:
     directory = Path(path_str)
     return tuple(
         sorted(
-            (p.name for p in directory.iterdir() if p.is_file() and _is_image(p.name)),
+            (
+                p.name
+                for p in directory.iterdir()
+                if p.is_file() and _is_image(p.name) and not is_cover_file(p.name)
+            ),
             key=natural_key,
         )
     )
@@ -103,7 +117,7 @@ class ZipContainer(BookContainer):
         except zipfile.BadZipFile as exc:
             raise BadRequestError(f"corrupt archive: {path.name}") from exc
         self._names = sorted(
-            (n for n in self._zip.namelist() if _is_image(n)),
+            (n for n in self._zip.namelist() if _is_image(n) and not is_cover_file(n)),
             key=natural_key,
         )
 

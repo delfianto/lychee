@@ -521,7 +521,7 @@ GET/PATCH — all offline, building real archives in `tmp_path` like `test_scan_
 > truth) with the small grid thumbnail still derived from it; **gallery** libraries scan
 > **two levels** (artist/model → gallery). Spec first — build after review. New deps: none.
 
-## H0 — `Cover.avif` as the canonical cover source
+## H0 — `Cover.avif` as the canonical cover source — ✅ done
 
 **Today:** covers are *derived only* — AVIF thumbnails in a central sharded store keyed by
 series id (`storage/thumbnails/<id[:2]>/<series_id>.{cover,detail}.avif`, 320/640). The source
@@ -536,31 +536,30 @@ storage/imports/<series_id>/
   <hash>.cbz  <hash>.cbz  ← the books
 storage/thumbnails/<id[:2]>/<series_id>.cover.avif   ← derived 320px (grids only)
 ```
-- [ ] **Managed libraries (import/download):** on transcode, write `<library>/<series_id>/Cover.avif`
-      — a normalized AVIF of the cover source (provider cover if matched, else first book's first
-      page). Atomic (temp + `os.replace`), same pattern as `write_cbz`. Books stay CBZ; the cover
-      sits beside them at the series dir.
-- [ ] **Scanned (in-place) libraries:** read a cover-file convention as the source — first of
-      `Cover.avif` / `cover.*` / `folder.*` (case-insensitive) in the series dir, else the current
-      fallback (provider cover / first page). Do **not** write into the user's originals (opt-in later).
-- [ ] **Source resolution** (`media.py::_cover_source_bytes`): precedence → (1) a `Cover.*`/`folder.*`
-      file at the series dir, (2) provider `cover_source` URL (cached), (3) first book's first page.
-      Cache the resolved pointer on `Series.cover_source` (already exists) to avoid re-resolving.
-- [ ] **Derived grid stays; drop `detail`:** keep `ThumbnailStore` for the 320px grid variant
-      (generated from `Cover.avif`); the canonical `Cover.avif` *is* the hero image — serve its bytes
-      for `?size=detail` instead of a 640 variant.
-- [ ] **Page-list exclusion (important):** exclude `Cover.avif`/`cover.*`/`folder.*` from
-      `resolve_books` image detection **and** `ImageDirContainer`/`ZipContainer` page lists — so a
-      cover file never (a) turns a series folder into a spurious 1-page image book, nor (b) shows up
-      as a readable page. (Directly fixes the "any image in a folder → image_dir book" gotcha.)
-- [ ] **Serving:** `GET /api/series/{id}/cover?size=cover|detail` — `cover` → derived 320; `detail` →
-      the `Cover.avif` bytes; ETag/Cache-Control/304 unchanged. Miss → generate from the source.
-- [ ] **Back-compat:** existing central thumbnails keep serving until regenerated; `Cover.avif` is
-      written on next import/download or cover request. No DB migration (reuses `Series.cover_source`).
-      Optional one-shot backfill task to emit `Cover.avif` for existing managed series.
-- [ ] **Tests:** managed import writes `<series>/Cover.avif` (AVIF ~640) + a 320 grid thumb; a scanned
-      lib with `folder.jpg` uses it as the source; a `Cover.avif` beside `.cbz`s is neither a book nor
-      a page; `?size=detail` serves the Cover.avif bytes.
+- [x] **Managed libraries (import/download):** `write_series_cover()` writes `<library>/<series_id>/Cover.avif`
+      — a normalized ~640px AVIF of the raw source (provider cover if matched, else first book's first
+      page). Atomic (temp + `os.replace`). Books stay CBZ; the cover sits beside them at the series dir.
+- [x] **Scanned (in-place) libraries:** `_on_disk_cover()` reads `Cover.avif` / `cover.*` / `folder.*`
+      (case-insensitive) from the series dir as the source, else the fallback (provider cover / first
+      page). Never writes into the user's originals.
+- [x] **Source resolution** (`media.py`): `_canonical_cover_bytes()` → (1) on-disk `Cover.*`/`folder.*`
+      at the series dir (normalized if not already AVIF), else (2) provider cover / first page via
+      `_raw_cover_source()`. `_series_dir()` resolves the dir (scanned `path_rel` folder, else managed
+      `<lib>/<series_id>`; None for a loose one-shot). *(Skipped the optional `cover_source` caching —
+      resolution is cheap.)*
+- [x] **Derived grid; dropped `detail`:** the store holds only the 320px `cover` variant (from the
+      canonical cover); `?size=detail` serves the canonical cover bytes, no 640 store variant.
+      (`ThumbnailStore` still *supports* `detail`/`generate_all` — just unused by the cover flow.)
+- [x] **Page-list exclusion:** `is_cover_file()` excludes `Cover.avif`/`cover.*`/`folder.*` from
+      `resolve_books` detection + `_signature` **and** `ImageDirContainer`/`ZipContainer` page lists — a
+      cover file is never a spurious book nor a page. (Fixes the "any image in a folder → book" gotcha.)
+- [x] **Serving:** `GET /api/series/{id}/cover?size=cover|detail` — `cover` → derived 320 (generated on
+      a miss); `detail` → canonical cover bytes; ETag/Cache-Control/304 unchanged.
+- [x] **Back-compat:** old `cover`/`detail` thumbnails keep serving; `Cover.avif` is written on the next
+      import/download. No DB migration. *(One-shot backfill for existing managed series not done — optional.)*
+- [x] **Tests:** import writes `<series>/Cover.avif` (AVIF) + `?size=detail` serves it; a source cover is
+      excluded from a chapter's page count; container cover-exclusion (dir + zip) + `is_cover_file` unit;
+      download writes a managed `Cover.avif`; scan/download warming assert the 320 grid. **+6 → 183.**
 
 **Open (follow-up, not this scope):** per-volume covers. With books as CBZ there's no `Vol.01/`
 dir — a volume's cover is its cbz's first page (served on demand). Series-level `Cover.avif` is the

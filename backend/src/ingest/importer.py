@@ -16,7 +16,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.catalog.media import generate_series_cover
+from src.catalog.media import generate_series_cover, write_series_cover
 from src.catalog.models import Book, Chapter, Library, Series, SeriesCredit
 from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
@@ -242,5 +242,7 @@ def import_path(
     if chapters:
         order_chapters(chapters)
         session.commit()
+    # write a portable Cover.avif beside the series' books, then derive the grid thumbnail
+    _ = write_series_cover(session, series.id, storage_root / "imports" / series.id)
     _ = generate_series_cover(session, store, series.id)
     return {"booksImported": imported}

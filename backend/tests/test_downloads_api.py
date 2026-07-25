@@ -79,8 +79,9 @@ def test_download_warms_series_cover(
 
     # The cover is warmed by the download worker (no /cover request made here).
     store = ThumbnailStore(tmp_path / "storage" / "thumbnails")
-    assert store.exists(series.id, ThumbVariant.COVER)
-    assert store.exists(series.id, ThumbVariant.DETAIL)
+    assert store.exists(series.id, ThumbVariant.COVER)  # derived 320px grid thumbnail
+    # a portable Cover.avif is written beside the downloaded chapters (managed library)
+    assert (tmp_path / "storage" / "downloads" / series.id / "Cover.avif").is_file()
 
 
 def test_download_is_idempotent_and_listed(client: TestClient, db_session: Session) -> None:

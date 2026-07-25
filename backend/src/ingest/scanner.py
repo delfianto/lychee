@@ -28,7 +28,7 @@ from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.ingest.parser import parse
-from src.media.containers import IMAGE_EXTS, open_container
+from src.media.containers import IMAGE_EXTS, is_cover_file, open_container
 from src.progress.models import ReadingProgress
 
 logger = get_logger(__name__)
@@ -67,7 +67,11 @@ def _signature(path: Path) -> tuple[int, float, str]:
     """Return (size_bytes, mtime, partial_hash) for a file or an image directory."""
     digest = xxhash.xxh3_128()  # fast, low-collision content fingerprint
     if path.is_dir():
-        images = sorted(p for p in path.iterdir() if p.is_file() and _is_image(p.name))
+        images = sorted(
+            p
+            for p in path.iterdir()
+            if p.is_file() and _is_image(p.name) and not is_cover_file(p.name)
+        )
         size = 0
         mtime = path.stat().st_mtime
         for image in images:
@@ -99,7 +103,7 @@ def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
 
     def visit(directory: Path) -> None:
         entries = sorted(p for p in directory.iterdir() if not p.name.startswith("."))
-        if any(e.is_file() and _is_image(e.name) for e in entries):
+        if any(e.is_file() and _is_image(e.name) and not is_cover_file(e.name) for e in entries):
             found.append(_candidate(directory, root, series_dir, "image_dir"))
             return  # its images are the pages; don't recurse
         for entry in entries:
