@@ -18,6 +18,7 @@ import {
 } from "../api/queries";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
+import ErrorState from "../components/ErrorState.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
 import { toast } from "../lib/toast";
@@ -39,22 +40,29 @@ const libraryStatus = ref<LibraryStatus>("none");
 const userRating = ref<number | null>(null);
 const hoverRating = ref(0);
 
+const failed = ref(false);
 async function load(id: string): Promise<void> {
   series.value = null;
-  const [s, vols, rel, art] = await Promise.all([
-    fetchSeries(id),
-    fetchChapters(id),
-    fetchRelated(id),
-    fetchArt(id),
-  ]);
-  series.value = s;
-  volumes.value = vols;
-  related.value = rel;
-  artCovers.value = art;
-  favorite.value = s.favorite ?? false;
-  libraryStatus.value = s.libraryStatus ?? "none";
-  userRating.value = s.userRating ?? null;
+  failed.value = false;
+  try {
+    const [s, vols, rel, art] = await Promise.all([
+      fetchSeries(id),
+      fetchChapters(id),
+      fetchRelated(id),
+      fetchArt(id),
+    ]);
+    series.value = s;
+    volumes.value = vols;
+    related.value = rel;
+    artCovers.value = art;
+    favorite.value = s.favorite ?? false;
+    libraryStatus.value = s.libraryStatus ?? "none";
+    userRating.value = s.userRating ?? null;
+  } catch {
+    failed.value = true;
+  }
 }
+const reload = (): void => void load(String(route.params.id));
 watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
 
 function toggleList(l: Collection): void {
@@ -147,7 +155,8 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 <template>
   <div class="flex flex-col gap-6">
-    <div v-if="!series" class="flex justify-center py-20">
+    <ErrorState v-if="failed" message="Couldn't load this series." @retry="reload" />
+    <div v-else-if="!series" class="flex justify-center py-20">
       <span class="loading loading-spinner loading-lg text-primary" />
     </div>
     <template v-else>
@@ -350,7 +359,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
           </button>
         </div>
         <label class="input input-bordered flex items-center gap-2">
-          <input v-model="matchQuery" class="grow" placeholder="Search title…" @keyup.enter="runMatchSearch" />
+          <input v-model="matchQuery" class="grow" placeholder="Search title…" aria-label="Search for a matching series" @keyup.enter="runMatchSearch" />
           <button class="btn btn-primary btn-sm" @click="runMatchSearch">Search</button>
         </label>
         <div v-if="matchLoading" class="flex justify-center py-8">

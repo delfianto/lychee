@@ -399,6 +399,15 @@
   border: 1px solid var(--surface-border);
 }
 
+/* Consistent keyboard-focus ring. Browser/DaisyUI defaults vary across themes and
+   are missing on many custom surfaces (cards, dropdown triggers, rails). :focus-visible
+   only shows for keyboard/AT navigation, so it never appears on mouse clicks. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-field);
+}
+
 /* Reusable segmented control — see components/SegmentedToggle.vue. Uses the
    same hairline as the cards so a toggle never looks heavier/alien beside the
    rest of the UI; the active segment is the only filled element. */

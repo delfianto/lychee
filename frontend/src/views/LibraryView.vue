@@ -6,6 +6,7 @@ import { useRoute } from "vue-router";
 import { buildLibraryQuery, fetchTagGroups, type TagGroup, useSeriesList } from "../api/queries";
 import FilterPanel from "../components/FilterPanel.vue";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
+import ErrorState from "../components/ErrorState.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { toast } from "../lib/toast";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
@@ -160,7 +161,7 @@ const title = computed(() => TITLES[props.libraryKey] ?? "Library");
 // "reading" is a fixed-status shelf, so the shelf-status tabs are hidden there.
 const showTabs = computed(() => props.libraryKey !== "reading");
 
-const { items: results, loading, hasMore, reload, loadMore } = useSeriesList();
+const { items: results, loading, failed, hasMore, reload, loadMore, retry } = useSeriesList();
 
 const queryParams = computed(() =>
   buildLibraryQuery(props.libraryKey, { activeTab: activeTab.value, filters, sort: sort.value }),
@@ -199,7 +200,7 @@ watch(
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="filters.query" type="search" class="grow" placeholder="Search this library…" />
+        <input v-model="filters.query" type="search" class="grow" placeholder="Search this library…" aria-label="Search this library" />
       </label>
       <button
         class="btn btn-sm gap-1.5"
@@ -283,7 +284,13 @@ watch(
     </div>
 
     <!-- Results -->
+    <ErrorState
+      v-if="failed && !results.length"
+      message="Couldn't load this library."
+      @retry="retry"
+    />
     <SeriesCollection
+      v-else
       :series="results"
       :density="density"
       :has-more="hasMore"

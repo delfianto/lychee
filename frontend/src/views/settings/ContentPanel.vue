@@ -116,7 +116,7 @@ onMounted(loadTaxonomy);
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="taxSearch" type="search" class="grow" placeholder="Search name…" />
+        <input v-model="taxSearch" type="search" class="grow" placeholder="Search name…" aria-label="Search taxonomy" />
       </label>
       <select v-model="taxCat" class="select select-bordered select-sm" aria-label="Filter by type">
         <option value="">All types</option>
