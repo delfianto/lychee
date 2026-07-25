@@ -141,6 +141,7 @@ onMounted(async () => {
                 <code class="text-primary/70">{volume}</code> <code class="text-primary/70">{chapter}</code>
                 <code class="text-primary/70">{author}</code> <code class="text-primary/70">{artist}</code>
                 <code class="text-primary/70">{group}</code> <code class="text-primary/70">{year}</code>
+                <code class="text-primary/70">{language}</code> <code class="text-primary/70">{tags}</code>
                 · <code class="text-primary/70">*</code> ignores a segment
               </p>
             </div>

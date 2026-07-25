@@ -117,6 +117,25 @@ def test_import_applies_filename_pattern(client: TestClient, tmp_path: Path) -> 
     assert numbers == ["1", "2"]  # {chapter}
 
 
+def test_import_pattern_applies_language_and_tags(client: TestClient, tmp_path: Path) -> None:
+    _enable(client)
+    assert client.patch(
+        "/api/import/config",
+        json={"filenamePattern": "{series} [{language}] {tags} - c{chapter}"},
+    ).status_code == 200
+    root = tmp_path / "incoming" / "raw"
+    _cbz(root / "Vinland Saga [en] action, seinen - c001.cbz", 2)
+
+    assert client.post("/api/import", json={"path": str(root), "kind": "manga"}).status_code == 202
+    queue.wait_idle()
+
+    series = _series_by_title(client, "Vinland Saga")
+    # {tags} → series tags (matched case-insensitively to existing taxonomy, else created)
+    assert {"action", "seinen"} <= {t["name"].lower() for t in series["tags"]}
+    chapters = client.get(f"/api/series/{series['id']}/chapters").json()
+    assert chapters[0]["chapters"][0]["language"] == "en"  # {language} → chapter language
+
+
 def test_import_bad_path_rejected(client: TestClient, tmp_path: Path) -> None:
     _enable(client)
     missing = client.post("/api/import", json={"path": str(tmp_path / "nope.cbz"), "kind": "manga"})

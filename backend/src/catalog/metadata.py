@@ -58,7 +58,7 @@ def apply_metadata(
     if unlocked("credits"):
         series.credits = _build_credits(series.id, meta)
     if unlocked("tags"):
-        series.tags = _reconcile_tags(session, meta.tags)
+        series.tags = reconcile_tags(session, meta.tags)
     series.external_ids_json = meta.external_ids or None
     session.flush()
 
@@ -91,7 +91,7 @@ def _build_credits(series_id: str, meta: SeriesMetadata) -> list[SeriesCredit]:
     return credits
 
 
-def _reconcile_tags(session: Session, tags: list[tuple[str, str]]) -> list[Tag]:
+def reconcile_tags(session: Session, tags: list[tuple[str, str]]) -> list[Tag]:
     """Match each (name, group) to an existing Tag (by slug or name); create if missing."""
     known = list(session.scalars(select(Tag)))
     by_slug = {tag.id: tag for tag in known}
