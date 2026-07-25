@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -239,9 +240,16 @@ def begin_tracker_connect(
         raise BadRequestError(f"tracker {tracker_id!r} is not supported yet")
     row.client_id = data.client_id
     row.client_secret_enc = encrypt(data.client_secret)  # requires LYCHEE_SECRET_KEY
+    challenge: str | None = None
+    if impl.uses_pkce:
+        row.pkce_verifier = secrets.token_urlsafe(64)[:128]  # PKCE "plain": challenge == verifier
+        challenge = row.pkce_verifier
     session.commit()
     url = impl.authorize_url(
-        client_id=data.client_id, redirect_uri=data.redirect_uri, state=tracker_id
+        client_id=data.client_id,
+        redirect_uri=data.redirect_uri,
+        state=tracker_id,
+        code_challenge=challenge,
     )
     return TrackerAuthUrl(authorize_url=url)
 
@@ -261,10 +269,12 @@ def complete_tracker_connect(
         client_id=row.client_id,
         client_secret=decrypt(row.client_secret_enc),
         redirect_uri=data.redirect_uri,
+        code_verifier=row.pkce_verifier,
     )
     row.access_token_enc = encrypt(tokens.access_token)
     row.refresh_token_enc = encrypt(tokens.refresh_token) if tokens.refresh_token else None
     row.account_name = impl.account_name(tokens.access_token)
+    row.pkce_verifier = None  # one-time use
     row.connected = True
     session.commit()
     return _tracker_out(row)
@@ -278,6 +288,7 @@ def disconnect_tracker(session: Session, tracker_id: str) -> None:
     tracker.client_secret_enc = None
     tracker.access_token_enc = None
     tracker.refresh_token_enc = None
+    tracker.pkce_verifier = None
     session.commit()
 
 
