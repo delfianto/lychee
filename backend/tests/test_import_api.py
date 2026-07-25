@@ -136,7 +136,7 @@ def test_upload_import_transcodes(client: TestClient, tmp_path: Path) -> None:
     _enable(client)
     resp = client.post(
         "/api/import/upload",
-        files={"file": ("Chainsaw Man.cbz", _cbz_bytes(2), "application/zip")},
+        files={"files": ("Chainsaw Man.cbz", _cbz_bytes(2), "application/zip")},
         data={"kind": "manga"},
     )
     assert resp.status_code == 202
@@ -154,7 +154,7 @@ def test_upload_import_transcodes(client: TestClient, tmp_path: Path) -> None:
 def test_upload_disabled_is_rejected(client: TestClient) -> None:
     resp = client.post(  # disabled by default
         "/api/import/upload",
-        files={"file": ("X.cbz", _cbz_bytes(1), "application/zip")},
+        files={"files": ("X.cbz", _cbz_bytes(1), "application/zip")},
         data={"kind": "manga"},
     )
     assert resp.status_code == 400
@@ -164,7 +164,7 @@ def test_upload_bad_type_is_rejected(client: TestClient) -> None:
     _enable(client)
     resp = client.post(
         "/api/import/upload",
-        files={"file": ("notes.txt", io.BytesIO(b"nope"), "text/plain")},
+        files={"files": ("notes.txt", io.BytesIO(b"nope"), "text/plain")},
         data={"kind": "manga"},
     )
     assert resp.status_code == 400
@@ -177,7 +177,43 @@ def test_upload_oversize_is_rejected(client: TestClient, monkeypatch: pytest.Mon
     monkeypatch.setattr(local_import, "_MAX_UPLOAD_BYTES", 16)  # tiny cap
     resp = client.post(
         "/api/import/upload",
-        files={"file": ("Big.cbz", _cbz_bytes(2), "application/zip")},
+        files={"files": ("Big.cbz", _cbz_bytes(2), "application/zip")},
         data={"kind": "manga"},
     )
     assert resp.status_code == 400
+
+
+def test_upload_multiple_files_group_into_one_series(client: TestClient) -> None:
+    _enable(client)
+    resp = client.post(
+        "/api/import/upload",
+        files=[
+            ("files", ("Berserk c001.cbz", _cbz_bytes(2), "application/zip")),
+            ("files", ("Berserk c002.cbz", _cbz_bytes(2), "application/zip")),
+        ],
+        data={"kind": "manga"},
+    )
+    assert resp.status_code == 202
+    queue.wait_idle()
+
+    # the shared filename prefix names the one series; each uploaded file is a chapter
+    series = _series_by_title(client, "Berserk")
+    assert series["chapterCount"] == 2
+
+
+def test_import_output_is_stored_cbz(client: TestClient, tmp_path: Path) -> None:
+    _enable(client)
+    cbz = tmp_path / "incoming" / "Dandadan.cbz"
+    _cbz(cbz, 3)
+    assert client.post("/api/import", json={"path": str(cbz), "kind": "manga"}).status_code == 202
+    queue.wait_idle()
+
+    # the imported book is stored as one .cbz written with ZIP_STORED (no compression —
+    # the AVIF pages are already compressed)
+    archives = list((tmp_path / "storage" / "imports").rglob("*.cbz"))
+    assert len(archives) == 1
+    with zipfile.ZipFile(archives[0]) as archive:
+        infos = archive.infolist()
+        assert len(infos) == 3
+        assert all(info.filename.endswith(".avif") for info in infos)
+        assert all(info.compress_type == zipfile.ZIP_STORED for info in infos)

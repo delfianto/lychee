@@ -52,21 +52,21 @@ async function startImport(): Promise<void> {
   }
   toast("Import started…"); // progress + result arrive via the localimport task's SSE
 }
-async function uploadFile(event: Event): Promise<void> {
+async function uploadFiles(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
+  const files = [...(input.files ?? [])];
+  if (files.length === 0) return;
   const form = new FormData();
-  form.append("file", file);
+  for (const file of files) form.append("files", file); // one batch → one series
   form.append("kind", importForm.kind);
   // Raw fetch (multipart) rather than the JSON openapi-fetch client.
   const resp = await fetch("/api/import/upload", { method: "POST", body: form });
-  input.value = ""; // allow re-picking the same file
+  input.value = ""; // allow re-picking the same file(s)
   if (!resp.ok) {
     toast("Upload failed — check the file type/size and that import is enabled", "error");
     return;
   }
-  toast("Upload started…"); // result arrives via the localimport SSE
+  toast(files.length === 1 ? "Upload started…" : `Uploading ${files.length} files…`);
 }
 const disposeDone = onTaskDone((task) => {
   if (task.kind !== "localimport") return;
@@ -90,106 +90,111 @@ onMounted(async () => {
       <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Local import</h3>
       <p class="max-w-2xl text-xs text-base-content/50">
         Import comic/manga containers (CBZ/ZIP) or image folders from the server's disk and transcode
-        their pages to AVIF. Configure it here, then import from a path below.
+        their pages to AVIF. Configure it on the left, then import from a path or upload files.
       </p>
-      <div class="card bg-base-100">
-        <div class="card-body gap-4 p-4">
-          <div class="flex items-center justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Enable local import</div>
-                <div class="text-xs text-base-content/50">Allow importing &amp; transcoding local files</div>
-              </div>
-            </div>
-            <input v-model="config.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
-          </div>
-
-          <label class="flex items-center justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <Gauge class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Image quality</div>
-                <div class="text-xs text-base-content/50">AVIF quality for transcoded pages</div>
-              </div>
-            </div>
-            <select v-model.number="config.quality" class="select select-bordered select-sm w-40">
-              <option v-for="t in qualityTiers" :key="t.value" :value="t.value">{{ t.label }}</option>
-            </select>
-          </label>
-
-          <div class="flex flex-col gap-2">
-            <div class="flex items-start gap-3">
-              <FileText class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Filename pattern</div>
-                <div class="text-xs text-base-content/50">
-                  Auto-fill metadata from filenames — leave blank to use the built-in parser
+      <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <!-- Config -->
+        <div class="card bg-base-100">
+          <div class="card-body gap-4 p-4">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Enable local import</div>
+                  <div class="text-xs text-base-content/50">Allow importing &amp; transcoding local files</div>
                 </div>
               </div>
+              <input v-model="config.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
             </div>
-            <input
-              v-model="config.filenamePattern"
-              class="input input-bordered input-sm w-full font-mono"
-              placeholder="{series} - c{chapter} (v{volume})"
-            />
-            <p class="text-xs leading-relaxed text-base-content/40">
-              Tokens:
-              <code class="text-primary/70">{series}</code> <code class="text-primary/70">{title}</code>
-              <code class="text-primary/70">{volume}</code> <code class="text-primary/70">{chapter}</code>
-              <code class="text-primary/70">{author}</code> <code class="text-primary/70">{artist}</code>
-              <code class="text-primary/70">{group}</code> <code class="text-primary/70">{year}</code>
-              · <code class="text-primary/70">*</code> ignores a segment
-            </p>
+
+            <label class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <Gauge class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Image quality</div>
+                  <div class="text-xs text-base-content/50">AVIF quality for transcoded pages</div>
+                </div>
+              </div>
+              <select v-model.number="config.quality" class="select select-bordered select-sm w-40">
+                <option v-for="t in qualityTiers" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </label>
+
+            <div class="flex flex-col gap-2">
+              <div class="flex items-start gap-3">
+                <FileText class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Filename pattern</div>
+                  <div class="text-xs text-base-content/50">
+                    Auto-fill metadata from filenames — leave blank to use the built-in parser
+                  </div>
+                </div>
+              </div>
+              <input
+                v-model="config.filenamePattern"
+                class="input input-bordered input-sm w-full font-mono"
+                placeholder="{series} - c{chapter} (v{volume})"
+              />
+              <p class="text-xs leading-relaxed text-base-content/40">
+                Tokens:
+                <code class="text-primary/70">{series}</code> <code class="text-primary/70">{title}</code>
+                <code class="text-primary/70">{volume}</code> <code class="text-primary/70">{chapter}</code>
+                <code class="text-primary/70">{author}</code> <code class="text-primary/70">{artist}</code>
+                <code class="text-primary/70">{group}</code> <code class="text-primary/70">{year}</code>
+                · <code class="text-primary/70">*</code> ignores a segment
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Import action -->
-      <div class="card bg-base-100">
-        <div class="card-body gap-3 p-4">
-          <div class="flex items-start gap-3">
-            <HardDriveDownload class="mt-0.5 size-5 shrink-0 text-primary" />
-            <div>
-              <div class="text-sm font-medium">Import from a path</div>
-              <div class="text-xs text-base-content/50">A container file (.cbz/.zip) or a folder on the server</div>
+        <!-- Import action -->
+        <div class="card bg-base-100">
+          <div class="card-body gap-3 p-4">
+            <div class="flex items-start gap-3">
+              <HardDriveDownload class="mt-0.5 size-5 shrink-0 text-primary" />
+              <div>
+                <div class="text-sm font-medium">Import from a path</div>
+                <div class="text-xs text-base-content/50">A container file (.cbz/.zip) or a folder on the server</div>
+              </div>
             </div>
-          </div>
-          <div class="flex flex-col gap-2 sm:flex-row">
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input
+                v-model="importForm.path"
+                class="input input-bordered input-sm flex-1 font-mono"
+                placeholder="/data/incoming/Series   or   /data/file.cbz"
+                :disabled="!config.enabled"
+              />
+              <select v-model="importForm.kind" class="select select-bordered select-sm sm:w-32" :disabled="!config.enabled">
+                <option value="manga">Manga</option>
+                <option value="comic">Comic</option>
+                <option value="gallery">Gallery</option>
+              </select>
+              <button
+                class="btn btn-primary btn-sm gap-1"
+                :disabled="!config.enabled || !importForm.path.trim() || importing"
+                @click="startImport"
+              >
+                <FolderInput class="size-4" />{{ importing ? "Importing…" : "Import" }}
+              </button>
+            </div>
+
+            <div class="flex items-center gap-3 text-xs text-base-content/40">
+              <div class="h-px flex-1 bg-base-content/10"></div>
+              or upload files
+              <div class="h-px flex-1 bg-base-content/10"></div>
+            </div>
             <input
-              v-model="importForm.path"
-              class="input input-bordered input-sm flex-1 font-mono"
-              placeholder="/data/incoming/Series   or   /data/file.cbz"
+              type="file"
+              accept=".cbz,.zip"
+              multiple
+              class="file-input file-input-bordered file-input-sm w-full"
               :disabled="!config.enabled"
+              @change="uploadFiles"
             />
-            <select v-model="importForm.kind" class="select select-bordered select-sm sm:w-32" :disabled="!config.enabled">
-              <option value="manga">Manga</option>
-              <option value="comic">Comic</option>
-              <option value="gallery">Gallery</option>
-            </select>
-            <button
-              class="btn btn-primary btn-sm gap-1"
-              :disabled="!config.enabled || !importForm.path.trim() || importing"
-              @click="startImport"
-            >
-              <FolderInput class="size-4" />{{ importing ? "Importing…" : "Import" }}
-            </button>
-          </div>
+            <p class="text-xs text-base-content/40">Selecting several files imports them as one series.</p>
 
-          <div class="flex items-center gap-3 text-xs text-base-content/40">
-            <div class="h-px flex-1 bg-base-content/10"></div>
-            or upload a file
-            <div class="h-px flex-1 bg-base-content/10"></div>
+            <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import to use this.</p>
           </div>
-          <input
-            type="file"
-            accept=".cbz,.zip"
-            class="file-input file-input-bordered file-input-sm w-full"
-            :disabled="!config.enabled"
-            @change="uploadFile"
-          />
-
-          <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import above to use this.</p>
         </div>
       </div>
     </section>

@@ -22,7 +22,7 @@ from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.ingest.parser import PatternResult, parse_pattern
 from src.ingest.scanner import Candidate, order_chapters, resolve_books, sync_chapter
-from src.media.containers import open_container
+from src.media.containers import open_container, write_cbz
 from src.media.encode_pool import encode_pages
 from src.media.thumbnails import ThumbnailStore
 
@@ -130,7 +130,7 @@ def _import_book(
 ) -> Book | None:
     """Transcode one source book's pages to AVIF and register it. Returns the new Book,
     or None if it was already imported (idempotent) or the source can't be read."""
-    rel = f"{series.id}/{_book_key(candidate)}"
+    rel = f"{series.id}/{_book_key(candidate)}.cbz"
     already = session.scalar(
         select(Book.id).where(
             Book.library_id == library.id, Book.path_rel == rel, Book.deleted_at.is_(None)
@@ -144,20 +144,17 @@ def _import_book(
     except LycheeError as exc:
         logger.warning("import_skip_unreadable", path=str(candidate.path), error=str(exc))
         return None
-    out_dir = storage_root / "imports" / rel
-    out_dir.mkdir(parents=True, exist_ok=True)
-    size = 0
-    # transcode to AVIF at the configured quality, possibly across the encode pool
-    for index, data in enumerate(encode_pages(raws, quality=quality)):
-        _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
-        size += len(data)
+    # transcode to AVIF at the configured quality (possibly across the encode pool) and
+    # pack the pages into a stored CBZ
+    dest = storage_root / "imports" / rel
+    page_count, size = write_cbz(dest, encode_pages(raws, quality=quality))
     book = Book(
         series_id=series.id,
         library_id=library.id,
         path_rel=rel,
-        content_kind="avif_dir",
+        content_kind="cbz",
         file_size=size,
-        page_count=len(raws),
+        page_count=page_count,
     )
     session.add(book)
     session.flush()
@@ -188,15 +185,17 @@ def import_path(
     storage_root: Path,
     quality: int,
     filename_pattern: str = "",
+    title: str | None = None,
     on_progress: Callable[[int, str], None] | None = None,
 ) -> dict[str, int]:
     """Import a container file or series folder, transcoding its pages to AVIF.
 
     Creates/reuses one series in the managed "Imports" library; each source book
-    becomes an ``avif_dir`` Book (+ Chapter). When ``filename_pattern`` is set, it fills
+    becomes a stored-CBZ Book (+ Chapter). When ``filename_pattern`` is set, it fills
     series/chapter/volume/title/credits from each filename (else the built-in parser).
-    Commits per book so progress is visible, then warms the series cover. Returns
-    ``{"booksImported": n}``.
+    ``title`` overrides the series name + identity (uploads pass a batch title, since
+    their staging dir has no meaningful name). Commits per book so progress is visible,
+    then warms the series cover. Returns ``{"booksImported": n}``.
     """
     if not source.exists():
         raise BadRequestError(f"import path not found: {source}")
@@ -205,16 +204,18 @@ def import_path(
     store = ThumbnailStore(storage_root / "thumbnails")
 
     source_name, candidates = _resolve_source(source)
-    # A pattern match on the first book can name the series (+ its year/credits); the
-    # source name stays the stable identity so re-import doesn't duplicate the series.
+    # A pattern match on the first book can name the series (+ its year/credits); failing
+    # that, an explicit ``title`` (uploads) or the source name. The identity keeps a
+    # re-import / re-upload of the same series from duplicating it.
     first = (
         parse_pattern(candidates[0].segments[-1], filename_pattern)
         if filename_pattern and candidates
         else None
     )
-    display_title = (first.series if first else None) or source_name
+    display_title = (first.series if first else None) or title or source_name
+    identity = display_title if title is not None else source_name
     series = _get_or_create_series(
-        session, library, path_rel=source_name, title=display_title, kind=series_kind
+        session, library, path_rel=identity, title=display_title, kind=series_kind
     )
     if first is not None:
         _apply_series_fields(session, series, first)

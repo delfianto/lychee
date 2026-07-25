@@ -7,8 +7,8 @@ A download runs in two phases so it can be paused and resumed:
   chapter in ``remote_json`` so it can be fetched later.
 * :func:`run_download_queue` drains those rows one at a time — for each, fetch
   page bytes from the provider, encode each to AVIF (discarding the original),
-  write to ``<storage>/downloads/<series>/<chapter>`` as an ``avif_dir`` Book,
-  and create the Chapter. It commits per chapter (and per page), so a pause
+  pack them into ``<storage>/downloads/<series>/<chapter>.cbz`` as a stored-CBZ
+  Book, and create the Chapter. It commits per chapter (and per page), so a pause
   takes effect at the next chapter boundary and progress is visible live.
 
 Downloaded books live in a "Downloads" library so serving resolves their path
@@ -31,6 +31,7 @@ from src.catalog.media import generate_series_cover
 from src.catalog.models import Book, Chapter, Library, Series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import Provider, RemoteChapter, get_provider
+from src.media.containers import write_cbz
 from src.media.encode_pool import encode_pages
 from src.media.thumbnails import ThumbnailStore
 
@@ -92,27 +93,27 @@ def _download_chapter(
     on_page: Callable[[int], None] | None = None,
 ) -> Chapter:
     pages = provider.fetch_pages(remote, data_saver=data_saver)
-    rel = f"{series.id}/{remote.provider_chapter_id}"
-    out_dir = storage_root / "downloads" / rel
-    out_dir.mkdir(parents=True, exist_ok=True)
+    rel = f"{series.id}/{remote.provider_chapter_id}.cbz"
+    dest = storage_root / "downloads" / rel
 
     total = len(pages) or 1
-    size = 0
-    # content-aware AVIF (discard original), possibly fanned across the encode pool
-    for index, data in enumerate(encode_pages(pages)):
-        _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
-        size += len(data)
-        task.progress = int((index + 1) / total * 100)
+
+    def _on_page(done: int) -> None:
+        task.progress = int(done / total * 100)
         if on_page is not None:
             on_page(task.progress)  # publish this chapter's page progress
+
+    # content-aware AVIF (discard original), possibly fanned across the encode pool,
+    # packed into a stored CBZ
+    page_count, size = write_cbz(dest, encode_pages(pages), on_page=_on_page)
 
     book = Book(
         series_id=series.id,
         library_id=library.id,
         path_rel=rel,
-        content_kind="avif_dir",
+        content_kind="cbz",
         file_size=size,
-        page_count=len(pages),
+        page_count=page_count,
     )
     session.add(book)
     session.flush()

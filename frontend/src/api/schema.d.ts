@@ -742,7 +742,7 @@ export interface paths {
         put?: never;
         /**
          * Upload Import
-         * @description Import an uploaded container file in the background (transcode → AVIF).
+         * @description Import uploaded container files in the background (transcode → AVIF, stored CBZ).
          */
         post: operations["upload_import_api_import_upload_post"];
         delete?: never;
@@ -1083,8 +1083,8 @@ export interface components {
         };
         /** Body_upload_import_api_import_upload_post */
         Body_upload_import_api_import_upload_post: {
-            /** File */
-            file: string;
+            /** Files */
+            files: string[];
             /**
              * Kind
              * @default manga
