@@ -18,10 +18,10 @@
   (ADR 01–19).
 - **PART H — ✅ done:** on-disk `Cover.avif` storage (canonical source + derived grid) + gallery
   artist/model two-level scan (artist folder → `SeriesCredit` + auto `Collection`). See PART H below.
-- **PART I — planned (spec'd not built):** **two-way** MangaDex account sync — local shelf/read edits
-  push to MangaDex per-action; a re-runnable pull brings status/read-markers/custom-lists→Collections/
-  metadata down with MangaDex as source of truth. No page downloads. Plus **no-volume** chapter
-  grouping. A sync, not a client. See PART I below.
+- **PART I — ✅ done:** **two-way** MangaDex account sync — local shelf/read edits push to MangaDex
+  per-action (threaded into the tracker sync-on-read machinery); a re-runnable Sync pulls
+  status/read-markers/custom-lists→Collections/metadata with MangaDex as source of truth. No page
+  downloads. Plus **no-volume** chapter grouping. A sync, not a client. See PART I below.
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -606,7 +606,7 @@ subfolder/cbz below = its own gallery.
 **Testing (both):** offline, building real dirs/CBZs in `tmp_path` like `test_scan_api.py` /
 `test_import_api.py`. New deps: none (Pillow AVIF + stdlib `zipfile`).
 
-# PART I — Two-way MangaDex sync (status · read · lists) + no-volume grouping — planned (I0–I2)
+# PART I — Two-way MangaDex sync (status · read · lists) + no-volume grouping — ✅ done (I0–I2)
 
 > Decided 2026-07-25: a **two-way** sync with the MangaDex account. Local edits to a dex-linked series
 > **push to MangaDex the moment you make them** (per-action, like the AniList/MAL trackers); a re-runnable
@@ -621,6 +621,12 @@ subfolder/cbz below = its own gallery.
 > never the at-home page path — so it can't leak; the download provider stays unauthenticated.
 > **Push gate:** only series with a MangaDex id (`provider_series_id`) + a connected account push.
 
+**Shipped — deviations from the spec:** `Chapter.provider_chapter_id` already existed + is populated by
+the downloader, so no new column there — the only migration is `Collection.provider/provider_list_id`
+(`bac440c50fd8`). The account access token is cached **in-memory** (~14 min), not in a DB column — the
+single-worker queue makes that race-free. The endpoint was renamed `/import` → `/sync`, and the FE
+already labelled `volume=null` (just capitalised to "No Volume").
+
 **Conflict policy (per data type):**
 
 | Data | Direction | Resolution |
@@ -632,70 +638,70 @@ subfolder/cbz below = its own gallery.
 | Favorite · personal rating | local only | not synced |
 | Unfollow / removal on MD | — | **never delete** a series with downloaded chapters; just clear its shelf |
 
-## I0 — Inbound sync (pull; MangaDex is source of truth)
+## I0 — Inbound sync (pull; MangaDex is source of truth) — ✅ done
 
 **Today:** `POST /api/providers/mangadex/import` (`providers/mangadex_account.py::import_follows`) is a
 one-shot — authed → `list_follows` + `reading_status` → upsert Series into the virtual "MangaDex"
 library, `apply_metadata`, status → `library_status`. No custom lists, no read markers, no re-sync.
 
 **Target:** an idempotent Sync over the union of follows ∪ status'd ∪ custom-list-member manga.
-- [ ] **Provider:** add `list_custom_lists()` → `GET /user/list` (paged, Bearer) → `[{id, name,
+- [x] **Provider:** add `list_custom_lists()` → `GET /user/list` (paged, Bearer) → `[{id, name,
       manga_ids}]` (manga ids ride in each `CustomList.relationships` — verified live; no per-list call
       needed). Add `read_markers(manga_ids)` → batch `GET /manga/read?ids[]=` → `{manga_id:[chapter_id]}`.
       `list_follows` + `reading_status` already exist. (Bonus, later: `/list/{id}/feed` → "follow a list".)
-- [ ] **Series set = union:** follows ∪ status'd ∪ list members; `get_metadata` for any not covered.
+- [x] **Series set = union:** follows ∪ status'd ∪ list members; `get_metadata` for any not covered.
       Upsert by `(provider, provider_series_id)` (existing) — so a scanned-and-matched series is the *same*
       row (no duplicate; sync updates it in place).
-- [ ] **Status → shelf (MD-wins):** `_READING_STATUSES` → `library_status`, overwriting local. Paired with
+- [x] **Status → shelf (MD-wins):** `_READING_STATUSES` → `library_status`, overwriting local. Paired with
       the I1 push, local edits already reached MD, so a pull only lands genuine website-side changes.
-- [ ] **Read markers → progress (downloaded only):** needs `Chapter.provider_chapter_id` (nullable,
+- [x] **Read markers → progress (downloaded only):** needs `Chapter.provider_chapter_id` (nullable,
       indexed; migration), set by the downloader from `RemoteChapter.provider_chapter_id`. For each synced
       series **with local chapters**, mark `ReadingProgress` completed for chapters whose id ∈ the read set
       (additive v1 — don't unmark). Sync-only series → no-op; only request markers for series that have
       local chapters (bounds calls).
-- [ ] **Custom lists → Collections (managed):** add `provider` + `provider_list_id` (+ index) to
+- [x] **Custom lists → Collections (managed):** add `provider` + `provider_list_id` (+ index) to
       `Collection` (migration). Get-or-create by `(provider, provider_list_id)`, name from the MD list;
       reconcile membership. Surfaces in the Lists UI unchanged.
-- [ ] **Metadata + covers (mirror):** `apply_metadata` as today — `cover_source` = MD cover URL, lazy.
+- [x] **Metadata + covers (mirror):** `apply_metadata` as today — `cover_source` = MD cover URL, lazy.
       **No page downloads.** Never delete a series on unfollow (clear shelf only, keep any downloads).
-- [ ] **Re-runnable action:** **"Sync from MangaDex"** (202 + SSE queue task); reuse the account button.
+- [x] **Re-runnable action:** **"Sync from MangaDex"** (202 + SSE queue task); reuse the account button.
       Optional `last_synced_at` on the Provider row.
-- [ ] **Tests:** stub provider → follows + statuses + two overlapping lists + read markers → one Series per
+- [x] **Tests:** stub provider → follows + statuses + two overlapping lists + read markers → one Series per
       unique manga, shelves set, two Collections w/ membership, read chapters completed on a downloaded
       series (no-op on a sync-only one); re-sync idempotent (no dup series/collections/members).
 
-## I1 — Outbound sync (push; per-action, immediate)
+## I1 — Outbound sync (push; per-action, immediate) — ✅ done
 
 **Today:** local shelf/progress edits stay local for MangaDex-linked series (the AniList/MAL/MU trackers
 push local changes out; MangaDex — a *provider* — does not).
 
 **Target:** on a dex-linked series, push local edits to MangaDex the moment they happen.
-- [ ] **Status push:** when `library_status` changes on a series with `provider="mangadex"` +
+- [x] **Status push:** when `library_status` changes on a series with `provider="mangadex"` +
       `provider_series_id` + a connected account → `POST /manga/{id}/status` `{status|null}` (map
       `_READING_STATUSES`; `none` → clear). Fire where the trackers hook the shelf change.
-- [ ] **Read push:** when a chapter is completed on such a series → `POST /manga/{id}/read`
+- [x] **Read push:** when a chapter is completed on such a series → `POST /manga/{id}/read`
       `{chapterIdsRead:[<provider_chapter_id>]}` (uses the I0 `Chapter.provider_chapter_id`). Hook the
       progress-completed path (the trackers' sync-on-read point).
-- [ ] **Best-effort:** fire-and-forget through the client's retry/rate-limit; a failed push isn't fatal (a
+- [x] **Best-effort:** fire-and-forget through the client's retry/rate-limit; a failed push isn't fatal (a
       later pull may revert — acceptable v1; retry queue later). Never attach the Bearer to page fetches.
-- [ ] **Reuse:** thread MangaDex into the existing tracker sync-on-read trigger points rather than new call
+- [x] **Reuse:** thread MangaDex into the existing tracker sync-on-read trigger points rather than new call
       sites — one place decides "push to all connected sinks".
-- [ ] **Tests:** shelf change on a dex-linked + connected series → `status` POST with the mapped value; a
+- [x] **Tests:** shelf change on a dex-linked + connected series → `status` POST with the mapped value; a
       non-dex or disconnected series → no push; chapter-completed → `read` POST carrying the MD chapter id.
 
-## I2 — No-volume chapter grouping ("No Volume" on top)
+## I2 — No-volume chapter grouping ("No Volume" on top) — ✅ done
 
 **Today:** `catalog/service.py::list_chapters` groups by nullable `volume` (good) but emits groups in
 **first-seen order** of a `number_sort`-ordered list — so a `null`-volume group interleaves among
 numbered volumes, and the FE has no label for `volume: null`.
 
 **Target:** deterministic grouping with loose chapters up top (MangaDex-style).
-- [ ] **BE group order:** emit the `null` ("No Volume") group **first**, then numbered volumes by number
+- [x] **BE group order:** emit the `null` ("No Volume") group **first**, then numbered volumes by number
       **descending** (latest first). Within a group keep the existing chapter order.
-- [ ] **FE label:** `ChapterList` renders `volume === null` as a **"No Volume"** heading (not "Volume ").
-- [ ] **Pure-loose (nice-to-have):** a series with only null volumes may render as a flat list; the "No
+- [x] **FE label:** `ChapterList` renders `volume === null` as a **"No Volume"** heading (not "Volume ").
+- [x] **Pure-loose (nice-to-have):** a series with only null volumes may render as a flat list; the "No
       Volume" heading is harmless either way — decide in impl.
-- [ ] **Tests:** volumes {null, 1, 2} → group order [null, 2, 1]; non-numeric MD volumes land in the null
+- [x] **Tests:** volumes {null, 1, 2} → group order [null, 2, 1]; non-numeric MD volumes land in the null
       group (already true); the null group is labeled "No Volume" in the FE.
 
 **Testing (all):** offline — stub the provider (no network), fixtures in `tmp_path`; migrations for
