@@ -52,6 +52,22 @@ async function startImport(): Promise<void> {
   }
   toast("Import started…"); // progress + result arrive via the localimport task's SSE
 }
+async function uploadFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", importForm.kind);
+  // Raw fetch (multipart) rather than the JSON openapi-fetch client.
+  const resp = await fetch("/api/import/upload", { method: "POST", body: form });
+  input.value = ""; // allow re-picking the same file
+  if (!resp.ok) {
+    toast("Upload failed — check the file type/size and that import is enabled", "error");
+    return;
+  }
+  toast("Upload started…"); // result arrives via the localimport SSE
+}
 const disposeDone = onTaskDone((task) => {
   if (task.kind !== "localimport") return;
   if (task.status === "done") {
@@ -159,6 +175,20 @@ onMounted(async () => {
               <FolderInput class="size-4" />{{ importing ? "Importing…" : "Import" }}
             </button>
           </div>
+
+          <div class="flex items-center gap-3 text-xs text-base-content/40">
+            <div class="h-px flex-1 bg-base-content/10"></div>
+            or upload a file
+            <div class="h-px flex-1 bg-base-content/10"></div>
+          </div>
+          <input
+            type="file"
+            accept=".cbz,.zip"
+            class="file-input file-input-bordered file-input-sm w-full"
+            :disabled="!config.enabled"
+            @change="uploadFile"
+          />
+
           <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import above to use this.</p>
         </div>
       </div>

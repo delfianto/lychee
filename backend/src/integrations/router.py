@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from typing import Annotated
+
+from fastapi import APIRouter, Form, Response, UploadFile, status
 
 from src.core.persistence.database import DbSession
 from src.downloads.deps import StorageRootDep
@@ -120,6 +122,17 @@ def update_import_config(db: DbSession, data: ImportConfigUpdate) -> ImportConfi
 def start_import(db: DbSession, storage: StorageRootDep, data: ImportRequest) -> TaskOut:
     """Import a local container file or folder in the background (transcode → AVIF)."""
     return local_import_svc.start_import(db, data, storage)
+
+
+@router.post("/import/upload", status_code=status.HTTP_202_ACCEPTED)
+async def upload_import(
+    db: DbSession,
+    storage: StorageRootDep,
+    file: UploadFile,
+    kind: Annotated[str, Form()] = "manga",
+) -> TaskOut:
+    """Import an uploaded container file in the background (transcode → AVIF)."""
+    return await local_import_svc.start_upload_import(db, file, kind, storage)
 
 
 @router.get("/about")
