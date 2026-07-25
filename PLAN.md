@@ -60,7 +60,9 @@
    - [x] Move-restore preserves reading progress — a soft-delete snapshots its chapters' progress onto
          `Book.restore_progress_json`; a restore (matched by size + hash) re-applies it by chapter number.
          `partial_hash` is now **xxh3-128** (xxhash dep). ✅
-   - [~] Taxonomy seed is hand-curated MangaDex-aligned, not fetched from `/manga/tag`.
+   - [x] Taxonomy refresh from `/manga/tag` — `POST /api/taxonomy/refresh` (queue) fetches the provider's
+         canonical tag list and adds any missing tags (idempotent; user edits kept). FE: a Refresh button
+         on Settings → Content. The hand-curated seed remains the offline default. ✅
 5. **FE polish + backlog:** see PART A remaining and PART E.
 
 ---

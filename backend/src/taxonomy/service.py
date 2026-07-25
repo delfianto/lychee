@@ -8,6 +8,7 @@ content_rating/demographic from the matching ``Series`` column. System rows
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,10 +16,14 @@ from sqlalchemy.orm import Session
 from src.catalog.models import Series
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import OffsetPage
+from src.downloads.provider import get_metadata_provider
+from src.tasks.queue import Work, queue
+from src.tasks.schema import TaskOut
 from src.taxonomy.models import Tag, series_tag
 from src.taxonomy.schema import TaxonomyCreate, TaxonomyItemOut, TaxonomyUpdate
 
 _USER_GROUPS = {"genre", "theme", "content", "format"}
+_TAXONOMY_PROVIDER = "mangadex"
 
 
 def _uses_maps(session: Session) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
@@ -122,3 +127,31 @@ def delete_taxonomy(session: Session, tag_id: str) -> None:
         raise BadRequestError("system taxonomy rows cannot be deleted")
     session.delete(tag)
     session.commit()
+
+
+def _refresh_work() -> Work:
+    def work(session: Session, _on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        provider = get_metadata_provider(_TAXONOMY_PROVIDER)
+        if provider is None:
+            raise BadRequestError(f"metadata provider {_TAXONOMY_PROVIDER!r} is not available")
+        existing = set(session.scalars(select(Tag.id)))
+        added = 0
+        for name, group in provider.list_tags():
+            slug = _slugify(name)
+            if slug not in existing:
+                session.add(
+                    Tag(id=slug, name=name, group=group if group in _USER_GROUPS else "genre")
+                )
+                existing.add(slug)
+                added += 1
+        return {"added": added}
+
+    return work
+
+
+def refresh_taxonomy(session: Session) -> TaskOut:
+    """Add any tags missing from the provider's canonical list (idempotent; user edits and
+    extra tags are kept). Runs on the task queue since it hits the network."""
+    if get_metadata_provider(_TAXONOMY_PROVIDER) is None:
+        raise BadRequestError(f"metadata provider {_TAXONOMY_PROVIDER!r} is not available")
+    return queue.submit_task("taxonomy", "Refreshing tag taxonomy", _refresh_work())

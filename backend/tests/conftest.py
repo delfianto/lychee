@@ -36,6 +36,9 @@ class _OfflineProvider:
     def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:
         return []
 
+    def list_tags(self, *, language: str = "en") -> list[tuple[str, str]]:
+        return []
+
     def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
         raise NotImplementedError
 

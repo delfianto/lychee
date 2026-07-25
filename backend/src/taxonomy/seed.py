@@ -2,7 +2,8 @@
 
 Idempotent: only inserts rows whose id (slug) is absent, so user edits to
 ``name`` / ``enabled`` and user-created tags survive restarts. The exact MangaDex
-set can be refreshed later from ``/manga/tag`` (PLAN follow-up); slugs are stable.
+set can be refreshed from ``/manga/tag`` via ``POST /api/taxonomy/refresh``; slugs
+are stable.
 
 The four ``genre|theme|content|format`` groups link to series via ``series_tag``.
 ``content_rating`` and ``demographic`` are fixed enum groups: ``system`` rows whose

@@ -785,6 +785,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxonomy/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Taxonomy
+         * @description Refresh the tag list from the metadata provider (adds missing tags) in the background.
+         */
+        post: operations["refresh_taxonomy_api_taxonomy_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/taxonomy/{tag_id}": {
         parameters: {
             query?: never;
@@ -3078,6 +3098,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_taxonomy_api_taxonomy_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
         };

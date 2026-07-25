@@ -83,6 +83,10 @@ class MetadataProvider(Protocol):
         self, provider_series_id: str, *, known: set[str], language: str = "en"
     ) -> list[RemoteChapter]: ...
 
+    def list_tags(self, *, language: str = "en") -> list[tuple[str, str]]:
+        """The provider's canonical tag list as ``(name, group)`` pairs."""
+        ...
+
 
 _REGISTRY: dict[str, Provider] = {}
 
