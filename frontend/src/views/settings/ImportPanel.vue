@@ -3,7 +3,7 @@
 // transcoding their pages to AVIF — the enable toggle, page quality, and the
 // filename→metadata token pattern — plus the import action itself. Config persists
 // on change (watch → PATCH); imports run on the queue and report via SSE.
-import { FileText, FolderInput, Gauge, HardDriveDownload, X } from "lucide-vue-next";
+import { Bookmark, FileText, FolderInput, Gauge, HardDriveDownload, Save, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { api } from "../../api/client";
@@ -170,33 +170,49 @@ onMounted(async () => {
                 · <code class="text-primary/70">*</code> ignores a segment
               </p>
               <!-- Saved pattern presets (reusable, stored server-side with the config) -->
-              <div class="flex flex-wrap items-center gap-1.5 pt-1">
-                <span
-                  v-for="p in presets"
-                  :key="p.name"
-                  class="badge badge-outline cursor-pointer gap-1 hover:border-primary"
-                  :title="p.pattern"
-                  @click="applyPreset(p)"
-                >
-                  {{ p.name }}
-                  <button class="opacity-60 hover:opacity-100" aria-label="Delete preset" @click.stop="deletePreset(p.name)">
-                    <X class="size-3" />
+              <div class="mt-1 flex flex-col gap-1.5 border-t border-base-content/10 pt-3">
+                <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/60">
+                  <Bookmark class="size-3.5" />Presets
+                </div>
+                <div v-if="presets.length" class="flex flex-col gap-1">
+                  <div
+                    v-for="p in presets"
+                    :key="p.name"
+                    class="group flex items-center gap-2 rounded-md border border-base-content/10 px-2.5 py-1.5 transition hover:border-primary/50 hover:bg-base-200/40"
+                  >
+                    <button class="min-w-0 flex-1 text-left" @click="applyPreset(p)">
+                      <div class="flex items-center gap-2">
+                        <span class="truncate text-sm font-medium">{{ p.name }}</span>
+                        <span v-if="config.filenamePattern === p.pattern" class="badge badge-primary badge-xs">active</span>
+                      </div>
+                      <div class="truncate font-mono text-xs text-base-content/50">{{ p.pattern }}</div>
+                    </button>
+                    <button
+                      class="btn btn-ghost btn-xs btn-circle text-base-content/40 opacity-0 transition hover:text-error group-hover:opacity-100"
+                      aria-label="Delete preset"
+                      @click="deletePreset(p.name)"
+                    >
+                      <X class="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p v-else class="text-xs text-base-content/40">No presets yet — name the pattern above to reuse it.</p>
+                <div class="mt-0.5 flex gap-2">
+                  <input
+                    v-model="presetName"
+                    type="text"
+                    placeholder="Name this pattern"
+                    class="input input-bordered input-xs flex-1"
+                    @keyup.enter="savePreset"
+                  />
+                  <button
+                    class="btn btn-primary btn-xs gap-1"
+                    :disabled="!presetName.trim() || !config.filenamePattern.trim()"
+                    @click="savePreset"
+                  >
+                    <Save class="size-3.5" />Save preset
                   </button>
-                </span>
-                <input
-                  v-model="presetName"
-                  type="text"
-                  placeholder="Preset name"
-                  class="input input-bordered input-xs w-32"
-                  @keyup.enter="savePreset"
-                />
-                <button
-                  class="btn btn-ghost btn-xs"
-                  :disabled="!presetName.trim() || !config.filenamePattern.trim()"
-                  @click="savePreset"
-                >
-                  Save preset
-                </button>
+                </div>
               </div>
             </div>
           </div>

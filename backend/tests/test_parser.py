@@ -110,11 +110,11 @@ def test_pattern_language_token_lowercased() -> None:
     assert r.number == "12"
 
 
-def test_pattern_tags_token_splits_and_strips() -> None:
-    r = parse_pattern("Vinland Saga [action, dark fantasy; seinen] c001", "{series} [{tags}] c{chapter}")
+def test_pattern_tags_token_is_comma_separated_and_trimmed() -> None:
+    r = parse_pattern("Vinland Saga [ action ,  dark fantasy , seinen ] c001", "{series} [{tags}] c{chapter}")
     assert r is not None
     assert r.series == "Vinland Saga"
-    assert r.tags == ("action", "dark fantasy", "seinen")  # split on ,/;/ and stripped
+    assert r.tags == ("action", "dark fantasy", "seinen")  # comma-separated, each trimmed
 
 
 def test_pattern_without_new_tokens_leaves_them_empty() -> None:

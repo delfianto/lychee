@@ -120,7 +120,8 @@ def parse_pattern(filename: str, pattern: str) -> PatternResult | None:
     number = groups.get("chapter")
     language = text("language")
     tags_raw = groups.get("tags")
-    tags = tuple(t.strip() for t in re.split(r"[,;/]", tags_raw) if t.strip()) if tags_raw else ()
+    # {tags} is a comma-separated value: split on commas, trim each, drop empties.
+    tags = tuple(t.strip() for t in tags_raw.split(",") if t.strip()) if tags_raw else ()
     return PatternResult(
         series=text("series"),
         title=text("title"),
