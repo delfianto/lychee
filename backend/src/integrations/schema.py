@@ -100,3 +100,10 @@ class ImportConfigUpdate(CamelModel):
     enabled: bool | None = None
     quality: int | None = Field(default=None, ge=1, le=100)
     filename_pattern: str | None = None
+
+
+class ImportRequest(CamelModel):
+    """Import a container file or folder from a path on the server."""
+
+    path: str
+    kind: str = "manga"

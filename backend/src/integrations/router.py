@@ -5,8 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Response, status
 
 from src.core.persistence.database import DbSession
+from src.downloads.deps import StorageRootDep
 from src.integrations import about as about_svc
 from src.integrations import import_config as import_svc
+from src.integrations import local_import as local_import_svc
 from src.integrations import providers as providers_svc
 from src.integrations import sync as sync_svc
 from src.integrations import trackers as trackers_svc
@@ -14,6 +16,7 @@ from src.integrations.schema import (
     AboutOut,
     ImportConfigOut,
     ImportConfigUpdate,
+    ImportRequest,
     ProviderConnect,
     ProviderOut,
     ProviderUpdate,
@@ -111,6 +114,12 @@ def get_import_config(db: DbSession) -> ImportConfigOut:
 @router.patch("/import/config")
 def update_import_config(db: DbSession, data: ImportConfigUpdate) -> ImportConfigOut:
     return import_svc.update_import_config(db, data)
+
+
+@router.post("/import", status_code=status.HTTP_202_ACCEPTED)
+def start_import(db: DbSession, storage: StorageRootDep, data: ImportRequest) -> TaskOut:
+    """Import a local container file or folder in the background (transcode → AVIF)."""
+    return local_import_svc.start_import(db, data, storage)
 
 
 @router.get("/about")
