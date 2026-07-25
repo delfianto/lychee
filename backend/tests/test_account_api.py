@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from src.core.config import settings
 from src.core.crypto import decrypt
 from src.downloads.provider import SeriesMetadata
-from src.integrations import service
 from src.integrations.models import Provider
+from src.providers import mangadex_account
 from src.providers.mangadex_auth import TokenPair
 from src.tasks.queue import queue
 
@@ -28,7 +28,7 @@ def test_connect_stores_encrypted_secrets(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "secret_key", "test-key")
-    monkeypatch.setattr(service, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
+    monkeypatch.setattr(mangadex_account, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
 
     resp = client.post(
         "/api/providers/mangadex/connect",
@@ -49,14 +49,14 @@ def test_import_creates_followed_series_with_status(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "secret_key", "test-key")
-    monkeypatch.setattr(service, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
+    monkeypatch.setattr(mangadex_account, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
     assert client.post(
         "/api/providers/mangadex/connect",
         json={"clientId": "cid", "clientSecret": "csecret", "username": "me", "password": "pw"},
     ).status_code == 200
 
-    monkeypatch.setattr(service, "refresh_grant", lambda **_kw: TokenPair("acc2", "refresh-2"))
-    monkeypatch.setattr(service, "_authed_provider", lambda _token: _FakeAuthedProvider())
+    monkeypatch.setattr(mangadex_account, "refresh_grant", lambda **_kw: TokenPair("acc2", "refresh-2"))
+    monkeypatch.setattr(mangadex_account, "_authed_provider", lambda _token: _FakeAuthedProvider())
 
     assert client.post("/api/providers/mangadex/import").status_code == 202
     queue.wait_idle()
