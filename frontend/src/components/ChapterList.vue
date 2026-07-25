@@ -47,7 +47,7 @@ const tab = ref<"chapters" | "related" | "art">("chapters");
 
       <div v-for="vg in volumes" :key="vg.volume ?? 'none'" class="flex flex-col gap-1">
         <div class="text-sm font-semibold text-base-content/70">
-          {{ vg.volume === null ? "No volume" : `Volume ${vg.volume}` }}
+          {{ vg.volume === null ? "No Volume" : `Volume ${vg.volume}` }}
         </div>
         <div class="overflow-hidden rounded-box border border-base-300">
           <RouterLink
