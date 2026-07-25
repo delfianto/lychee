@@ -185,10 +185,12 @@ def to_chapter_out(row: ChapterRow) -> ChapterOut:
 def list_chapters(
     session: Session, series_id: str, *, language: str | None, order: str
 ) -> list[VolumeGroupOut]:
-    """Chapters grouped by volume, preserving the requested chapter order."""
+    """Chapters grouped by volume, preserving the requested chapter order. The "No Volume"
+    group (loose chapters) sorts first; numbered volumes follow the chapter order direction."""
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
-    rows = repo.list_chapters(session, series_id, language=language, descending=order != "asc")
+    ascending = order == "asc"
+    rows = repo.list_chapters(session, series_id, language=language, descending=not ascending)
     groups: list[VolumeGroupOut] = []
     by_volume: dict[int | None, VolumeGroupOut] = {}
     for row in rows:
@@ -199,6 +201,8 @@ def list_chapters(
             by_volume[volume] = group
             groups.append(group)
         group.chapters.append(to_chapter_out(row))
+    # No Volume (null) first, then numbered volumes ascending or descending to match chapters.
+    groups.sort(key=lambda g: (g.volume is not None, (g.volume or 0) if ascending else -(g.volume or 0)))
     return groups
 
 

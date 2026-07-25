@@ -194,3 +194,24 @@ def test_page_without_width_serves_original(
     assert chapter is not None
     resp = client.get(f"/api/chapters/{chapter.id}/pages/1")
     assert resp.headers["content-type"] == "image/png"  # untouched original
+
+
+def test_chapters_group_no_volume_first_then_descending(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    library = ensure_library(db_session)
+    library.path = str(tmp_path / "lib")
+    series = Series(library_id=library.id, kind="manga", title="Vol Test", sort_title="vol test")
+    db_session.add(series)
+    db_session.flush()
+    book = Book(series_id=series.id, library_id=library.id, path_rel=series.id, content_kind="image_dir", page_count=1)
+    db_session.add(book)
+    db_session.flush()
+    for volume, number, sort in [(None, "100", 100.0), (1, "1", 1.0), (2, "10", 10.0)]:
+        db_session.add(
+            Chapter(series_id=series.id, book_id=book.id, volume=volume, number=number, number_sort=sort, page_count=1)
+        )
+    db_session.commit()
+
+    groups = client.get(f"/api/series/{series.id}/chapters").json()
+    assert [g["volume"] for g in groups] == [None, 2, 1]  # No Volume first, then volumes descending
