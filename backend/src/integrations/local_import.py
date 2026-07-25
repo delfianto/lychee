@@ -24,13 +24,14 @@ _KINDS = {"manga", "comic", "gallery"}
 
 def _import_work(source: str, kind: str, storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
-        quality = get_config_row(session).quality  # read fresh at run time
+        cfg = get_config_row(session)  # read quality + pattern fresh at run time
         return import_path(
             session,
             Path(source),
             kind=kind,
             storage_root=storage_root,
-            quality=quality,
+            quality=cfg.quality,
+            filename_pattern=cfg.filename_pattern,
             on_progress=on_progress,
         )
 

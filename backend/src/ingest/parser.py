@@ -43,6 +43,90 @@ class ParsedName:
     label: str | None  # special label, e.g. "Omake"
 
 
+@dataclass(frozen=True)
+class PatternResult:
+    """Metadata pulled from a filename by a user token pattern (PART G / G4)."""
+
+    series: str | None = None
+    title: str | None = None  # chapter title
+    volume: int | None = None
+    number: str | None = None  # display chapter number
+    number_sort: float | None = None
+    author: str | None = None
+    artist: str | None = None
+    group: str | None = None
+    year: int | None = None
+
+
+# Token → capture regex. Text tokens are lazy so a following literal still matches.
+_PATTERN_TOKENS = {
+    "series": r".+?",
+    "title": r".+?",
+    "author": r".+?",
+    "artist": r".+?",
+    "group": r".+?",
+    "volume": r"\d{1,4}",
+    "year": r"(?:19|20)\d{2}",
+    "chapter": r"\d{1,5}(?:\.\d+)?",
+}
+# A template splits into: a {token}, a * wildcard, or a literal run.
+_PATTERN_PART = re.compile(r"\{(\w+)\}|(\*)|([^{}*]+)")
+
+
+def _compile_pattern(pattern: str) -> re.Pattern[str] | None:
+    """Compile a token template (e.g. ``{series} - c{chapter}``) into a regex, or None
+    if it has no known tokens / an unknown or repeated token / is otherwise invalid."""
+    parts: list[str] = []
+    seen: set[str] = set()
+    for match in _PATTERN_PART.finditer(pattern):
+        token, star, literal = match.groups()
+        if token is not None:
+            if token not in _PATTERN_TOKENS or token in seen:
+                return None
+            seen.add(token)
+            parts.append(f"(?P<{token}>{_PATTERN_TOKENS[token]})")
+        elif star is not None:
+            parts.append(r".*?")
+        else:
+            parts.append(re.escape(literal))
+    if not seen:
+        return None
+    try:
+        return re.compile("".join(parts), re.IGNORECASE)
+    except re.error:
+        return None
+
+
+def parse_pattern(filename: str, pattern: str) -> PatternResult | None:
+    """Extract metadata from ``filename`` using a token ``pattern``. The template must
+    match the whole (extension-stripped) name — use ``*`` to ignore a run of text.
+    Returns None on no match / bad pattern — the caller then falls back to :func:`parse`."""
+    compiled = _compile_pattern(pattern)
+    if compiled is None:
+        return None
+    match = compiled.fullmatch(_strip_ext(filename))
+    if match is None:
+        return None
+    groups = match.groupdict()
+
+    def text(name: str) -> str | None:
+        value = groups.get(name)
+        return value.strip() if value and value.strip() else None
+
+    number = groups.get("chapter")
+    return PatternResult(
+        series=text("series"),
+        title=text("title"),
+        volume=int(groups["volume"]) if groups.get("volume") else None,
+        number=_trim(number) if number else None,
+        number_sort=float(number) if number else None,
+        author=text("author"),
+        artist=text("artist"),
+        group=text("group"),
+        year=int(groups["year"]) if groups.get("year") else None,
+    )
+
+
 def _strip_ext(name: str) -> str:
     return re.sub(r"\.(cbz|cbr|zip|rar|7z|pdf|epub)$", "", name, flags=re.IGNORECASE)
 

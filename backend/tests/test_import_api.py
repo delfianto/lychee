@@ -92,6 +92,29 @@ def test_import_is_idempotent(client: TestClient, tmp_path: Path) -> None:
     assert titles.count("Frieren") == 1
 
 
+def test_import_applies_filename_pattern(client: TestClient, tmp_path: Path) -> None:
+    _enable(client)
+    assert client.patch(
+        "/api/import/config", json={"filenamePattern": "{author} - {series} - c{chapter}"}
+    ).status_code == 200
+    root = tmp_path / "incoming" / "raw"  # folder name is ignored; the pattern names the series
+    _cbz(root / "Kentaro Miura - Berserk - c001.cbz", 2)
+    _cbz(root / "Kentaro Miura - Berserk - c002.cbz", 2)
+
+    assert client.post("/api/import", json={"path": str(root), "kind": "manga"}).status_code == 202
+    queue.wait_idle()
+
+    series = _series_by_title(client, "Berserk")  # {series}, not the "raw" folder
+    assert series["chapterCount"] == 2
+    assert "Kentaro Miura" in series["authors"]  # {author} → credit
+    numbers = sorted(
+        c["number"]
+        for group in client.get(f"/api/series/{series['id']}/chapters").json()
+        for c in group["chapters"]
+    )
+    assert numbers == ["1", "2"]  # {chapter}
+
+
 def test_import_bad_path_rejected(client: TestClient, tmp_path: Path) -> None:
     _enable(client)
     missing = client.post("/api/import", json={"path": str(tmp_path / "nope.cbz"), "kind": "manga"})

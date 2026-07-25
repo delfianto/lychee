@@ -1,6 +1,6 @@
 """Filename parser regression corpus (ADR 06)."""
 
-from src.ingest.parser import parse
+from src.ingest.parser import parse, parse_pattern
 
 
 def test_nested_volume_and_chapter() -> None:
@@ -58,3 +58,45 @@ def test_volume_only_book_has_no_chapter() -> None:
     p = parse(["7 Seeds v03.cbz"], "7 Seeds")
     assert p.volume == 3
     assert p.number is None
+
+
+# --- filename → metadata token pattern (PART G / G4) ---
+
+
+def test_pattern_series_chapter_volume() -> None:
+    r = parse_pattern("Berserk - c012 (v02).cbz", "{series} - c{chapter} (v{volume})")
+    assert r is not None
+    assert (r.series, r.number, r.number_sort, r.volume) == ("Berserk", "12", 12.0, 2)
+
+
+def test_pattern_author_and_series() -> None:
+    r = parse_pattern("Kentaro Miura - Berserk - c001", "{author} - {series} - c{chapter}")
+    assert r is not None
+    assert (r.author, r.series, r.number) == ("Kentaro Miura", "Berserk", "1")
+
+
+def test_pattern_title_and_year() -> None:
+    r = parse_pattern("Naruto v03 (2005)", "{series} v{volume} ({year})")
+    assert r is not None
+    assert (r.series, r.volume, r.year) == ("Naruto", 3, 2005)
+
+
+def test_pattern_whole_name_is_series() -> None:
+    r = parse_pattern("Solo Leveling", "{series}")
+    assert r is not None and r.series == "Solo Leveling"
+
+
+def test_pattern_trailing_wildcard_ignores_extra() -> None:
+    r = parse_pattern("Berserk - c012 [scan] (2020)", "{series} - c{chapter}*")
+    assert r is not None
+    assert (r.series, r.number) == ("Berserk", "12")
+
+
+def test_pattern_no_full_match_returns_none() -> None:
+    assert parse_pattern("random_stuff.cbz", "{series} - c{chapter}") is None
+
+
+def test_pattern_invalid_returns_none() -> None:
+    assert parse_pattern("anything", "") is None  # no tokens
+    assert parse_pattern("anything", "{bogus}") is None  # unknown token
+    assert parse_pattern("x - c1", "{series} {series}") is None  # duplicate token
