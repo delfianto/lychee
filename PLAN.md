@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **146
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **151
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -46,8 +46,8 @@
    - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
          AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
-         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G2 done
-         (quality override + eager thumbnails + import config/panel); G3–G5 remain.**
+         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G3 done
+         (quality override + eager thumbnails + import config/panel + the import job); G4–G5 remain.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -226,7 +226,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 146 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 151 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -376,7 +376,7 @@ override.
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
-# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G2 done)
+# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G3 done)
 
 Three related pieces of catalog-building polish:
 1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
@@ -454,18 +454,19 @@ Three related pieces of catalog-building polish:
       token legend. Screenshot-verified, zero JS errors. (Import form itself lands in G3.)
 - [x] Tests: defaults, PATCH persists, partial update, quality out-of-range → 422.
 
-**G3 — Local import job (walk → AVIF → catalog)**
-- [ ] `ingest/importer.py` `import_path(session, source, *, kind, storage_root, config, on_progress)` —
-      resolve books (reuse `parser` + `containers`; share the scanner's walk), transcode each page
-      `encode_bytes(raw, quality=config.quality)` → `NNN.avif` under `storage/imports/<series>/<book>`, create
-      `Book(content_kind="avif_dir")` + `Chapter` into a get-or-create **Imports** library, warm cover (G1).
-      Skip unreadable; per-book commit + progress.
-- [ ] `POST /api/import` `{path, kind?}` → validate `config.enabled` + path exists →
-      `queue.submit_task("localimport", f"Importing {name}", work)` → 202 + TaskOut. (Reject 400 when disabled.)
-- [ ] FE: import form in ImportPanel (server-path input + kind select + Import); follows SSE
-      (`activeTasks` / `onTaskDone` filter `kind === "localimport"`), toast on done.
-- [ ] Tests: import a tmp CBZ + a tmp image folder → `avif_dir` books created, pages serve as `image/avif`,
-      cover thumb generated; disabled → 400.
+**G3 — Local import job (walk → AVIF → catalog)** — ✅ done
+- [x] `ingest/importer.py` `import_path(session, source, *, kind, storage_root, quality, on_progress)` —
+      resolves the source (file → one book; folder → `resolve_books`), transcodes each page
+      `encode_bytes(raw, quality)` → `NNN.avif` under `storage/imports/<series>/<book>`, creates
+      `Book(content_kind="avif_dir")` + `Chapter` in a get-or-create **Imports** library, warms cover (G1).
+      Idempotent (skips already-imported books), per-book commit + progress. Promoted the reused scanner
+      helpers to public (`Candidate`, `resolve_books`, `sync_chapter`, `order_chapters`).
+- [x] `POST /api/import` `{path, kind}` (`integrations/local_import.py`) →
+      `queue.submit_task("localimport", …)` → 202 + TaskOut. Rejects 400 when disabled / bad kind / bad path.
+- [x] FE: "Import from a path" form in ImportPanel (path + kind + Import); follows SSE
+      (`activeTasks` / `onTaskDone` filter `kind === "localimport"`), toasts the result.
+- [x] Verified live (CBZ → served AVIF pages + warmed cover) + 5 tests: file, folder, idempotent,
+      disabled → 400, bad path → 400.
 
 **G4 — Filename → metadata pattern (LANraragi-style)**
 - [ ] Pattern engine in `parser.py`: `parse_pattern(filename, pattern) -> dict` — compile a token template
