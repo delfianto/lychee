@@ -13,17 +13,18 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.catalog.metadata import apply_metadata
-from src.catalog.models import Library, Series
+from src.catalog.models import Chapter, Library, Series
 from src.collections.models import Collection, CollectionSeries
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
 from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
+from src.progress.models import ReadingProgress
 from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import password_grant, refresh_grant
 from src.providers.mangadex_client import API_BASE, USER_AGENT
@@ -163,6 +164,48 @@ def _sync_lists(session: Session, lists: list[CustomList], series_by_id: dict[st
     return len(lists)
 
 
+def _sync_read_markers(
+    session: Session, provider: MangaDexProvider, series_by_id: dict[str, Series]
+) -> int:
+    """Pull MangaDex read markers onto local chapters of already-downloaded series (matched by
+    ``provider_chapter_id``). Additive — marks read, never un-reads. Writes progress directly
+    (no tracker push — this is the inbound side). Sync-only series (no local chapters) are a
+    no-op, so only series that have chapters are even requested."""
+    downloaded = {
+        md_id: series
+        for md_id, series in series_by_id.items()
+        if session.scalar(
+            select(func.count()).select_from(Chapter).where(Chapter.series_id == series.id)
+        )
+    }
+    if not downloaded:
+        return 0
+    markers = provider.read_markers(list(downloaded))
+    marked = 0
+    for md_id, series in downloaded.items():
+        read_ids = set(markers.get(md_id, []))
+        if not read_ids:
+            continue
+        chapters = session.scalars(
+            select(Chapter).where(
+                Chapter.series_id == series.id, Chapter.provider_chapter_id.in_(read_ids)
+            )
+        )
+        for chapter in chapters:
+            row = session.scalar(
+                select(ReadingProgress).where(ReadingProgress.chapter_id == chapter.id)
+            )
+            if row is not None and row.completed:
+                continue  # already read — additive, leave it
+            if row is None:
+                row = ReadingProgress(chapter_id=chapter.id, series_id=series.id)
+                session.add(row)
+            row.completed = True
+            row.current_page = chapter.page_count
+            marked += 1
+    return marked
+
+
 def _sync_work() -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         config = get_provider_row(session, _MANGADEX)
@@ -203,8 +246,10 @@ def _sync_work() -> Work:
 
         on_progress(95, "Syncing lists")
         synced_lists = _sync_lists(session, lists, series_by_id)
+        on_progress(98, "Syncing read markers")
+        marked = _sync_read_markers(session, provider, series_by_id)
         session.commit()
-        return {"synced": len(series_by_id), "lists": synced_lists}
+        return {"synced": len(series_by_id), "lists": synced_lists, "readMarked": marked}
 
     return work
 
