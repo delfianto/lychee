@@ -19,7 +19,7 @@ interface DlRow {
   size: string;
 }
 const dl = ref<DlRow[]>([]);
-const sync = reactive({ lastSync: "never", newChapters: 0, autoEvery: "6h", syncing: false });
+const sync = reactive({ lastSync: "never", newChapters: 0, syncing: false });
 const dlLabel: Record<string, string> = {
   downloading: "Downloading",
   queued: "Queued",
@@ -58,7 +58,6 @@ async function loadSync(): Promise<void> {
   if (!data) return;
   sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "never";
   sync.newChapters = data.newChapters;
-  sync.autoEvery = `${Math.max(1, Math.round(data.autoEveryMinutes / 60))}h`;
 }
 async function syncNow(): Promise<void> {
   sync.syncing = true;
@@ -130,8 +129,7 @@ onMounted(() => {
                 <div class="text-xs text-base-content/60">
                   <template v-if="sync.syncing">Checking for new chapters…</template>
                   <template v-else>
-                    Last synced {{ sync.lastSync }} · {{ sync.newChapters }} new chapters · auto every
-                    {{ sync.autoEvery }}
+                    Last synced {{ sync.lastSync }} · {{ sync.newChapters }} new chapters
                   </template>
                 </div>
               </div>
