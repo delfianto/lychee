@@ -3,14 +3,16 @@
 // transcoding their pages to AVIF — the enable toggle, page quality, and the
 // filename→metadata token pattern — plus the import action itself. Config persists
 // on change (watch → PATCH); imports run on the queue and report via SSE.
-import { FileText, FolderInput, Gauge, HardDriveDownload } from "lucide-vue-next";
-import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
+import { FileText, FolderInput, Gauge, HardDriveDownload, X } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
 import { toast } from "../../lib/toast";
 
 const config = reactive({ enabled: false, quality: 75, filenamePattern: "" });
+const presets = ref<{ name: string; pattern: string }[]>([]);
+const presetName = ref("");
 const qualityTiers = [
   { value: 85, label: "Higher quality" },
   { value: 75, label: "Balanced" },
@@ -27,6 +29,7 @@ async function loadConfig(): Promise<void> {
     config.enabled = data.enabled;
     config.quality = data.quality;
     config.filenamePattern = data.filenamePattern;
+    presets.value = data.patternPresets;
   }
 }
 watch(
@@ -42,6 +45,28 @@ watch(
     });
   },
 );
+// Presets are saved patterns (server-side, in the import config) you can reuse.
+async function savePresets(): Promise<void> {
+  await api.PATCH("/api/import/config", { body: { patternPresets: presets.value } });
+}
+function savePreset(): void {
+  const name = presetName.value.trim();
+  if (!name || !config.filenamePattern.trim()) return;
+  const preset = { name, pattern: config.filenamePattern };
+  const idx = presets.value.findIndex((p) => p.name === name);
+  if (idx >= 0) presets.value[idx] = preset; // overwrite same-named
+  else presets.value.push(preset);
+  presetName.value = "";
+  void savePresets();
+  toast(`Saved preset “${name}”`);
+}
+function applyPreset(preset: { name: string; pattern: string }): void {
+  config.filenamePattern = preset.pattern; // the config watch persists the active pattern
+}
+function deletePreset(name: string): void {
+  presets.value = presets.value.filter((p) => p.name !== name);
+  void savePresets();
+}
 async function startImport(): Promise<void> {
   const { error } = await api.POST("/api/import", {
     body: { path: importForm.path.trim(), kind: importForm.kind },
@@ -144,6 +169,35 @@ onMounted(async () => {
                 <code class="text-primary/70">{language}</code> <code class="text-primary/70">{tags}</code>
                 · <code class="text-primary/70">*</code> ignores a segment
               </p>
+              <!-- Saved pattern presets (reusable, stored server-side with the config) -->
+              <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                <span
+                  v-for="p in presets"
+                  :key="p.name"
+                  class="badge badge-outline cursor-pointer gap-1 hover:border-primary"
+                  :title="p.pattern"
+                  @click="applyPreset(p)"
+                >
+                  {{ p.name }}
+                  <button class="opacity-60 hover:opacity-100" aria-label="Delete preset" @click.stop="deletePreset(p.name)">
+                    <X class="size-3" />
+                  </button>
+                </span>
+                <input
+                  v-model="presetName"
+                  type="text"
+                  placeholder="Preset name"
+                  class="input input-bordered input-xs w-32"
+                  @keyup.enter="savePreset"
+                />
+                <button
+                  class="btn btn-ghost btn-xs"
+                  :disabled="!presetName.trim() || !config.filenamePattern.trim()"
+                  @click="savePreset"
+                >
+                  Save preset
+                </button>
+              </div>
             </div>
           </div>
         </div>

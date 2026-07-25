@@ -1229,6 +1229,8 @@ export interface components {
             quality: number;
             /** Filenamepattern */
             filenamePattern: string;
+            /** Patternpresets */
+            patternPresets: components["schemas"]["PatternPreset"][];
         };
         /** ImportConfigUpdate */
         ImportConfigUpdate: {
@@ -1238,6 +1240,8 @@ export interface components {
             quality?: number | null;
             /** Filenamepattern */
             filenamePattern?: string | null;
+            /** Patternpresets */
+            patternPresets?: components["schemas"]["PatternPreset"][] | null;
         };
         /**
          * ImportRequest
@@ -1356,6 +1360,16 @@ export interface components {
             items: string[];
             /** Nextcursor */
             nextCursor?: string | null;
+        };
+        /**
+         * PatternPreset
+         * @description A saved, reusable filename→metadata pattern.
+         */
+        PatternPreset: {
+            /** Name */
+            name: string;
+            /** Pattern */
+            pattern: string;
         };
         /** ProgressUpdate */
         ProgressUpdate: {

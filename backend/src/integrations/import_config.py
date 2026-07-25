@@ -10,14 +10,17 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from src.integrations.models import ImportConfig
-from src.integrations.schema import ImportConfigOut, ImportConfigUpdate
+from src.integrations.schema import ImportConfigOut, ImportConfigUpdate, PatternPreset
 
 IMPORT_CONFIG_ID = "default"
 
 
 def _out(cfg: ImportConfig) -> ImportConfigOut:
     return ImportConfigOut(
-        enabled=cfg.enabled, quality=cfg.quality, filename_pattern=cfg.filename_pattern
+        enabled=cfg.enabled,
+        quality=cfg.quality,
+        filename_pattern=cfg.filename_pattern,
+        pattern_presets=[PatternPreset.model_validate(p) for p in cfg.pattern_presets or []],
     )
 
 
@@ -43,5 +46,7 @@ def update_import_config(session: Session, data: ImportConfigUpdate) -> ImportCo
         cfg.quality = data.quality
     if data.filename_pattern is not None:
         cfg.filename_pattern = data.filename_pattern
+    if data.pattern_presets is not None:
+        cfg.pattern_presets = [p.model_dump() for p in data.pattern_presets]
     session.commit()
     return _out(cfg)
