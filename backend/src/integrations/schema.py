@@ -34,6 +34,25 @@ class ProviderConnect(CamelModel):
     password: str
 
 
+class TrackerConnect(CamelModel):
+    """Begin a tracker OAuth flow: client app credentials + the registered redirect URI."""
+
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+
+
+class TrackerAuthUrl(CamelModel):
+    authorize_url: str
+
+
+class TrackerCallback(CamelModel):
+    """Complete the flow with the authorization code returned to the redirect URI."""
+
+    code: str
+    redirect_uri: str
+
+
 class TrackerOut(CamelModel):
     id: str
     name: str

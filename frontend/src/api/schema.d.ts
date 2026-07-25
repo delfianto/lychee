@@ -620,8 +620,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Connect Tracker */
+        /**
+         * Connect Tracker
+         * @description Begin OAuth: store client credentials and return the authorize URL to visit.
+         */
         post: operations["connect_tracker_api_trackers__tracker_id__connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trackers/{tracker_id}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tracker Callback
+         * @description Complete OAuth with the code from the redirect; stores the token encrypted.
+         */
+        post: operations["tracker_callback_api_trackers__tracker_id__callback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1367,6 +1390,33 @@ export interface components {
             name?: string | null;
             /** Enabled */
             enabled?: boolean | null;
+        };
+        /** TrackerAuthUrl */
+        TrackerAuthUrl: {
+            /** Authorizeurl */
+            authorizeUrl: string;
+        };
+        /**
+         * TrackerCallback
+         * @description Complete the flow with the authorization code returned to the redirect URI.
+         */
+        TrackerCallback: {
+            /** Code */
+            code: string;
+            /** Redirecturi */
+            redirectUri: string;
+        };
+        /**
+         * TrackerConnect
+         * @description Begin a tracker OAuth flow: client app credentials + the registered redirect URI.
+         */
+        TrackerConnect: {
+            /** Clientid */
+            clientId: string;
+            /** Clientsecret */
+            clientSecret: string;
+            /** Redirecturi */
+            redirectUri: string;
         };
         /** TrackerOut */
         TrackerOut: {
@@ -2516,7 +2566,46 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackerConnect"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerAuthUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tracker_callback_api_trackers__tracker_id__callback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tracker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackerCallback"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

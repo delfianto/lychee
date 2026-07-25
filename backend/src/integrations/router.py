@@ -12,6 +12,9 @@ from src.integrations.schema import (
     ProviderOut,
     ProviderUpdate,
     SyncOut,
+    TrackerAuthUrl,
+    TrackerCallback,
+    TrackerConnect,
     TrackerOut,
     TrackerUpdate,
 )
@@ -58,8 +61,15 @@ def update_tracker(db: DbSession, tracker_id: str, data: TrackerUpdate) -> Track
 
 
 @router.post("/trackers/{tracker_id}/connect")
-def connect_tracker(db: DbSession, tracker_id: str) -> TrackerOut:
-    return service.connect_tracker(db, tracker_id)
+def connect_tracker(db: DbSession, tracker_id: str, data: TrackerConnect) -> TrackerAuthUrl:
+    """Begin OAuth: store client credentials and return the authorize URL to visit."""
+    return service.begin_tracker_connect(db, tracker_id, data)
+
+
+@router.post("/trackers/{tracker_id}/callback")
+def tracker_callback(db: DbSession, tracker_id: str, data: TrackerCallback) -> TrackerOut:
+    """Complete OAuth with the code from the redirect; stores the token encrypted."""
+    return service.complete_tracker_connect(db, tracker_id, data)
 
 
 @router.delete("/trackers/{tracker_id}", status_code=status.HTTP_204_NO_CONTENT)

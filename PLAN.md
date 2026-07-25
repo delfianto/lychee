@@ -26,8 +26,12 @@
    - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
          **PART F M0–M5 done** (only the automatic sync scheduler is deferred).
-   - [ ] **Tracker OAuth + outbound sync** for AniList/MangaUpdates/MAL (connect is a stub; nothing
-         pushes read status) — distinct from MangaDex; MangaDex `links` (PART F/M1) feed the match.
+   - [~] **Tracker OAuth + outbound sync.** AniList OAuth2 **connect done** — `src/trackers/` (Tracker
+         protocol + registry), authorize-URL + code-exchange + viewer lookup, tokens encrypted
+         (Tracker cols, migration `a453837`), `POST /api/trackers/{id}/connect` (→ authorize URL) +
+         `/callback`; FE two-step connect modal. **Remaining: outbound progress push
+         (SaveMediaListEntry on read) + MyAnimeList/MangaUpdates/NovelUpdates.** MangaDex `links`
+         (M1 `external_ids`, key `al`) feed the media-id match.
    - [x] **SSE** `/api/events` + `/api/tasks` + task tracker — scans emit live progress events. ✅ done.
    - [x] **Background execution queue** — `src/tasks/queue.py` runs scans + downloads on a worker
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress

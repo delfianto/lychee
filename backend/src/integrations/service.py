@@ -23,6 +23,9 @@ from src.integrations.schema import (
     ProviderOut,
     ProviderUpdate,
     SyncOut,
+    TrackerAuthUrl,
+    TrackerCallback,
+    TrackerConnect,
     TrackerOut,
     TrackerUpdate,
 )
@@ -32,6 +35,7 @@ from src.providers.mangadex_auth import password_grant, refresh_grant
 from src.providers.mangadex_client import API_BASE, USER_AGENT
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
+from src.trackers.base import get_tracker
 
 logger = get_logger(__name__)
 _STARTED = datetime.now(UTC)
@@ -225,21 +229,55 @@ def update_tracker(session: Session, tracker_id: str, data: TrackerUpdate) -> Tr
     return _tracker_out(tracker)
 
 
-def connect_tracker(session: Session, tracker_id: str) -> TrackerOut:
-    """Stub OAuth connect (real flow is a follow-up): mark connected."""
-    tracker = _get_tracker(session, tracker_id)
-    tracker.connected = True
-    tracker.account_name = tracker.account_name or "Connected account"
+def begin_tracker_connect(
+    session: Session, tracker_id: str, data: TrackerConnect
+) -> TrackerAuthUrl:
+    """Store the client app credentials (secret encrypted) and return the authorize URL."""
+    row = _get_tracker(session, tracker_id)
+    impl = get_tracker(tracker_id)
+    if impl is None:
+        raise BadRequestError(f"tracker {tracker_id!r} is not supported yet")
+    row.client_id = data.client_id
+    row.client_secret_enc = encrypt(data.client_secret)  # requires LYCHEE_SECRET_KEY
     session.commit()
-    return _tracker_out(tracker)
+    url = impl.authorize_url(
+        client_id=data.client_id, redirect_uri=data.redirect_uri, state=tracker_id
+    )
+    return TrackerAuthUrl(authorize_url=url)
+
+
+def complete_tracker_connect(
+    session: Session, tracker_id: str, data: TrackerCallback
+) -> TrackerOut:
+    """Exchange the authorization code for a token (stored encrypted) and mark connected."""
+    row = _get_tracker(session, tracker_id)
+    impl = get_tracker(tracker_id)
+    if impl is None:
+        raise BadRequestError(f"tracker {tracker_id!r} is not supported yet")
+    if not (row.client_id and row.client_secret_enc):
+        raise BadRequestError("start the connect flow first")
+    tokens = impl.exchange_code(
+        code=data.code,
+        client_id=row.client_id,
+        client_secret=decrypt(row.client_secret_enc),
+        redirect_uri=data.redirect_uri,
+    )
+    row.access_token_enc = encrypt(tokens.access_token)
+    row.refresh_token_enc = encrypt(tokens.refresh_token) if tokens.refresh_token else None
+    row.account_name = impl.account_name(tokens.access_token)
+    row.connected = True
+    session.commit()
+    return _tracker_out(row)
 
 
 def disconnect_tracker(session: Session, tracker_id: str) -> None:
     tracker = _get_tracker(session, tracker_id)
     tracker.connected = False
     tracker.account_name = None
-    tracker.access_token = None
-    tracker.refresh_token = None
+    tracker.client_id = None
+    tracker.client_secret_enc = None
+    tracker.access_token_enc = None
+    tracker.refresh_token_enc = None
     session.commit()
 
 
