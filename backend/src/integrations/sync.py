@@ -85,5 +85,4 @@ def _sync_work() -> Work:
 
 def run_sync(session: Session) -> TaskOut:
     """Check every matched series for new remote chapters on the background queue."""
-    task = queue.submit("sync", "Checking for new chapters", _sync_work())
-    return TaskOut.model_validate(task)
+    return queue.submit_task("sync", "Checking for new chapters", _sync_work())

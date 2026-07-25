@@ -55,8 +55,7 @@ def refresh_series(session: Session, series_id: str) -> TaskOut:
     language = config.language if config else "en"
     fetch_covers = config.fetch_covers if config else True
     work = _refresh_work(series.id, series.provider, language, fetch_covers)
-    task = queue.submit("metadata", f"Refreshing {series.title}", work)
-    return TaskOut.model_validate(task)
+    return queue.submit_task("metadata", f"Refreshing {series.title}", work)
 
 
 def _normalize_title(title: str) -> str:
