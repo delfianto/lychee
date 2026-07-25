@@ -28,6 +28,7 @@ dependencies = [
     # NOTE: remaining media/domain deps (rarfile/libarchive-c, pymupdf, ebooklib,
     # python-magic, xxhash, natsort, APScheduler, tenacity, …) are added per the
     # relevant ADR as those features land — see ../notes/decisions/.
+    "cryptography>=49.0.0",
 ]
 
 [project.optional-dependencies]

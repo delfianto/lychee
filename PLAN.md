@@ -326,15 +326,16 @@ override.
       `fetch_pages` picks `data` vs `data-saver`; on 403 re-fetches `/at-home/server` + retries once.
       (Per-page report + the 40/min at-home bucket were already done in M0.)
 
-**M4 — Account auth (OAuth2) + follows / status import**
-- [ ] OAuth2 personal-client flow (password → refresh grant); auto-refresh inside the client.
-- [ ] **Secret storage (decided 2026-07-25): encrypt at rest with an app key.** Add a
-      `LYCHEE_SECRET_KEY` setting; encrypt the client secret + refresh token with Fernet (adds a
-      `cryptography` dep) before writing to SQLite (Provider columns or a `mangadex_account` row).
-      Losing the key just means re-connecting.
-- [ ] `POST /api/providers/mangadex/connect {clientId, clientSecret, username, password}` / `DELETE`.
-- [ ] Import follows: `GET /user/follows/manga` (paged) → create/link `Series` + fetch metadata;
-      `GET /manga/status` → map reading status → `library_status`.
+**M4 — Account auth (OAuth2) + follows / status import** — ✅ done
+- [x] OAuth2 personal-client flow (`src/providers/mangadex_auth.py`): `password` grant on connect,
+      `refresh_token` grant at import time (tokens rotate → the new refresh token is re-persisted).
+- [x] **Secret storage — encrypted at rest.** `LYCHEE_SECRET_KEY` setting + `src/core/crypto.py`
+      (Fernet, `cryptography` dep); Provider gains `client_id`/`account_name` + encrypted
+      `client_secret_enc`/`refresh_token_enc` (migration `37829ee`). Connect is refused without a key.
+- [x] `POST /api/providers/{id}/connect` (stores encrypted) / `/disconnect`; `ProviderOut.connected`
+      + `account_name`. FE: Settings connect form + Connected/Import/Disconnect card.
+- [x] `POST /api/providers/{id}/import` → background `import` task: `list_follows` + `reading_status`
+      (authed) upsert into a virtual "MangaDex" library, apply metadata, map status → `library_status`.
 
 **M5 — Sync (new-chapter checks; "flag as available")**
 - [ ] Real `POST /api/sync` → enqueue a **`sync`** task (queue + SSE). For matched series, compare

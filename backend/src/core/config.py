@@ -3,6 +3,7 @@
 from typing import Literal
 
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ = load_dotenv()
@@ -18,6 +19,10 @@ class Settings(BaseSettings):
 
     # Storage root for generated binary files (thumbnails, etc.).
     storage_path: str = "./storage"
+
+    # Passphrase used to encrypt stored provider secrets at rest (PART F/M4).
+    # Unset ⇒ connecting a MangaDex account is refused (no plaintext secrets).
+    secret_key: str | None = Field(default=None, validation_alias="LYCHEE_SECRET_KEY")
 
     # Run migrations + seed on startup. Disabled in tests (they manage schema).
     auto_bootstrap: bool = True
