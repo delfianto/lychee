@@ -68,3 +68,19 @@ def test_encode_bytes_roundtrip() -> None:
     _flat_color().save(src, format="PNG")
     data = encode_bytes(src.getvalue(), content_class=ContentClass.COLOR_ART)
     assert Image.open(io.BytesIO(data)).format == "AVIF"
+
+
+def test_quality_override_shrinks_output() -> None:
+    photo = _photo()  # noisy content shows a clear size delta across quality
+    low = encode(photo, content_class=ContentClass.PHOTO, quality=20)
+    high = encode(photo, content_class=ContentClass.PHOTO, quality=90)
+    assert len(low) < len(high)
+    assert Image.open(io.BytesIO(low)).format == "AVIF"
+
+
+def test_quality_none_matches_preset() -> None:
+    art = _flat_color()
+    # quality=None must reproduce the preset path byte-for-byte (deterministic encode).
+    assert encode(art, content_class=ContentClass.COLOR_ART, quality=None) == encode(
+        art, content_class=ContentClass.COLOR_ART
+    )
