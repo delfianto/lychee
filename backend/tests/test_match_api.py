@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from src.catalog.service import auto_match_library
+from src.catalog.matching import auto_match_library
 from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata, register_provider
 from src.tasks.queue import queue
 
