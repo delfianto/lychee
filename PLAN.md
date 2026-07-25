@@ -28,7 +28,7 @@
 2. **Larger features (genuinely new work):**
    - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
-         **PART F M0–M5 done** (only the automatic sync scheduler is deferred).
+         **PART F M0–M5 done** (the automatic sync scheduler is not planned — manual sync covers it).
    - [x] **Tracker outbound sync.** `src/trackers/` — Tracker protocol + registry supporting two auth
          kinds (`oauth` with optional PKCE, `credentials`); tokens/secrets encrypted (Tracker cols,
          migrations `a453837`/`999d293`). Endpoints: `/connect`→authorize URL, `/callback`, `/login`;
@@ -108,7 +108,7 @@
 - [x] **Archives/formats:** stdlib `zipfile` (CBZ/ZIP) + image dirs + AVIF-dir. rarfile/py7zr/pymupdf/ebooklib
       **not planned** (CBZ + directories cover the common cases).
 - [~] **Ingest utils:** `hashlib` sha1 sample (not xxhash) · regex natural-sort (not natsort).
-- [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); APScheduler (auto-sync) + ProcessPoolExecutor (encode) ❌.
+- [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); ProcessPoolExecutor (encode) ❌. APScheduler (auto-sync) not planned.
 - [x] **Providers/trackers:** `httpx` ✅ · `cryptography` ✅ (Fernet token encryption) · custom 429/5xx retry + rate-limit buckets (no tenacity).
 - [x] **Search:** SQLite **FTS5 trigram** (title / alt-titles / authors, bm25-ranked). ✅
 - [x] Present: fastapi, uvicorn, sqlalchemy 2, alembic, pydantic 2 + settings, structlog, nanoid, httpx, pillow, cryptography.
@@ -150,7 +150,7 @@
       climbs mid-chapter (FE reloads on throttled progress events). Planned as one queued row per
       chapter (carrying provider + remote_json) so a serial runner can drain them and pause/resume ✅.
 - [x] **Sync** ✅ — `/api/sync` diffs each matched series' feed vs local chapters → `Series.available_chapters`
-      + a global count (M5). Auto-scheduler deferred.
+      + a global count (M5). Auto-scheduler not planned.
 
 ## B6. Search
 - [x] `GET /api/search` — **FTS5 trigram** over title / alt-titles / authors, bm25-ranked (title weighted
@@ -241,14 +241,14 @@
 6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
        ✅; downloads run on the background queue with SSE progress. Full MangaDex metadata / match /
        auth / sync done (PART F M0–M5); resumable download pause/resume ✅. (Local cover cache remains.)
-7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
+7. [x] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
        sync/about/taxonomy/collections APIs, SSE + task tracker + background queue + FE SSE consumption,
        MangaDex integration (PART F) + tracker OAuth/push (`src/trackers/`), FE Lists + Settings
-       swapped. **Remaining: sync scheduler.**
+       swapped. (Auto-sync scheduler not planned.)
 
 ---
 
-# PART F — MangaDex API (full integration) — ✅ done (M0–M5; auto-sync scheduler deferred)
+# PART F — MangaDex API (full integration) — ✅ done (M0–M5; auto-sync scheduler not planned)
 
 Use the MangaDex API for **metadata fetch + matching**, **chapter download** (already partial), and
 **sync** (new-chapter checks + account import). Grounded in the official docs:
@@ -364,8 +364,8 @@ override.
       skips already-present chapters) is the "download" affordance.
 - [x] FE: Settings → Sync card runs the async sync + reloads on the task's `done`; SeriesDetail shows
       a "N new" badge from `availableChapters`.
-- [ ] **Scheduler** honouring `SyncState.auto_every_minutes` (periodic task) — **deferred** (manual
-      sync works; automatic interval sync is a follow-up).
+- [—] **Scheduler** honouring `SyncState.auto_every_minutes` (periodic task) — **not planned**. Manual
+      sync (Settings → Sync → "Sync now") covers the need; an always-on interval scheduler isn't worth it.
 
 **Testing:** all via `httpx.MockTransport` with canned fixtures per endpoint (search / get / feed /
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
