@@ -1,4 +1,4 @@
-"""MyAnimeList tracker — OAuth2 with PKCE + list updates (PART F).
+"""MyAnimeList tracker — OAuth2 with PKCE + list updates.
 
 MAL requires PKCE with ``code_challenge_method=plain`` (challenge == verifier), so
 the service generates a verifier, passes it as the challenge in ``authorize_url``,

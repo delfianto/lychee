@@ -86,7 +86,7 @@ function clearRating(): void {
   void patchSeries(series.value.id, { rating: null });
 }
 
-// --- Metadata: match to MangaDex + refresh (PART F/M2) ---
+// --- Metadata: match to MangaDex + refresh ---
 const isMatched = computed(() => !!series.value?.provider);
 const matchOpen = ref(false);
 const matchQuery = ref("");

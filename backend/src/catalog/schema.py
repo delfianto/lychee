@@ -2,7 +2,7 @@
 
 Timestamps are returned as ISO-8601 (pydantic serializes ``datetime``); the
 frontend renders relative labels ("2h ago"). Image fields are API paths, never
-filesystem paths (ADR 09 / B0).
+filesystem paths.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ class SeriesUpdate(CamelModel):
 
 
 class MangaMatchOut(CamelModel):
-    """A provider search candidate for matching a local series (PART F/M2)."""
+    """A provider search candidate for matching a local series."""
 
     provider_series_id: str
     title: str

@@ -27,7 +27,7 @@ class Provider(Base, TimestampMixin):
     fetch_covers: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Download the lighter "data-saver" (JPEG) pages instead of original quality.
     data_saver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # OAuth2 account (PART F/M4): client secret + refresh token are stored encrypted.
+    # OAuth2 account: client secret + refresh token are stored encrypted.
     account_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     client_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -35,7 +35,7 @@ class Provider(Base, TimestampMixin):
 
 
 class Tracker(Base, TimestampMixin):
-    """An outbound reading tracker (AniList / MangaUpdates / MyAnimeList) (ADR 16)."""
+    """An outbound reading tracker (AniList / MangaUpdates / MyAnimeList)."""
 
     __tablename__ = "tracker"
 
@@ -44,7 +44,7 @@ class Tracker(Base, TimestampMixin):
     connected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sync_on_read: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     account_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    # OAuth2 (PART F trackers): client secret + tokens stored encrypted (see core.crypto).
+    # OAuth2: client secret + tokens stored encrypted (see core.crypto).
     client_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)

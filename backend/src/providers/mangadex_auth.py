@@ -1,4 +1,4 @@
-"""MangaDex OAuth2 personal-client flow (PART F/M4).
+"""MangaDex OAuth2 personal-client flow.
 
 MangaDex auth is Keycloak (OpenID Connect). A personal client gives a
 ``client_id`` / ``client_secret``; the ``password`` grant exchanges the user's

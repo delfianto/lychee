@@ -1,4 +1,4 @@
-"""SSE event broker — thread-safe publish, async subscribe (ADR 08/15).
+"""SSE event broker — thread-safe publish, async subscribe.
 
 Long-running work (scan/download/sync) runs in request/worker threads and calls
 ``publish`` (thread-safe); browser clients on ``GET /api/events`` consume via

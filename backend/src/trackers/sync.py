@@ -1,4 +1,4 @@
-"""Outbound reading-progress push to connected trackers (PART F).
+"""Outbound reading-progress push to connected trackers.
 
 When a chapter is completed, ``enqueue_push`` schedules a background ``tracker``
 task (only if a tracker is actually connected, so idle reads cost nothing). The

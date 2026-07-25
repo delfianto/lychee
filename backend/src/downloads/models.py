@@ -1,4 +1,4 @@
-"""Download-task model — one queued/active/finished chapter download (ADR 13, B5)."""
+"""Download-task model — one queued/active/finished chapter download."""
 
 from __future__ import annotations
 

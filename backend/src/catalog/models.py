@@ -1,10 +1,10 @@
-"""Catalog domain models (ADR 05, 18; amended by PLAN B2).
+"""Catalog domain models.
 
 Physical / logical split:
 
 - **Book** — a physical container the scanner discovers (archive, image dir, or a
   downloaded AVIF set). Carries the on-disk identity: path, size, partial hash,
-  page count. Move-tracking (ADR 05) happens at this level via ``partial_hash`` +
+  page count. Move-tracking happens at this level via ``partial_hash`` +
   ``file_size`` and a soft ``deleted_at``.
 - **Chapter** — the logical reading unit the API serves (``/api/chapters/{id}``):
   a book plus a page range, with the display metadata (volume, number, group,
@@ -12,7 +12,7 @@ Physical / logical split:
   Book of images and *no* chapters (served via ``/api/series/{id}/images``).
 
 Per-user state (``favorite``, ``library_status``, ``rating``) lives inline on
-``Series`` — v1 is single-user (ADR 12). Derived values (``chapterCount``,
+``Series`` — v1 is single-user. Derived values (``chapterCount``,
 ``unreadCount``, ``lastReadChapter``) are computed in queries, never stored.
 """
 
@@ -97,17 +97,17 @@ class Series(BaseModel):
     )
 
     total_chapters: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Remote chapters not yet present locally, from the last sync (PART F/M5).
+    # Remote chapters not yet present locally, from the last sync.
     available_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    # Physical binding (ADR 05) — relative to the library root; null for download-only.
+    # Physical binding — relative to the library root; null for download-only.
     path_rel: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     cover_source: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    # Provider linkage for refresh/sync (ADR 13).
+    # Provider linkage for refresh/sync.
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provider_series_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # External site ids from the provider (al, mal, mu, …) for tracker matching (ADR 16).
+    # External site ids from the provider (al, mal, mu, …) for tracker matching.
     external_ids_json: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
 
     # Gallery-only extras.
@@ -157,7 +157,7 @@ class SeriesCredit(BaseModel):
 
 
 class TitleVariant(BaseModel):
-    """A language-tagged title (ADR 18); ``Series.title`` is the denormalized display one."""
+    """A language-tagged title; ``Series.title`` is the denormalized display one."""
 
     __tablename__ = "title_variant"
 

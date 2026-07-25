@@ -1,4 +1,4 @@
-"""A small thread-safe token-bucket rate limiter (PART F/M0).
+"""A small thread-safe token-bucket rate limiter.
 
 ``acquire`` blocks the calling thread until the requested tokens are available;
 ``take`` is the lock-guarded core that returns the wait needed, so it's unit-

@@ -1,1 +1,1 @@
-"""Task tracking + SSE event broker (ADR 08/15)."""
+"""Task tracking + SSE event broker."""

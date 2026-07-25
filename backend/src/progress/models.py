@@ -1,4 +1,4 @@
-"""Reading progress (ADR 11).
+"""Reading progress.
 
 One row per chapter (single-user v1). ``unreadCount`` / ``lastReadChapter`` and
 continue-reading are derived from these rows in queries; ``series_id`` is

@@ -1,4 +1,4 @@
-"""Reading-progress service (ADR 11). Drives unread / lastRead / continue-reading."""
+"""Reading-progress service. Drives unread / lastRead / continue-reading."""
 
 from __future__ import annotations
 

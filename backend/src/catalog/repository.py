@@ -419,7 +419,7 @@ def recently_added(session: Session, *, limit: int = 12) -> list[SeriesRow]:
 
 
 def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRow]:
-    """Title search (simple LIKE for now; FTS5 lands in B6)."""
+    """Title search (a simple LIKE match)."""
     rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
     return rows
 

@@ -1,11 +1,11 @@
-"""Chapter downloader → AVIF pipeline (ADR 13, ADR 19).
+"""Chapter downloader → AVIF pipeline.
 
 For each remote chapter: fetch page bytes from the provider, encode each to AVIF
-(discarding the original — ADR 19), write to ``<storage>/downloads/<series>/<chapter>``
-as an ``avif_dir`` Book, and create the Chapter. Downloaded books live in a
+(discarding the original), write to ``<storage>/downloads/<series>/<chapter>`` as
+an ``avif_dir`` Book, and create the Chapter. Downloaded books live in a
 "Downloads" library so serving resolves their path independently of the series'
-own (scan) library. Synchronous in v1; a background task runner + live progress
-is a follow-up.
+own (scan) library. Runs on the background task queue, committing per chapter so
+progress is visible mid-download.
 """
 
 from __future__ import annotations

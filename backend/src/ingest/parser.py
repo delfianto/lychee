@@ -1,11 +1,11 @@
-"""Filename / volume-chapter parser (ADR 06).
+"""Filename / volume-chapter parser.
 
 A prioritized regex cascade over the path segments below the series folder plus
-the filename. The key trick (ADR 06 §3) is **series-name subtraction**: strip the
+the filename. The key trick is **series-name subtraction**: strip the
 known series title first, then hunt for numbers in the remainder — this kills the
 classic title-number false positives (``Gundam 0079``, ``7 Seeds``). Specials
 (Omake/Extra/…) become decimal offsets; a base-less special returns
-``number_sort=None`` for the series-level ordering pass (ADR 07) to place.
+``number_sort=None`` for the series-level ordering pass to place.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class ParsedName:
     """Result of parsing a book's on-disk name."""
 
     number: str | None  # display label, e.g. "10.5", "1-4", "Omake"
-    number_sort: float | None  # ordering key; None → assign during ordering (ADR 07)
+    number_sort: float | None # ordering key; None → assign during ordering
     volume: int | None
     year: int | None
     special: bool

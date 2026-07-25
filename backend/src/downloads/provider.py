@@ -1,4 +1,4 @@
-"""Download provider abstraction + registry (ADR 13).
+"""Download provider abstraction + registry.
 
 A provider lists a remote series' chapters and fetches a chapter's page bytes.
 The downloader (below) is provider-agnostic; MangaDex registers a concrete impl
@@ -32,14 +32,14 @@ class Provider(Protocol):
         ...
 
 
-# --- Metadata side of the abstraction (PART F) --------------------------------
-# Declared here so the matching (M2), refresh (M1), and sync (M5) services can
-# depend on the contract now; MangaDexProvider implements it in those phases.
+# --- Metadata side of the abstraction ------------------------------------------
+# Declared here so the matching / refresh / sync services depend on the contract;
+# MangaDexProvider implements it.
 
 
 @dataclass(frozen=True)
 class MangaMatch:
-    """A search hit when matching a local series to a provider entry (M2)."""
+    """A search hit when matching a local series to a provider entry."""
 
     provider_series_id: str
     title: str
@@ -50,7 +50,7 @@ class MangaMatch:
 
 @dataclass
 class SeriesMetadata:
-    """Normalised provider metadata for one series (M1), before mapping to the model."""
+    """Normalised provider metadata for one series, before mapping to the model."""
 
     provider_series_id: str
     title: str
@@ -71,7 +71,7 @@ class SeriesMetadata:
 
 
 class MetadataProvider(Protocol):
-    """Search + metadata + new-chapter discovery (PART F M1/M2/M5)."""
+    """Search + metadata + new-chapter discovery (implemented by MangaDexProvider)."""
 
     id: str
 
