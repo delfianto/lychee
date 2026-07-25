@@ -911,6 +911,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/downloads/{task_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause Download
+         * @description Hold a queued chapter; returns the refreshed download list.
+         */
+        post: operations["pause_download_api_downloads__task_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/downloads/{task_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Download
+         * @description Re-queue a paused chapter and start draining; returns the refreshed download list.
+         */
+        post: operations["resume_download_api_downloads__task_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/downloads/{task_id}": {
         parameters: {
             query?: never;
@@ -1141,7 +1181,7 @@ export interface components {
         };
         /**
          * MangaMatchOut
-         * @description A provider search candidate for matching a local series (PART F/M2).
+         * @description A provider search candidate for matching a local series.
          */
         MangaMatchOut: {
             /** Providerseriesid */
@@ -3232,6 +3272,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_download_api_downloads__task_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadTaskOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_download_api_downloads__task_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadTaskOut"][];
                 };
             };
             /** @description Validation Error */
