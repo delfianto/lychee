@@ -67,6 +67,17 @@ class MangaDexClient:
 
         return self._with_retries(send)
 
+    def post(self, path: str, *, json: dict[str, object] | None = None) -> httpx.Response:
+        """POST an api.mangadex.org path (rate limited + retried). Used for authed writes
+        (status / read markers); the Bearer rides on the client and only api.mangadex.org
+        paths go through here — never at-home nodes."""
+
+        def send() -> httpx.Response:
+            self._global.acquire()
+            return self._client.post(path, json=json)
+
+        return self._with_retries(send)
+
     def get_bytes(self, url: str) -> httpx.Response:
         """GET an absolute at-home node URL (image); not rate-limited here."""
         return self._with_retries(lambda: self._client.get(url))

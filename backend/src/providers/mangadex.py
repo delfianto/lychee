@@ -238,6 +238,17 @@ class MangaDexProvider:
                     result[manga_id] = list(chapter_ids or [])
         return result
 
+    def push_status(self, provider_series_id: str, status: str | None) -> None:
+        """Set the authed user's reading status for a manga (``None`` clears it)."""
+        _ = self._api.post(f"/manga/{provider_series_id}/status", json={"status": status})
+
+    def push_read(self, provider_series_id: str, chapter_ids: list[str]) -> None:
+        """Mark chapters read for the authed user (no-op for an empty list)."""
+        if chapter_ids:
+            _ = self._api.post(
+                f"/manga/{provider_series_id}/read", json={"chapterIdsRead": chapter_ids}
+            )
+
     def _rating(self, provider_series_id: str) -> float | None:
         """Community rating via /statistics — best-effort (never blocks metadata)."""
         try:

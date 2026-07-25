@@ -10,6 +10,7 @@ list into a managed Collection. It downloads no pages (download stays a triggere
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 
 import httpx
@@ -21,7 +22,9 @@ from src.catalog.models import Chapter, Library, Series
 from src.collections.models import Collection, CollectionSeries
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
+from src.core.logging import get_logger
 from src.downloads.provider import CustomList, SeriesMetadata
+from src.integrations.models import Provider
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
 from src.progress.models import ReadingProgress
@@ -35,6 +38,11 @@ _MANGADEX = "mangadex"
 _MANGADEX_LIBRARY = "MangaDex"
 # MangaDex reading statuses that map 1:1 onto Series.library_status.
 _READING_STATUSES = {"reading", "on_hold", "plan_to_read", "dropped", "re_reading", "completed"}
+
+logger = get_logger(__name__)
+# Access token cached in-memory (~14 min) so a burst of pushes doesn't re-refresh (and
+# re-rotate the refresh token) each time. The single-worker task queue makes this race-free.
+_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 
 
 def connect(session: Session, provider_id: str, data: ProviderConnect) -> ProviderOut:
@@ -71,6 +79,27 @@ def _authed_provider(access_token: str) -> MangaDexProvider:
         headers={"User-Agent": USER_AGENT, "Authorization": f"Bearer {access_token}"},
     )
     return MangaDexProvider(client=client)
+
+
+def _access_token(session: Session, config: Provider) -> str:
+    """A valid access token for the connected account, cached in-memory (persisting the
+    rotated refresh token whenever it does refresh)."""
+    if not (config.client_id and config.client_secret_enc and config.refresh_token_enc):
+        raise BadRequestError("MangaDex account is not connected")
+    cache_key = config.client_id or ""
+    cached = _TOKEN_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached and cached[1] > now:
+        return cached[0]
+    tokens = refresh_grant(
+        client_id=config.client_id,
+        client_secret=decrypt(config.client_secret_enc),
+        refresh_token=decrypt(config.refresh_token_enc),
+    )
+    config.refresh_token_enc = encrypt(tokens.refresh_token)
+    session.commit()  # persist the rotated refresh token before it's used again
+    _TOKEN_CACHE[cache_key] = (tokens.access_token, now + 14 * 60)
+    return tokens.access_token
 
 
 def _mangadex_library(session: Session) -> Library:
@@ -211,16 +240,7 @@ def _sync_work() -> Work:
         config = get_provider_row(session, _MANGADEX)
         if not (config.client_id and config.client_secret_enc and config.refresh_token_enc):
             raise BadRequestError("MangaDex account is not connected")
-        # Tokens rotate on refresh — persist the new refresh token before the long sync.
-        tokens = refresh_grant(
-            client_id=config.client_id,
-            client_secret=decrypt(config.client_secret_enc),
-            refresh_token=decrypt(config.refresh_token_enc),
-        )
-        config.refresh_token_enc = encrypt(tokens.refresh_token)
-        session.commit()
-
-        provider = _authed_provider(tokens.access_token)
+        provider = _authed_provider(_access_token(session, config))
         library = _mangadex_library(session)
 
         on_progress(5, "Fetching account")
@@ -260,3 +280,43 @@ def sync_account(session: Session, provider_id: str) -> TaskOut:
     if not (config.client_id and config.refresh_token_enc):
         raise BadRequestError("MangaDex account is not connected")
     return queue.submit_task("import", "Syncing MangaDex", _sync_work())
+
+
+def is_connected(session: Session) -> bool:
+    """Whether a MangaDex account is connected (i.e. an outbound push sink is available)."""
+    config = session.get(Provider, _MANGADEX)
+    return bool(config and config.client_id and config.refresh_token_enc)
+
+
+def push_series(session: Session, series_id: str) -> bool:
+    """Outbound two-way push: send a dex-linked series' reading status + read markers to
+    MangaDex. Best-effort (swallows failures); a no-op when the series isn't MangaDex-linked
+    or the account isn't connected. Called from the tracker sync-on-read task."""
+    series = session.get(Series, series_id)
+    if series is None or series.provider != _MANGADEX or not series.provider_series_id:
+        return False
+    config = get_provider_row(session, _MANGADEX)
+    if not (config.client_id and config.client_secret_enc and config.refresh_token_enc):
+        return False
+    try:
+        provider = _authed_provider(_access_token(session, config))
+        status = series.library_status if series.library_status in _READING_STATUSES else None
+        provider.push_status(series.provider_series_id, status)
+        read_ids = [
+            cid
+            for cid in session.scalars(
+                select(Chapter.provider_chapter_id)
+                .join(ReadingProgress, ReadingProgress.chapter_id == Chapter.id)
+                .where(
+                    Chapter.series_id == series_id,
+                    ReadingProgress.completed.is_(True),
+                    Chapter.provider_chapter_id.is_not(None),
+                )
+            )
+            if cid
+        ]
+        provider.push_read(series.provider_series_id, read_ids)
+    except Exception as exc:  # noqa: BLE001 - best-effort; a push failure can't fail a read/edit
+        logger.warning("mangadex_push_failed", series=series.title, error=str(exc))
+        return False
+    return True

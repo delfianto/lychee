@@ -26,6 +26,7 @@ from src.catalog.schema import (
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+from src.trackers.sync import enqueue_push
 
 _LIBRARY_STATUSES = {
     "none",
@@ -149,14 +150,18 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
     fields = data.model_dump(exclude_unset=True)
     if "favorite" in fields:
         series.favorite = bool(fields["favorite"])
+    shelf_changed = False
     if "library_status" in fields:
         status = fields["library_status"]
         if status not in _LIBRARY_STATUSES:
             raise BadRequestError(f"invalid library status: {status!r}")
+        shelf_changed = series.library_status != status
         series.library_status = status
     if "rating" in fields:
         series.user_rating = fields["rating"]  # may be None to clear
     session.commit()
+    if shelf_changed:  # push the new shelf to connected sinks (trackers + MangaDex), best-effort
+        enqueue_push(session, series_id)
     row = repo.get_series(session, series_id)
     assert row is not None  # just updated
     return to_series_out(row)

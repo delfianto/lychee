@@ -2,12 +2,14 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from src.catalog.models import Book, Chapter, Library, Series
 from src.core.config import settings
 from src.core.crypto import decrypt
 from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
+from src.progress.models import ReadingProgress
 from src.providers import mangadex_account
 from src.providers.mangadex_auth import TokenPair
 from src.tasks.queue import queue
@@ -131,6 +133,77 @@ def test_sync_marks_read_chapters_of_downloaded_series(
     groups = client.get(f"/api/series/{series.id}/chapters").json()
     read = {c["id"]: c["read"] for group in groups for c in group["chapters"]}
     assert read[chapter_id] is True  # MangaDex read marker → local chapter marked read
+
+
+def _connect(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    monkeypatch.setattr(mangadex_account, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
+    assert client.post(
+        "/api/providers/mangadex/connect",
+        json={"clientId": "cid", "clientSecret": "csecret", "username": "me", "password": "pw"},
+    ).status_code == 200
+
+
+def _dex_series(db_session: Session, provider_series_id: str, **kw: object) -> Series:
+    library = db_session.scalar(select(Library).where(Library.name == "Downloads")) or Library(
+        name="Downloads", path="mangadex://dl", kind="mixed"
+    )
+    db_session.add(library)
+    db_session.flush()
+    series = Series(
+        library_id=library.id, kind="manga", title=provider_series_id, sort_title=provider_series_id,
+        provider="mangadex", provider_series_id=provider_series_id, **kw,
+    )
+    db_session.add(series)
+    db_session.flush()
+    return series
+
+
+def test_push_series_sends_status_and_read_markers(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _connect(client, monkeypatch)
+    series = _dex_series(db_session, "md-9", library_status="completed")
+    book = Book(series_id=series.id, library_id=series.library_id, path_rel="md-9/c.cbz", content_kind="cbz", page_count=1)
+    db_session.add(book)
+    db_session.flush()
+    chapter = Chapter(series_id=series.id, book_id=book.id, number="1", page_count=1, provider="mangadex", provider_chapter_id="ch-9")
+    db_session.add(chapter)
+    db_session.flush()
+    db_session.add(ReadingProgress(chapter_id=chapter.id, series_id=series.id, completed=True))
+    db_session.commit()
+
+    calls: dict[str, object] = {}
+
+    class _Recorder:
+        def push_status(self, mid: str, status: str | None) -> None:
+            calls["status"] = (mid, status)
+
+        def push_read(self, mid: str, ids: list[str]) -> None:
+            calls["read"] = (mid, ids)
+
+    monkeypatch.setattr(mangadex_account, "_access_token", lambda *_a: "tok")
+    monkeypatch.setattr(mangadex_account, "_authed_provider", lambda _t: _Recorder())
+
+    assert mangadex_account.push_series(db_session, series.id) is True
+    assert calls["status"] == ("md-9", "completed")  # shelf → MangaDex status
+    assert calls["read"] == ("md-9", ["ch-9"])  # completed chapter → read marker
+
+
+def test_shelf_change_enqueues_mangadex_push(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _connect(client, monkeypatch)
+    series = _dex_series(db_session, "md-7")
+    db_session.commit()
+    series_id = series.id
+
+    pushed: list[str] = []
+    monkeypatch.setattr(mangadex_account, "push_series", lambda _s, sid: bool(pushed.append(sid)))
+
+    assert client.patch(f"/api/series/{series_id}", json={"libraryStatus": "completed"}).status_code == 200
+    queue.wait_idle()
+    assert pushed == [series_id]  # a shelf change pushes the dex-linked series to MangaDex
 
 
 def test_sync_requires_connection(client: TestClient) -> None:
