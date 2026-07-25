@@ -185,7 +185,7 @@ class Book(BaseModel):
         ForeignKey("library.id", ondelete="CASCADE"), index=True, nullable=False
     )
     path_rel: Mapped[str] = mapped_column(String(1024), nullable=False)
-    # cbz | cbr | zip | rar | 7z | pdf | epub | image_dir | avif_dir
+    # cbz | zip | image_dir | avif_dir  (the reader's supported container kinds)
     content_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     partial_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

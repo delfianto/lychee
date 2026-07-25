@@ -1,9 +1,9 @@
 """Book-page containers — read a book's pages without unpacking it.
 
 A ``BookContainer`` exposes an ordered, 0-indexed page list and reads one page's
-raw bytes on demand. v1 handles the zero-system-dependency kinds: a directory of
-images, a CBZ/ZIP archive, and a downloaded AVIF directory. RAR/7z/PDF/EPUB land
-with the scanner behind optional deps and register the same way.
+raw bytes on demand. It handles the zero-system-dependency kinds: a directory of
+images, a CBZ/ZIP archive, and a downloaded AVIF directory. (RAR/7z/PDF/EPUB are
+not planned — CBZ + image directories cover the common cases.)
 
 Pages are ordered by a natural sort of their names so ``2.jpg`` precedes ``10.jpg``.
 """

@@ -7,9 +7,9 @@ book + its full page range). Move/rename safety comes from soft-delete + a
 ``(file_size, partial_hash)`` restore hint. Covers are generated lazily on first
 request, so no thumbnail job is enqueued here.
 
-Deferred (follow-ups): filesystem watcher, content-type sniffing (extension only
-for now), embedded ComicInfo/OPF metadata, FTS sync, RAR/7z/PDF/EPUB
-containers, and multi-chapter archives.
+Deferred (follow-ups): filesystem watcher, embedded ComicInfo/OPF metadata, and
+multi-chapter archives. (Extra container formats + content-sniffing are not
+planned — CBZ + image directories cover the common cases.)
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from src.media.containers import IMAGE_EXTS, open_container
 
 logger = get_logger(__name__)
 
-_ARCHIVE_KINDS = {".cbz": "cbz", ".zip": "zip"}  # extended as containers land
+_ARCHIVE_KINDS = {".cbz": "cbz", ".zip": "zip"}  # the reader's supported archive kinds
 _HASH_CHUNK = 64 * 1024
 
 
