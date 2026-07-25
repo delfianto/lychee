@@ -109,7 +109,7 @@ const nav: NavItem[] = [
         <div class="navbar-end ml-auto w-auto gap-1">
           <label class="input input-bordered input-sm hidden w-44 items-center gap-2 sm:flex lg:w-56">
             <Search class="size-4 opacity-60" />
-            <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" @keyup.enter="goSearch" />
+            <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" aria-label="Search series" @keyup.enter="goSearch" />
           </label>
           <ActivityIndicator />
           <button class="btn btn-circle btn-ghost btn-sm" aria-label="Random series" @click="goRandom">

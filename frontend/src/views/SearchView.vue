@@ -54,6 +54,7 @@ function submit(): void {
         type="search"
         class="grow"
         placeholder="Search all series by title or author…"
+        aria-label="Search all series"
         @keyup.enter="submit"
       />
     </label>

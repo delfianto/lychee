@@ -126,6 +126,7 @@ export type SeriesQuery = NonNullable<paths["/api/series"]["get"]["parameters"][
 export function useSeriesList() {
   const items = ref<Series[]>([]);
   const loading = ref(false);
+  const failed = ref(false);
   const done = ref(false);
   const cursor = ref<string | null>(null);
   let params: SeriesQuery = {};
@@ -141,6 +142,9 @@ export function useSeriesList() {
       items.value = reset ? mapped : [...items.value, ...mapped];
       cursor.value = data.nextCursor ?? null;
       done.value = !data.nextCursor;
+      failed.value = false;
+    } else if (reset) {
+      failed.value = true; // distinguish a load failure from a genuinely empty grid
     }
     loading.value = false;
   }
@@ -149,6 +153,7 @@ export function useSeriesList() {
     params = next;
     cursor.value = null;
     done.value = false;
+    failed.value = false;
     items.value = [];
     await fetchPage(true);
   }
@@ -157,7 +162,11 @@ export function useSeriesList() {
     if (!done.value && !loading.value) void fetchPage(false);
   }
 
-  return { items, loading, hasMore: computed(() => !done.value), reload, loadMore };
+  function retry(): void {
+    void fetchPage(true);
+  }
+
+  return { items, loading, failed, hasMore: computed(() => !done.value), reload, loadMore, retry };
 }
 
 // --- series detail -------------------------------------------------------------

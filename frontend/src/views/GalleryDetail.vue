@@ -4,6 +4,7 @@ import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { fetchGalleryImages, fetchSeries, patchSeries } from "../api/queries";
+import ErrorState from "../components/ErrorState.vue";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
 import { toast } from "../lib/toast";
@@ -15,13 +16,20 @@ const gallery = ref<Series | null>(null);
 const images = ref<string[]>([]);
 const favorite = ref(false);
 
+const failed = ref(false);
 async function load(id: string): Promise<void> {
   gallery.value = null;
-  const [g, imgs] = await Promise.all([fetchSeries(id), fetchGalleryImages(id)]);
-  gallery.value = g;
-  images.value = imgs;
-  favorite.value = g.favorite ?? false;
+  failed.value = false;
+  try {
+    const [g, imgs] = await Promise.all([fetchSeries(id), fetchGalleryImages(id)]);
+    gallery.value = g;
+    images.value = imgs;
+    favorite.value = g.favorite ?? false;
+  } catch {
+    failed.value = true;
+  }
 }
+const reload = (): void => void load(String(route.params.id));
 watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
 
 const collections = useCollections();
@@ -50,7 +58,8 @@ function openAt(i: number): void {
 
 <template>
   <div class="flex flex-col gap-6 p-4 sm:p-6">
-    <div v-if="!gallery" class="flex justify-center py-20">
+    <ErrorState v-if="failed" message="Couldn't load this gallery." @retry="reload" />
+    <div v-else-if="!gallery" class="flex justify-center py-20">
       <span class="loading loading-spinner loading-lg text-primary" />
     </div>
     <template v-else>

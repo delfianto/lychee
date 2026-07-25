@@ -4,12 +4,14 @@ import { onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import { fetchDashboard, fetchLibrarySummaries, type LibrarySummary } from "../api/queries";
+import ErrorState from "../components/ErrorState.vue";
 import FeaturedCarousel from "../components/FeaturedCarousel.vue";
 import RecentUpdates from "../components/RecentUpdates.vue";
 import SeriesRail from "../components/SeriesRail.vue";
 import type { RecentUpdate, Series } from "../types";
 
 const loading = ref(true);
+const failed = ref(false);
 const totalSeries = ref(0);
 const unreadTotal = ref(0);
 const readingCount = ref(0);
@@ -19,17 +21,25 @@ const recentlyAdded = ref<Series[]>([]);
 // Storage per library — hide empty (0 GB) ones so the strip stays uncluttered.
 const storageLibs = ref<LibrarySummary[]>([]);
 
-onMounted(async () => {
-  const [dashboard, summaries] = await Promise.all([fetchDashboard(), fetchLibrarySummaries()]);
-  totalSeries.value = dashboard.stats.series;
-  unreadTotal.value = dashboard.stats.unreadChapters;
-  readingCount.value = dashboard.stats.reading;
-  continueReading.value = dashboard.continueReading;
-  homeUpdates.value = dashboard.recentUpdates;
-  recentlyAdded.value = dashboard.recentlyAdded;
-  storageLibs.value = summaries.filter((l) => l.sizeGb > 0);
-  loading.value = false;
-});
+async function load(): Promise<void> {
+  loading.value = true;
+  failed.value = false;
+  try {
+    const [dashboard, summaries] = await Promise.all([fetchDashboard(), fetchLibrarySummaries()]);
+    totalSeries.value = dashboard.stats.series;
+    unreadTotal.value = dashboard.stats.unreadChapters;
+    readingCount.value = dashboard.stats.reading;
+    continueReading.value = dashboard.continueReading;
+    homeUpdates.value = dashboard.recentUpdates;
+    recentlyAdded.value = dashboard.recentlyAdded;
+    storageLibs.value = summaries.filter((l) => l.sizeGb > 0);
+  } catch {
+    failed.value = true;
+  } finally {
+    loading.value = false;
+  }
+}
+onMounted(load);
 </script>
 
 <template>
@@ -37,6 +47,7 @@ onMounted(async () => {
     <div v-if="loading" class="flex justify-center py-20">
       <span class="loading loading-spinner loading-lg text-primary" />
     </div>
+    <ErrorState v-else-if="failed" message="Couldn't load your dashboard." @retry="load" />
     <template v-else>
     <!-- At-a-glance stats -->
     <div class="stats stats-vertical w-full surface-border bg-base-100 shadow-sm sm:stats-horizontal sm:w-auto sm:self-start">

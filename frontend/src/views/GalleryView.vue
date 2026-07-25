@@ -56,7 +56,7 @@ const filtered = computed(() => {
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="query" type="search" class="grow" placeholder="Search title, artist, character…" />
+        <input v-model="query" type="search" class="grow" placeholder="Search title, artist, character…" aria-label="Search galleries" />
       </label>
       <select v-model="artist" class="select select-bordered select-sm" aria-label="Filter by artist">
         <option value="">All artists</option>
