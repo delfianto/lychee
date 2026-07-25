@@ -156,6 +156,56 @@ def test_scan_warms_series_covers(client: TestClient, tmp_path: Path) -> None:
         assert store.exists(series["id"], ThumbVariant.COVER)  # derived 320px grid thumbnail
 
 
+def _make_gallery_library(tmp_path: Path) -> Path:
+    root = tmp_path / "galleries"
+    _image_dir(root / "Artist Name" / "Set A", 4)  # gallery (image dir) under an artist
+    _cbz(root / "Artist Name" / "Set B.cbz", 3)  # gallery (archive) under the same artist
+    _cbz(root / "Loose Gallery.cbz", 2)  # root-level one-shot — no artist
+    return root
+
+
+def _create_and_scan_gallery(client: TestClient, root: Path) -> tuple[str, dict[str, int]]:
+    created = client.post(
+        "/api/libraries", json={"name": "Art", "path": str(root), "kind": "gallery"}
+    )
+    assert created.status_code == 201
+    library_id = created.json()["id"]
+    return library_id, _scan(client, library_id)
+
+
+def test_gallery_scan_groups_by_artist(client: TestClient, tmp_path: Path) -> None:
+    root = _make_gallery_library(tmp_path)
+    _, summary = _create_and_scan_gallery(client, root)
+    assert summary["seriesAdded"] == 3  # Set A, Set B, Loose Gallery — each its own gallery
+
+    series = {s["title"]: s for s in client.get("/api/series").json()["items"]}
+    assert set(series) == {"Set A", "Set B", "Loose Gallery"}
+    assert all(s["kind"] == "gallery" for s in series.values())
+    # the two under "Artist Name" are credited to the artist; the loose one isn't
+    assert series["Set A"]["artists"] == ["Artist Name"]
+    assert series["Set B"]["artists"] == ["Artist Name"]
+    assert series["Loose Gallery"]["artists"] == []
+
+    # an auto Collection named after the artist holds exactly those two galleries
+    collections = {c["name"]: c for c in client.get("/api/collections").json()}
+    assert "Artist Name" in collections
+    detail = client.get(f"/api/collections/{collections['Artist Name']['id']}").json()
+    assert {s["title"] for s in detail["series"]} == {"Set A", "Set B"}
+
+
+def test_gallery_rescan_is_idempotent(client: TestClient, tmp_path: Path) -> None:
+    root = _make_gallery_library(tmp_path)
+    library_id, _ = _create_and_scan_gallery(client, root)
+    _scan(client, library_id)  # scan again — must not double credits/collections
+
+    series = {s["title"]: s for s in client.get("/api/series").json()["items"]}
+    assert series["Set A"]["artists"] == ["Artist Name"]  # not doubled
+    named = [c for c in client.get("/api/collections").json() if c["name"] == "Artist Name"]
+    assert len(named) == 1  # one collection, not one per scan
+    detail = client.get(f"/api/collections/{named[0]['id']}").json()
+    assert len(detail["series"]) == 2  # membership not duplicated
+
+
 def test_library_list_reports_series_count(client: TestClient, tmp_path: Path) -> None:
     root = _make_library(tmp_path)
     library_id, _ = _create_and_scan(client, root)
