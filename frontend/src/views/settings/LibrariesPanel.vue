@@ -1,0 +1,91 @@
+<script setup lang="ts">
+// Settings → Libraries: the registered library roots + manual scan triggers.
+// Owns the scan SSE handler (a background scan refreshes the list on done).
+import { Library, Plus, RefreshCw } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+
+import { api } from "../../api/client";
+import { activeTasks, onTaskDone } from "../../api/events";
+import { relativeTime } from "../../api/format";
+import { toast } from "../../lib/toast";
+
+interface LibraryRow {
+  id: string;
+  name: string;
+  path: string;
+  series: number;
+  lastScan: string;
+}
+const libraries = ref<LibraryRow[]>([]);
+// A scan runs in the background; disable the triggers while one is in flight.
+const scanning = computed(() => activeTasks.value.some((t) => t.kind === "scan"));
+async function loadLibraries(): Promise<void> {
+  const { data } = await api.GET("/api/libraries");
+  libraries.value = (data ?? []).map((l) => ({
+    id: l.id,
+    name: l.name,
+    path: l.path,
+    series: l.seriesCount,
+    lastScan: l.lastScan ? relativeTime(l.lastScan) : "never",
+  }));
+}
+async function scanAll(): Promise<void> {
+  await api.POST("/api/libraries/scan");
+  toast("Scan started"); // libraries refresh when the scan.done event arrives
+}
+async function scanOne(id: string): Promise<void> {
+  await api.POST("/api/libraries/{library_id}/scan", { params: { path: { library_id: id } } });
+  toast("Scan started");
+}
+async function removeLibrary(id: string): Promise<void> {
+  await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
+  await loadLibraries();
+}
+async function addLibrary(): Promise<void> {
+  const name = window.prompt("Library name?");
+  if (!name?.trim()) return;
+  const path = window.prompt("Library path (a folder on the server)?");
+  if (!path?.trim()) return;
+  await api.POST("/api/libraries", { body: { name: name.trim(), path: path.trim(), kind: "manga" } });
+  await loadLibraries();
+}
+
+const disposeDone = onTaskDone((task) => {
+  if (task.kind !== "scan") return;
+  void loadLibraries();
+  toast(
+    task.status === "done" ? "Scan complete" : "Scan failed",
+    task.status === "done" ? "success" : "error",
+  );
+});
+onUnmounted(disposeDone);
+onMounted(loadLibraries);
+</script>
+
+<template>
+  <section class="flex flex-col gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
+          <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
+        </button>
+        <button class="btn btn-primary btn-sm gap-1" @click="addLibrary"><Plus class="size-4" />Add library</button>
+      </div>
+    </div>
+    <div class="grid gap-4 lg:grid-cols-2">
+      <div v-for="lib in libraries" :key="lib.id" class="card bg-base-100">
+        <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
+          <Library class="size-5 shrink-0 text-primary" />
+          <div class="min-w-0 grow">
+            <div class="font-medium">{{ lib.name }}</div>
+            <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
+            <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" :disabled="scanning" @click="scanOne(lib.id)">Scan</button>
+          <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">Remove</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</template>

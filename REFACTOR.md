@@ -10,21 +10,15 @@ Legend: **[H]** high priority · **[M]** medium · **[L]** low / nice-to-have.
 
 ## 1. God objects
 
-### 1.1 [H] `frontend/src/views/SettingsView.vue` — was 1093 lines
-One component owned **eight** unrelated concerns, each with its own state, API
-calls, and template block. Decomposing along the tab seam into
+### 1.1 [H] `frontend/src/views/SettingsView.vue` — was 1093 lines → **done (63 lines)**
+One component owned **eight** unrelated concerns; now decomposed into
 `views/settings/*Panel.vue`, each owning its state, `load*()`, and SSE subscription.
-
-**Status — partially done (1093 → 674 lines):**
-- [x] `ContentPanel.vue` (taxonomy table)
-- [x] `AboutPanel.vue` (server info + library summary)
-- [x] `DownloadsPanel.vue` (downloads queue + sync card + its own SSE wiring)
-- [ ] The **"general" tab** (~674 lines left in SettingsView) still bundles Libraries,
-      Provider + MangaDex account, Trackers (+ connect modal), and Appearance/Reader.
-      Split next into `LibrariesPanel` / `ProviderPanel` / `TrackersPanel`
-      (+`TrackerConnectModal`) / `AppearancePanel`, leaving SettingsView a shell
-      (section rail + theme + `<component v-else-if>`). Scan + import SSE handlers
-      move to Libraries/Provider respectively.
+SettingsView is a thin shell (section rail + `<component v-else-if>`):
+- `LibrariesPanel.vue` (libraries + scan; owns the scan SSE handler)
+- `ProviderPanel.vue` (MangaDex config + account connect/import; owns the import toast)
+- `TrackersPanel.vue` + `TrackerConnectModal.vue` (connect flow as a child dialog)
+- `DownloadsPanel.vue` (downloads queue + sync card + its download/sync SSE wiring)
+- `ContentPanel.vue` (taxonomy) · `AppearancePanel.vue` (theme/density/reader) · `AboutPanel.vue`
 
 ### 1.2 [H] `backend/src/integrations/service.py` — 382 lines, 5 concerns
 Mixes provider-config CRUD, **MangaDex account + follows import**, tracker
@@ -117,8 +111,8 @@ Files with references (from grep): `tasks/*`, `progress/*`, `providers/*`,
 3. [x] **Extract `catalog/matching.py`** from `catalog/service.py`. (§1.3.)
 4. [x] **`queue.submit_task`** collapses the enqueue boilerplate. (§2.3.)
 5. [x] **Backend comment cleanup** — ADR/PLAN refs stripped across ~35 files. (§2.2, incl. FE.)
-6. [~] **Frontend SettingsView split** — Content/About/Downloads panels done (1093→674); the
-   general-tab panels remain (§1.1).
+6. [x] **Frontend SettingsView split** — fully decomposed into 8 panels; SettingsView is a
+   63-line shell (§1.1).
 7. [x] **Frontend comment cleanup** (done with step 5).
 
 Out of scope: `queries.ts` domain split (§1.3 borderline), FTS/search, and anything
