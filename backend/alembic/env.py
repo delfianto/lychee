@@ -26,9 +26,7 @@ target_metadata = Base.metadata
 def _include_object(_object: object, name: str | None, type_: str, *_args: object) -> bool:
     """Hide the FTS5 virtual table (+ its shadow tables) from autogenerate — they're
     hand-managed raw SQL, not ORM models, so a diff would otherwise try to drop them."""
-    if type_ == "table" and name is not None and name.startswith("series_fts"):
-        return False
-    return True
+    return not (type_ == "table" and name is not None and name.startswith("series_fts"))
 
 
 def run_migrations_offline() -> None:
