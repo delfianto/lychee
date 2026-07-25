@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **159
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **163
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -43,11 +43,10 @@
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress
          via SSE. FE consumes `/api/events` (shared `EventSource`, activity indicator, refetch on
          `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
-   - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
+   - [x] **Local import + eager thumbnails + filename metadata** (PART G) — cover thumbnails warmed on
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
-         AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
-         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G4 done
-         (thumbnails + import config/panel + the import job + the filename pattern); only G5 (browser upload) remains.**
+         AVIF (server path + browser upload; UI quality + enable toggle); and a configurable token-template
+         filename→metadata pattern that auto-fills series/volume/chapter/title. **G0–G5 done.** ✅
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -226,7 +225,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 159 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 163 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -376,7 +375,7 @@ override.
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
-# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G4 done)
+# PART G — Local import + eager thumbnails + filename metadata — ✅ done (G0–G5)
 
 Three related pieces of catalog-building polish:
 1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
@@ -481,14 +480,15 @@ Three related pieces of catalog-building polish:
       cases: series/chapter/volume, author, title/year, whole-name, trailing `*`, no-match, invalid; plus a
       pattern-driven import).
 
-**G5 — Browser upload (import source, Phase 2)**
-- [ ] `POST /api/import/upload` (multipart) — accept container file(s), stream to a staged temp dir under
-      `storage/imports/_staging/`, then run the same G3 `import_path` pipeline on the staged file and clean
-      up. Enforce an upload size cap + allowed extensions (cbz/zip).
-- [ ] FE: drag-and-drop / file-picker in ImportPanel alongside the server-path form; progress via SSE (same
-      `"localimport"` kind), toast on done.
-- [ ] Tests: upload a tmp CBZ (TestClient multipart) → staged, transcoded to an `avif_dir` book, cover thumb
-      generated; oversize / bad-type → 400.
+**G5 — Browser upload (import source, Phase 2)** — ✅ done
+- [x] `POST /api/import/upload` (multipart) — validates (enabled / `.cbz`|`.zip` / 1 GiB cap), streams the
+      upload in chunks to `storage/uploads/<token>/` (outside any library so scans ignore it), runs the same
+      `import_path` pipeline, and removes the staging dir when done (success or failure). Added
+      `python-multipart`.
+- [x] FE: an "or upload a file" file-input in ImportPanel (raw multipart `fetch`) beside the path form;
+      result via the same `"localimport"` SSE.
+- [x] Verified live (CBZ upload → series + transcoded AVIF + warmed cover, staging cleaned) + 4 tests:
+      upload transcodes, disabled → 400, bad-type → 400, oversize → 400.
 
 **Testing:** unit-test the pattern compiler (tokens→regex, literal escaping, no-match) and the AVIF quality
 override; integration-test import end-to-end (tmp CBZ/folder → served AVIF + generated thumbnail) and config
