@@ -21,7 +21,7 @@
 1. **Functional (user-facing, small backend):**
    - [x] `PATCH /api/series/{id}` — favorite / library-status / personal rating now persist (migration
          b6a9fd5d added `user_rating`; SeriesDetail + GalleryDetail wired). ✅ done.
-   - [ ] Download `pause`/`resume` endpoints (FE toggles status locally); `PUT /api/collections/{id}/series` reorder.
+   - [ ] Download `pause`/`resume` endpoints (FE toggles status locally).
 2. **Larger features (genuinely new work):**
    - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
@@ -179,7 +179,7 @@
 ### Collections (Lists)
 - [x] GET/POST `/api/collections`, [x] GET/PATCH/DELETE `/api/collections/{id}`,
       [x] POST/DELETE `/api/collections/{id}/series[/{sid}]`.
-- [ ] `PUT /api/collections/{id}/series` reorder.
+- [—] Series reorder within a list — intentionally not planned (lists are alphabetical + searchable).
 
 ### Settings
 - [x] **Libraries** GET/POST/PATCH/DELETE + `/summary` + scan/scan-all.
@@ -212,7 +212,7 @@
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
-- [ ] Drag-reorder in lists · per-page reader thumbnails.
+- [ ] Per-page reader thumbnails.
 - [x] Formalize AVIF policy as **ADR 19**.
 - [ ] Scrub any leftover "ebook/Books" wording.
 
