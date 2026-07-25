@@ -73,8 +73,9 @@ def get_sync(db: DbSession) -> SyncOut:
     return service.get_sync(db)
 
 
-@router.post("/sync")
-def run_sync(db: DbSession) -> SyncOut:
+@router.post("/sync", status_code=status.HTTP_202_ACCEPTED)
+def run_sync(db: DbSession) -> TaskOut:
+    """Check matched series for new remote chapters in the background."""
     return service.run_sync(db)
 
 

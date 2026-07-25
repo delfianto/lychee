@@ -57,6 +57,8 @@ export interface Series {
   libraryStatus?: LibraryStatus;
   /** Matched metadata provider slug (e.g. "mangadex"), or absent if unmatched. */
   provider?: string | null;
+  /** Remote chapters not yet local, from the last sync (drives the "new" badge). */
+  availableChapters?: number;
 }
 
 export interface RecentUpdate {

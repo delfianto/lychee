@@ -638,7 +638,10 @@ export interface paths {
         /** Get Sync */
         get: operations["get_sync_api_sync_get"];
         put?: never;
-        /** Run Sync */
+        /**
+         * Run Sync
+         * @description Check matched series for new remote chapters in the background.
+         */
         post: operations["run_sync_api_sync_post"];
         delete?: never;
         options?: never;
@@ -1279,6 +1282,11 @@ export interface components {
             libraryStatus?: string | null;
             /** Provider */
             provider?: string | null;
+            /**
+             * Availablechapters
+             * @default 0
+             */
+            availableChapters: number;
         };
         /**
          * SeriesUpdate
@@ -2560,12 +2568,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SyncOut"];
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
         };

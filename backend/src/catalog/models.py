@@ -97,6 +97,8 @@ class Series(BaseModel):
     )
 
     total_chapters: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Remote chapters not yet present locally, from the last sync (PART F/M5).
+    available_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Physical binding (ADR 05) — relative to the library root; null for download-only.
     path_rel: Mapped[str | None] = mapped_column(String(1024), nullable=True)

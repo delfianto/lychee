@@ -11,10 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.metadata import apply_metadata
-from src.catalog.models import Library, Series
+from src.catalog.models import Chapter, Library, Series
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError, NotFoundError
-from src.downloads.provider import SeriesMetadata
+from src.core.logging import get_logger
+from src.downloads.provider import SeriesMetadata, get_provider
 from src.integrations.models import Provider, SyncState, Tracker
 from src.integrations.schema import (
     AboutOut,
@@ -32,6 +33,7 @@ from src.providers.mangadex_client import API_BASE, USER_AGENT
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
+logger = get_logger(__name__)
 _STARTED = datetime.now(UTC)
 _MANGADEX = "mangadex"
 _MANGADEX_LIBRARY = "MangaDex"
@@ -263,14 +265,44 @@ def get_sync(session: Session) -> SyncOut:
     return _sync_out(_sync_state(session))
 
 
-def run_sync(session: Session) -> SyncOut:
-    """Stub sync (real MangaDex new-chapter check is B5): stamp last-sync now."""
-    state = _sync_state(session)
-    state.last_sync_at = datetime.now(UTC)
-    state.syncing = False
-    state.new_chapters = 0
-    session.commit()
-    return _sync_out(state)
+def _sync_work() -> Work:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        config = session.get(Provider, _MANGADEX)
+        language = config.language if config else "en"
+        matched = list(
+            session.scalars(
+                select(Series).where(
+                    Series.provider.is_not(None), Series.provider_series_id.is_not(None)
+                )
+            )
+        )
+        total_new = 0
+        for index, series in enumerate(matched, start=1):
+            provider = get_provider(series.provider or "")
+            if provider is not None:
+                try:
+                    remote = provider.list_chapters(series.provider_series_id or "", language=language)
+                    local = set(
+                        session.scalars(select(Chapter.number).where(Chapter.series_id == series.id))
+                    )
+                    series.available_chapters = sum(1 for r in remote if r.number not in local)
+                    total_new += series.available_chapters
+                except Exception as exc:  # noqa: BLE001 - per-series best-effort
+                    logger.warning("sync_series_failed", series=series.title, error=str(exc))
+            on_progress(round(index / len(matched) * 100) if matched else 100, series.title)
+        state = _sync_state(session)
+        state.new_chapters = total_new
+        state.last_sync_at = datetime.now(UTC)
+        state.syncing = False
+        return {"newChapters": total_new}
+
+    return work
+
+
+def run_sync(session: Session) -> TaskOut:
+    """Check every matched series for new remote chapters on the background queue."""
+    task = queue.submit("sync", "Checking for new chapters", _sync_work())
+    return TaskOut.model_validate(task)
 
 
 def about() -> AboutOut:

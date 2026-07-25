@@ -186,12 +186,8 @@ async function loadSync(): Promise<void> {
 }
 async function syncNow(): Promise<void> {
   sync.syncing = true;
-  const { data } = await api.POST("/api/sync");
-  if (data) {
-    sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "just now";
-    sync.newChapters = data.newChapters;
-  }
-  sync.syncing = false;
+  await api.POST("/api/sync"); // runs on the queue; state reloads on the sync task's done event
+  toast("Checking for new chapters…");
 }
 async function retryDownload(d: DlRow): Promise<void> {
   await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: d.id } } });
@@ -414,6 +410,12 @@ const disposeDone = onTaskDone((task) => {
     );
   } else if (task.kind === "download") {
     void loadDownloads();
+  } else if (task.kind === "sync") {
+    sync.syncing = false;
+    void loadSync();
+    if (task.status === "done") toast(`Sync complete — ${(task.result?.newChapters as number) ?? 0} new`);
+  } else if (task.kind === "import") {
+    if (task.status === "done") toast(`Imported ${(task.result?.imported as number) ?? 0} series`);
   }
 });
 // While a download runs, refresh the table on progress events (throttled) so
