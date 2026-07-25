@@ -3,6 +3,7 @@
 import io
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +29,7 @@ def _enable(client: TestClient) -> None:
     assert client.patch("/api/import/config", json={"enabled": True}).status_code == 200
 
 
-def _series_by_title(client: TestClient, title: str) -> dict[str, object]:
+def _series_by_title(client: TestClient, title: str) -> dict[str, Any]:
     items = client.get("/api/series").json()["items"]
     return next(s for s in items if s["title"] == title)
 

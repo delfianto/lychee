@@ -2,15 +2,22 @@
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from src.downloads.provider import register_provider
+from src.downloads.provider import RemoteChapter, register_provider
 from src.tasks.queue import queue
 from src.taxonomy.models import Tag
 
 
 class _TagProvider:
-    """A metadata provider that returns a canned tag list (one already seeded, one new)."""
+    """A provider that returns a canned tag list (one already seeded, one new). Implements
+    the minimal Provider surface so it can register, plus list_tags + get_metadata."""
 
     id = "mangadex"
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        return []
+
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+        return []
 
     def list_tags(self, *, language: str = "en") -> list[tuple[str, str]]:
         return [("Action", "genre"), ("Cybernetic Ninjas", "theme")]
