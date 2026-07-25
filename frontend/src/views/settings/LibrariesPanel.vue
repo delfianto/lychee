@@ -8,6 +8,7 @@ import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
 import { relativeTime } from "../../api/format";
 import { toast } from "../../lib/toast";
+import AddLibraryModal from "./AddLibraryModal.vue";
 
 interface LibraryRow {
   id: string;
@@ -17,6 +18,7 @@ interface LibraryRow {
   lastScan: string;
 }
 const libraries = ref<LibraryRow[]>([]);
+const showAdd = ref(false);
 // A scan runs in the background; disable the triggers while one is in flight.
 const scanning = computed(() => activeTasks.value.some((t) => t.kind === "scan"));
 async function loadLibraries(): Promise<void> {
@@ -41,13 +43,10 @@ async function removeLibrary(id: string): Promise<void> {
   await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
   await loadLibraries();
 }
-async function addLibrary(): Promise<void> {
-  const name = window.prompt("Library name?");
-  if (!name?.trim()) return;
-  const path = window.prompt("Library path (a folder on the server)?");
-  if (!path?.trim()) return;
-  await api.POST("/api/libraries", { body: { name: name.trim(), path: path.trim(), kind: "manga" } });
+async function onLibraryAdded(): Promise<void> {
+  showAdd.value = false;
   await loadLibraries();
+  toast("Library added");
 }
 
 const disposeDone = onTaskDone((task) => {
@@ -70,7 +69,7 @@ onMounted(loadLibraries);
         <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
           <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
         </button>
-        <button class="btn btn-primary btn-sm gap-1" @click="addLibrary"><Plus class="size-4" />Add library</button>
+        <button class="btn btn-primary btn-sm gap-1" @click="showAdd = true"><Plus class="size-4" />Add library</button>
       </div>
     </div>
     <div class="grid gap-4 lg:grid-cols-2">
@@ -87,5 +86,7 @@ onMounted(loadLibraries);
         </div>
       </div>
     </div>
+
+    <AddLibraryModal v-if="showAdd" @close="showAdd = false" @added="onLibraryAdded" />
   </section>
 </template>
