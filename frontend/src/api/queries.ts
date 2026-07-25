@@ -130,6 +130,7 @@ export function useSeriesList() {
   const done = ref(false);
   const cursor = ref<string | null>(null);
   let params: SeriesQuery = {};
+  let started = false; // no paging until the first reload sets a real query
 
   async function fetchPage(reset: boolean): Promise<void> {
     if (loading.value) return;
@@ -150,6 +151,7 @@ export function useSeriesList() {
   }
 
   async function reload(next: SeriesQuery): Promise<void> {
+    started = true;
     params = next;
     cursor.value = null;
     done.value = false;
@@ -159,7 +161,9 @@ export function useSeriesList() {
   }
 
   function loadMore(): void {
-    if (!done.value && !loading.value) void fetchPage(false);
+    // Never before the first reload — otherwise the sentinel fetches an unfiltered
+    // page 1 (empty params) and briefly flashes the wrong series on navigation.
+    if (started && !done.value && !loading.value) void fetchPage(false);
   }
 
   function retry(): void {
