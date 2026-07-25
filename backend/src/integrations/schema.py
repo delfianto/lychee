@@ -90,16 +90,25 @@ class AboutOut(CamelModel):
     uptime_seconds: int
 
 
+class PatternPreset(CamelModel):
+    """A saved, reusable filename→metadata pattern."""
+
+    name: str
+    pattern: str
+
+
 class ImportConfigOut(CamelModel):
     enabled: bool
     quality: int
     filename_pattern: str
+    pattern_presets: list[PatternPreset]
 
 
 class ImportConfigUpdate(CamelModel):
     enabled: bool | None = None
     quality: int | None = Field(default=None, ge=1, le=100)
     filename_pattern: str | None = None
+    pattern_presets: list[PatternPreset] | None = None
 
 
 class ImportRequest(CamelModel):

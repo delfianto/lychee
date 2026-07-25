@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.persistence.base_model import Base, TimestampMixin
@@ -76,3 +76,7 @@ class ImportConfig(Base, TimestampMixin):
     quality: Mapped[int] = mapped_column(Integer, default=75, nullable=False)
     # Token-template pattern to derive metadata from filenames (empty → built-in parser).
     filename_pattern: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    # Saved, reusable filename-pattern presets: a list of {"name", "pattern"}.
+    pattern_presets: Mapped[list[dict[str, str]] | None] = mapped_column(
+        JSON, default=list, nullable=True
+    )

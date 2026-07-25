@@ -8,6 +8,7 @@ def test_defaults(client: TestClient) -> None:
         "enabled": False,
         "quality": 75,
         "filenamePattern": "",
+        "patternPresets": [],
     }
 
 
@@ -21,9 +22,22 @@ def test_patch_persists(client: TestClient) -> None:
         "enabled": True,
         "quality": 60,
         "filenamePattern": "{series} - c{chapter}",
+        "patternPresets": [],
     }
     # persists across requests
     assert client.get("/api/import/config").json()["quality"] == 60
+
+
+def test_pattern_presets_saved_and_returned(client: TestClient) -> None:
+    presets = [
+        {"name": "Lanraragi", "pattern": "{series} - c{chapter}"},
+        {"name": "With tags", "pattern": "{series} [{tags}] c{chapter}"},
+    ]
+    resp = client.patch("/api/import/config", json={"patternPresets": presets})
+    assert resp.status_code == 200
+    assert resp.json()["patternPresets"] == presets
+    # persists across requests
+    assert client.get("/api/import/config").json()["patternPresets"] == presets
 
 
 def test_partial_update_leaves_others(client: TestClient) -> None:
