@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.media import generate_series_cover, write_series_cover
+from src.catalog.metadata import reconcile_tags
 from src.catalog.models import Book, Chapter, Library, Series, SeriesCredit
 from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
@@ -82,6 +83,12 @@ def _apply_series_fields(session: Session, series: Series, result: PatternResult
         if name and (name, role) not in existing:
             session.add(SeriesCredit(series_id=series.id, name=name, role=role))
             existing.add((name, role))
+    if result.tags:
+        linked = {tag.id for tag in series.tags}
+        for tag in reconcile_tags(session, [(name, "genre") for name in result.tags]):
+            if tag.id not in linked:
+                series.tags.append(tag)
+                linked.add(tag.id)
 
 
 def _import_chapter(
@@ -108,6 +115,8 @@ def _import_chapter(
     chapter.number_sort = result.number_sort
     chapter.title = result.title
     chapter.group_name = result.group
+    if result.language:
+        chapter.language = result.language
     chapter.page_start = 0
     chapter.page_count = book.page_count
     session.flush()

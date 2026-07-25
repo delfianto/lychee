@@ -100,3 +100,25 @@ def test_pattern_invalid_returns_none() -> None:
     assert parse_pattern("anything", "") is None  # no tokens
     assert parse_pattern("anything", "{bogus}") is None  # unknown token
     assert parse_pattern("x - c1", "{series} {series}") is None  # duplicate token
+
+
+def test_pattern_language_token_lowercased() -> None:
+    r = parse_pattern("Berserk [EN] c012", "{series} [{language}] c{chapter}")
+    assert r is not None
+    assert r.series == "Berserk"
+    assert r.language == "en"  # lowercased
+    assert r.number == "12"
+
+
+def test_pattern_tags_token_splits_and_strips() -> None:
+    r = parse_pattern("Vinland Saga [action, dark fantasy; seinen] c001", "{series} [{tags}] c{chapter}")
+    assert r is not None
+    assert r.series == "Vinland Saga"
+    assert r.tags == ("action", "dark fantasy", "seinen")  # split on ,/;/ and stripped
+
+
+def test_pattern_without_new_tokens_leaves_them_empty() -> None:
+    r = parse_pattern("Berserk - c012", "{series} - c{chapter}")
+    assert r is not None
+    assert r.language is None
+    assert r.tags == ()

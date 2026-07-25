@@ -56,6 +56,8 @@ class PatternResult:
     artist: str | None = None
     group: str | None = None
     year: int | None = None
+    language: str | None = None
+    tags: tuple[str, ...] = ()
 
 
 # Token → capture regex. Text tokens are lazy so a following literal still matches.
@@ -65,6 +67,8 @@ _PATTERN_TOKENS = {
     "author": r".+?",
     "artist": r".+?",
     "group": r".+?",
+    "language": r".+?",
+    "tags": r".+?",
     "volume": r"\d{1,4}",
     "year": r"(?:19|20)\d{2}",
     "chapter": r"\d{1,5}(?:\.\d+)?",
@@ -114,6 +118,9 @@ def parse_pattern(filename: str, pattern: str) -> PatternResult | None:
         return value.strip() if value and value.strip() else None
 
     number = groups.get("chapter")
+    language = text("language")
+    tags_raw = groups.get("tags")
+    tags = tuple(t.strip() for t in re.split(r"[,;/]", tags_raw) if t.strip()) if tags_raw else ()
     return PatternResult(
         series=text("series"),
         title=text("title"),
@@ -124,6 +131,8 @@ def parse_pattern(filename: str, pattern: str) -> PatternResult | None:
         artist=text("artist"),
         group=text("group"),
         year=int(groups["year"]) if groups.get("year") else None,
+        language=language.lower() if language else None,
+        tags=tags,
     )
 
 
