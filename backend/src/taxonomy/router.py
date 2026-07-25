@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Response, status
 
 from src.core.persistence.database import DbSession
 from src.core.schema import OffsetPage
+from src.tasks.schema import TaskOut
 from src.taxonomy import service
 from src.taxonomy.schema import TaxonomyCreate, TaxonomyItemOut, TaxonomyUpdate
 
@@ -21,6 +22,12 @@ def list_taxonomy(
     page_size: int = Query(20, alias="pageSize"),
 ) -> OffsetPage[TaxonomyItemOut]:
     return service.list_taxonomy(db, type_=type, q=q, page=page, page_size=page_size)
+
+
+@router.post("/taxonomy/refresh", status_code=status.HTTP_202_ACCEPTED)
+def refresh_taxonomy(db: DbSession) -> TaskOut:
+    """Refresh the tag list from the metadata provider (adds missing tags) in the background."""
+    return service.refresh_taxonomy(db)
 
 
 @router.post("/taxonomy", status_code=status.HTTP_201_CREATED)

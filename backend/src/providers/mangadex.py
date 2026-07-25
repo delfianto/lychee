@@ -177,6 +177,16 @@ class MangaDexProvider:
         ).json()["data"]
         return _parse_manga(data, language, rating=self._rating(provider_series_id))
 
+    def list_tags(self, *, language: str = "en") -> list[tuple[str, str]]:
+        """The canonical tag list — ``(name, group)`` for each tag from ``/manga/tag``."""
+        data = self._api.get("/manga/tag").json()
+        out: list[tuple[str, str]] = []
+        for tag in data.get("data", []):
+            name = _localized(tag["attributes"].get("name"), language) or ""
+            if name:
+                out.append((name, tag["attributes"].get("group", "genre")))
+        return out
+
     def list_follows(self, *, language: str = "en") -> list[SeriesMetadata]:
         """The authed user's followed manga as normalised metadata (needs a Bearer token)."""
         results: list[SeriesMetadata] = []
