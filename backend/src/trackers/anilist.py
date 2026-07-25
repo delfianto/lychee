@@ -19,6 +19,20 @@ AUTHORIZE_URL = "https://anilist.co/api/v2/oauth/authorize"
 TOKEN_URL = "https://anilist.co/api/v2/oauth/token"
 GRAPHQL_URL = "https://graphql.anilist.co"
 
+# lychee library_status → AniList MediaListStatus enum.
+_STATUS = {
+    "reading": "CURRENT",
+    "completed": "COMPLETED",
+    "on_hold": "PAUSED",
+    "dropped": "DROPPED",
+    "plan_to_read": "PLANNING",
+    "re_reading": "REPEATING",
+}
+_SAVE_ENTRY = (
+    "mutation($mediaId:Int,$status:MediaListStatus,$progress:Int){"
+    "SaveMediaListEntry(mediaId:$mediaId,status:$status,progress:$progress){id}}"
+)
+
 
 class AniListTracker:
     id = "anilist"
@@ -64,3 +78,18 @@ class AniListTracker:
         _ = response.raise_for_status()
         viewer = response.json().get("data", {}).get("Viewer") or {}
         return viewer.get("name")
+
+    def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
+        response = self._client.post(
+            GRAPHQL_URL,
+            json={
+                "query": _SAVE_ENTRY,
+                "variables": {
+                    "mediaId": int(media_id),
+                    "status": _STATUS.get(status, "CURRENT"),
+                    "progress": progress,
+                },
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        _ = response.raise_for_status()

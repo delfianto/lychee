@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.catalog.models import Chapter
 from src.core.exceptions import NotFoundError
 from src.progress.models import ReadingProgress
+from src.trackers.sync import enqueue_push
 
 
 def update_progress(
@@ -29,3 +30,5 @@ def update_progress(
     row.current_page = max(0, page)
     row.completed = done
     session.commit()
+    if done:  # push read progress to connected trackers (background, best-effort)
+        enqueue_push(session, chapter.series_id)

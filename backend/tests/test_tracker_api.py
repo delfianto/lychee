@@ -25,6 +25,9 @@ class _FakeAniList:
     def account_name(self, access_token: str) -> str | None:
         return "AniUser"
 
+    def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
+        pass
+
 
 def test_connect_returns_authorize_url_and_encrypts_secret(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
