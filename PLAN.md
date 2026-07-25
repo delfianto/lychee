@@ -1,7 +1,7 @@
 # lychee — Build Plan & TODO Tracker
 
 > **Build plan & status tracker** (tracked in git). Living doc; update as we go.
-> Legend: `[x]` done · `[~]` partial / needs wiring · `[ ]` not started · `[—]` not planned
+> Legend: `[x]` done · `[~]` partial / needs wiring · `[ ]` not started · `[—]` not planned · `[⏸]` on hold
 
 ## Status snapshot (2026-07-25)
 - **Frontend:** **fully API-driven** — `src/mocks/library.ts` is deleted; every view (Home,
@@ -233,10 +233,14 @@
       (`src/api/events.ts` + activity indicator), series PATCH ✅; **tracker sync ❌**.
 
 # PART E — Backlog / later
-- [ ] Auth & multi-user (ADR 12).
+- [x] **CI + task runner** — GitHub Actions (`ci.yml` backend: uv → ruff / basedpyright / alembic check /
+      pytest; `frontend-ci.yml`: bun → typecheck / vitest / build) + a `just` task runner (`just check`
+      runs the whole gate locally).
+- **Infra — on hold** (deferred to last, by request):
+  - [⏸] Auth & multi-user.
+  - [⏸] Docker packaging.
 - [~] Tests: backend 173 pytest ✅; FE vitest set up (@vue/test-utils + happy-dom) with first
       component/unit tests — **coverage still thin**.
-- [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
 - [ ] Per-page reader thumbnails.

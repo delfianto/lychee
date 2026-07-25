@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/ci.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  backend:
+    name: Backend lint + type + test
+    runs-on: ubuntu-latest
+    env:
+      # Throwaway DB for the alembic drift check; pytest uses its own temp DBs.
+      LYCHEE_DATABASE_URL: sqlite:///./ci.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Type-check (basedpyright)
+        run: uv run basedpyright
+
+      - name: Migrations in sync (alembic)
+        run: uv run alembic upgrade head && uv run alembic check
+
+      - name: Tests (pytest)
+        run: uv run pytest -q
