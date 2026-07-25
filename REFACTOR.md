@@ -10,24 +10,21 @@ Legend: **[H]** high priority · **[M]** medium · **[L]** low / nice-to-have.
 
 ## 1. God objects
 
-### 1.1 [H] `frontend/src/views/SettingsView.vue` — 1093 lines
-One component owns **eight** unrelated concerns, each with its own state, API
-calls, and template block: content taxonomy (table + pagination + filtering),
-downloads + MangaDex sync, libraries CRUD + scan, metadata-provider config,
-MangaDex account (connect/import/disconnect), trackers (OAuth + credentials +
-modal), reader defaults, appearance, and About. It also centralises all SSE
-`onTaskDone`/`onTaskEvent` wiring for every section.
+### 1.1 [H] `frontend/src/views/SettingsView.vue` — was 1093 lines
+One component owned **eight** unrelated concerns, each with its own state, API
+calls, and template block. Decomposing along the tab seam into
+`views/settings/*Panel.vue`, each owning its state, `load*()`, and SSE subscription.
 
-**Fix:** SettingsView becomes a thin shell (section rail + `<component :is>`); each
-concern moves to its own child component that owns its state, its `load*()`, and
-its own SSE subscription:
-- `settings/LibrariesPanel.vue` (libraries + scan)
-- `settings/ProviderPanel.vue` (MangaDex provider config + account connect/import)
-- `settings/TrackersPanel.vue` (+ the connect modal, split out as `TrackerConnectModal.vue`)
-- `settings/DownloadsPanel.vue` (downloads table + sync card)
-- `settings/ContentPanel.vue` (taxonomy table)
-- `settings/AppearancePanel.vue` (appearance + reader defaults)
-- `settings/AboutPanel.vue`
+**Status — partially done (1093 → 674 lines):**
+- [x] `ContentPanel.vue` (taxonomy table)
+- [x] `AboutPanel.vue` (server info + library summary)
+- [x] `DownloadsPanel.vue` (downloads queue + sync card + its own SSE wiring)
+- [ ] The **"general" tab** (~674 lines left in SettingsView) still bundles Libraries,
+      Provider + MangaDex account, Trackers (+ connect modal), and Appearance/Reader.
+      Split next into `LibrariesPanel` / `ProviderPanel` / `TrackersPanel`
+      (+`TrackerConnectModal`) / `AppearancePanel`, leaving SettingsView a shell
+      (section rail + theme + `<component v-else-if>`). Scan + import SSE handlers
+      move to Libraries/Provider respectively.
 
 ### 1.2 [H] `backend/src/integrations/service.py` — 382 lines, 5 concerns
 Mixes provider-config CRUD, **MangaDex account + follows import**, tracker
@@ -114,16 +111,16 @@ Files with references (from grep): `tasks/*`, `progress/*`, `providers/*`,
 
 ## 4. Execution plan (each step: verify `ruff`+`basedpyright`+`pytest` [+ FE build], then commit)
 
-1. **This file.**
-2. **Backend god-object split** — move MangaDex account/import → `providers/mangadex_account.py`;
-   split `integrations/service.py` → `providers.py` / `trackers.py` / `sync.py` / `about.py`;
-   rewire `integrations/router.py`. (Fixes §1.2, §2.1.)
-3. **Extract `catalog/matching.py`** from `catalog/service.py`; rewire router + library. (§1.3.)
-4. **Add `queue.submit_task`** and collapse the boilerplate. (§2.3.)
-5. **Backend comment cleanup** — strip ADR/PLAN refs; docstrings state responsibility. (§2.2.)
-6. **Frontend SettingsView split** — extract per-section panels + `TrackerConnectModal`. (§1.1.)
-7. **Frontend comment cleanup.** (§2.2.)
+1. [x] **This file.**
+2. [x] **Backend god-object split** — MangaDex account/import → `providers/mangadex_account.py`;
+   `integrations/service.py` → `providers.py` / `trackers.py` / `sync.py` / `about.py`. (§1.2, §2.1.)
+3. [x] **Extract `catalog/matching.py`** from `catalog/service.py`. (§1.3.)
+4. [x] **`queue.submit_task`** collapses the enqueue boilerplate. (§2.3.)
+5. [x] **Backend comment cleanup** — ADR/PLAN refs stripped across ~35 files. (§2.2, incl. FE.)
+6. [~] **Frontend SettingsView split** — Content/About/Downloads panels done (1093→674); the
+   general-tab panels remain (§1.1).
+7. [x] **Frontend comment cleanup** (done with step 5).
 
-Out of scope for now: `queries.ts` domain split (§1.3 borderline), FTS/search, and
-anything behavioural — this is a **pure refactor**; the test suite (129) must stay
-green and the API/DTO shapes unchanged throughout.
+Out of scope: `queries.ts` domain split (§1.3 borderline), FTS/search, and anything
+behavioural — this stayed a **pure refactor**; the test suite (**129 green**) and the
+API/DTO shapes are unchanged throughout.
