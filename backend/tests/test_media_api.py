@@ -3,12 +3,14 @@
 import io
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy.orm import Session
 from src.catalog.models import Book, Chapter, Series
+from src.media.thumbnails import ThumbnailStore, ThumbVariant
 
-from tests.support import ensure_library
+from tests.support import ensure_library, make_series
 
 
 def _write_pages(directory: Path, count: int) -> None:
@@ -123,3 +125,29 @@ def test_related_and_art(client: TestClient, db_session: Session, tmp_path: Path
     assert other.id in [s["id"] for s in related]
 
     assert client.get(f"/api/series/{series.id}/art").json() == {"images": []}
+
+
+def _png_bytes() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (100, 150), (120, 60, 40)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_provider_cover_is_downloaded_and_served_locally(
+    client: TestClient, db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.catalog import media
+
+    series = make_series(db_session, title="Matched")  # no book — cover must come from the source
+    series.cover_source = "https://uploads.mangadex.org/covers/x/cover.512.jpg"
+    db_session.commit()
+    monkeypatch.setattr(media, "_download_image", lambda _url: _png_bytes())  # no real network
+
+    resp = client.get(f"/api/series/{series.id}/cover")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/avif"  # transcoded from the downloaded cover
+
+    # coverUrl is local, and the cover is now cached
+    listed = client.get("/api/series").json()["items"]
+    assert next(s for s in listed if s["id"] == series.id)["coverUrl"] == f"/api/series/{series.id}/cover"
+    assert ThumbnailStore(tmp_path / "storage" / "thumbnails").exists(series.id, ThumbVariant.COVER)

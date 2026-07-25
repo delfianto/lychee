@@ -12,17 +12,22 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Book, Chapter, Library, Series
-from src.core.exceptions import NotFoundError
+from src.core.exceptions import LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
 from src.media.containers import open_container
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
 
 logger = get_logger(__name__)
+
+# Downloading a provider cover once (then serving it as a local AVIF thumbnail),
+# rather than hotlinking. A non-spoofed UA keeps MangaDex's CDN happy.
+_COVER_UA = "lychee/0.0.1 (self-hosted manga server)"
 
 _MIME = {
     ".avif": "image/avif",
@@ -70,47 +75,75 @@ def _read_page(session: Session, book: Book, index: int) -> tuple[bytes, str]:
         return container.read_page(index), container.page_name(index)
 
 
-def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str) -> Served:
-    """Serve a series cover thumbnail, generating it from the first page on a miss."""
-    variant = ThumbVariant.DETAIL if size == "detail" else ThumbVariant.COVER
-    data = store.read(series_id, variant)
-    if data is None:
-        if session.get(Series, series_id) is None:
-            raise NotFoundError(f"series {series_id!r} not found")
-        book = _first_book(session, series_id)
-        if book is None:
-            raise NotFoundError("no cover source for series")
-        source, _ = _read_page(session, book, 0)
-        _ = store.generate(series_id, source, variant)
-        data = store.read(series_id, variant)
-        if data is None:  # pragma: no cover - defensive
-            raise NotFoundError("cover generation failed")
-    return Served(data=data, media_type="image/avif", etag=_etag(data))
+def _download_image(url: str) -> bytes | None:
+    """Best-effort download of a remote image (a provider cover). None on any failure."""
+    try:
+        response = httpx.get(
+            url, headers={"User-Agent": _COVER_UA}, timeout=15.0, follow_redirects=True
+        )
+        if response.status_code == 200:
+            return response.content
+    except httpx.HTTPError as exc:
+        logger.warning("cover_download_failed", url=url, error=str(exc))
+    return None
+
+
+def _cover_source_bytes(session: Session, series_id: str) -> bytes | None:
+    """The best cover image bytes for a series: the provider cover (downloaded once) if
+    set, else the first book's first page. None when neither is available/readable."""
+    series = session.get(Series, series_id)
+    if series is None:
+        return None
+    if series.cover_source and series.cover_source.startswith("http"):
+        remote = _download_image(series.cover_source)
+        if remote is not None:
+            return remote
+    book = _first_book(session, series_id)
+    if book is None:
+        return None
+    try:
+        data, _ = _read_page(session, book, 0)
+    except LycheeError:
+        return None
+    return data
 
 
 def generate_series_cover(
     session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
 ) -> bool:
-    """Warm a series' cover thumbnails from its first book's first page.
+    """Generate a series' cover thumbnails — the provider cover if the series has one
+    (downloaded + cached locally, never hotlinked), else its first book's first page.
 
-    Idempotent and best-effort: skips reading the page when every variant already
-    exists (unless ``overwrite``), no-ops when the series has no book yet, and
-    swallows an unreadable/undecodable first page (the lazy ``get_cover`` path
-    retries on request). Returns whether it generated. Callers use this to warm
-    covers eagerly on download/scan instead of on first request.
+    Idempotent and best-effort: skips when every variant already exists (unless
+    ``overwrite``), no-ops when there's no cover source, and swallows failures. Returns
+    whether it generated. Used to warm covers eagerly on download/scan.
     """
     if not overwrite and all(store.exists(series_id, variant) for variant in ThumbVariant):
         return False
-    book = _first_book(session, series_id)
-    if book is None:
+    source = _cover_source_bytes(session, series_id)
+    if source is None:
         return False
     try:
-        source, _ = _read_page(session, book, 0)
         store.generate_all(series_id, source, overwrite=overwrite)
     except Exception as exc:  # noqa: BLE001 - warming must never break the download/scan
-        logger.warning("cover_warm_failed", series_id=series_id, error=str(exc))
+        logger.warning("cover_generate_failed", series_id=series_id, error=str(exc))
         return False
     return True
+
+
+def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str) -> Served:
+    """Serve a series cover thumbnail (cached AVIF), generating it on a miss from the
+    provider cover or the first page."""
+    variant = ThumbVariant.DETAIL if size == "detail" else ThumbVariant.COVER
+    data = store.read(series_id, variant)
+    if data is None:
+        if session.get(Series, series_id) is None:
+            raise NotFoundError(f"series {series_id!r} not found")
+        _ = generate_series_cover(session, store, series_id)
+        data = store.read(series_id, variant)
+        if data is None:
+            raise NotFoundError("no cover source for series")
+    return Served(data=data, media_type="image/avif", etag=_etag(data))
 
 
 def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
