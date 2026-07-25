@@ -1,9 +1,11 @@
-"""MangaDex account: OAuth connect/disconnect + follows / reading-status import.
+"""MangaDex account: OAuth connect/disconnect + a re-runnable account sync.
 
 Connecting exchanges a personal client's credentials for tokens (stored encrypted
-on the provider config row). Importing refreshes the token, then pulls the user's
-followed manga + reading statuses into a virtual "MangaDex" library, applying
-provider metadata and mapping each status onto ``Series.library_status``.
+on the provider config row). Syncing refreshes the token, then pulls the union of the
+user's followed manga, reading statuses, and custom lists (MDLists) into a virtual
+"MangaDex" library — applying provider metadata, mapping each status onto
+``Series.library_status`` (MangaDex is the source of truth), and mirroring each custom
+list into a managed Collection. It downloads no pages (download stays a triggered action).
 """
 
 from __future__ import annotations
@@ -16,9 +18,10 @@ from sqlalchemy.orm import Session
 
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Library, Series
+from src.collections.models import Collection, CollectionSeries
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
-from src.downloads.provider import SeriesMetadata
+from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
 from src.providers.mangadex import MangaDexProvider
@@ -78,9 +81,17 @@ def _mangadex_library(session: Session) -> Library:
     return library
 
 
-def _upsert_followed_series(
-    session: Session, library: Library, meta: SeriesMetadata, status: str | None, *, fetch_covers: bool
-) -> None:
+def _upsert_series(
+    session: Session,
+    library: Library,
+    meta: SeriesMetadata,
+    status: str | None,
+    *,
+    fetch_covers: bool,
+) -> Series:
+    """Create/update the Series for a MangaDex manga, matched by provider id **globally** — so
+    a scanned-and-matched series is updated in place, never duplicated. Applies metadata and,
+    MangaDex being the source of truth here, maps its reading status onto the shelf."""
     series = session.scalar(
         select(Series).where(
             Series.provider == _MANGADEX, Series.provider_series_id == meta.provider_series_id
@@ -100,15 +111,64 @@ def _upsert_followed_series(
         session.flush()
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
     if status in _READING_STATUSES:
-        series.library_status = status
+        series.library_status = status  # MangaDex wins on pull
+    return series
 
 
-def _import_work() -> Work:
+def _safe_metadata(provider: MangaDexProvider, md_id: str, language: str) -> SeriesMetadata | None:
+    """Fetch one manga's metadata; None on any provider error (skip, don't fail the sync)."""
+    try:
+        return provider.get_metadata(md_id, language=language)
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):
+        return None
+
+
+def _reconcile_membership(
+    session: Session, collection: Collection, ordered_series_ids: list[str]
+) -> None:
+    """Set a synced collection's members to exactly ``ordered_series_ids`` (MangaDex order)."""
+    want = set(ordered_series_ids)
+    have = {entry.series_id: entry for entry in collection.entries}
+    for series_id, entry in list(have.items()):
+        if series_id not in want:
+            collection.entries.remove(entry)  # delete-orphan drops the row
+    for position, series_id in enumerate(ordered_series_ids):
+        entry = have.get(series_id)
+        if entry is None:
+            collection.entries.append(CollectionSeries(series_id=series_id, position=position))
+        else:
+            entry.position = position
+
+
+def _sync_lists(session: Session, lists: list[CustomList], series_by_id: dict[str, Series]) -> int:
+    """Mirror each MangaDex custom list into a managed Collection (get-or-create by list id;
+    name + membership from MangaDex). Returns the number of lists synced."""
+    for custom in lists:
+        collection = session.scalar(
+            select(Collection).where(
+                Collection.provider == _MANGADEX,
+                Collection.provider_list_id == custom.provider_list_id,
+            )
+        )
+        if collection is None:
+            collection = Collection(
+                name=custom.name, provider=_MANGADEX, provider_list_id=custom.provider_list_id
+            )
+            session.add(collection)
+            session.flush()
+        else:
+            collection.name = custom.name  # MangaDex wins on the name
+        ordered = [series_by_id[mid].id for mid in custom.manga_ids if mid in series_by_id]
+        _reconcile_membership(session, collection, ordered)
+    return len(lists)
+
+
+def _sync_work() -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         config = get_provider_row(session, _MANGADEX)
         if not (config.client_id and config.client_secret_enc and config.refresh_token_enc):
             raise BadRequestError("MangaDex account is not connected")
-        # Tokens rotate on refresh — persist the new refresh token before the long import.
+        # Tokens rotate on refresh — persist the new refresh token before the long sync.
         tokens = refresh_grant(
             client_id=config.client_id,
             client_secret=decrypt(config.client_secret_enc),
@@ -118,24 +178,40 @@ def _import_work() -> Work:
         session.commit()
 
         provider = _authed_provider(tokens.access_token)
-        on_progress(10, "Fetching follows")
+        library = _mangadex_library(session)
+
+        on_progress(5, "Fetching account")
         follows = provider.list_follows(language=config.language)
         statuses = provider.reading_status()
-        library = _mangadex_library(session)
-        for index, meta in enumerate(follows, start=1):
-            _upsert_followed_series(
-                session, library, meta, statuses.get(meta.provider_series_id),
-                fetch_covers=config.fetch_covers,
+        lists = provider.list_custom_lists()
+
+        # The synced set = follows ∪ manga with a reading status ∪ custom-list members.
+        meta_by_id: dict[str, SeriesMetadata] = {m.provider_series_id: m for m in follows}
+        union_ids = set(meta_by_id) | set(statuses) | {mid for lst in lists for mid in lst.manga_ids}
+
+        series_by_id: dict[str, Series] = {}
+        total = len(union_ids) or 1
+        for index, md_id in enumerate(sorted(union_ids), start=1):
+            meta = meta_by_id.get(md_id) or _safe_metadata(provider, md_id, config.language)
+            if meta is None:
+                continue
+            series_by_id[md_id] = _upsert_series(
+                session, library, meta, statuses.get(md_id), fetch_covers=config.fetch_covers
             )
-            on_progress(round(index / len(follows) * 100) if follows else 100, meta.title)
-        return {"imported": len(follows)}
+            session.commit()  # commit per series so progress is durable
+            on_progress(round(index / total * 90), meta.title)
+
+        on_progress(95, "Syncing lists")
+        synced_lists = _sync_lists(session, lists, series_by_id)
+        session.commit()
+        return {"synced": len(series_by_id), "lists": synced_lists}
 
     return work
 
 
-def import_follows(session: Session, provider_id: str) -> TaskOut:
-    """Validate the account is connected, then import follows + statuses on the queue."""
+def sync_account(session: Session, provider_id: str) -> TaskOut:
+    """Validate the account is connected, then sync follows + statuses + lists on the queue."""
     config = get_provider_row(session, provider_id)
     if not (config.client_id and config.refresh_token_enc):
         raise BadRequestError("MangaDex account is not connected")
-    return queue.submit_task("import", "Importing MangaDex follows", _import_work())
+    return queue.submit_task("import", "Syncing MangaDex", _sync_work())

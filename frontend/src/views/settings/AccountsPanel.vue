@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Settings → Accounts: connect/disconnect the MangaDex account (with "import follows")
-// and the reading trackers (AniList, MyAnimeList, MangaUpdates), each via a popup.
+// Settings → Accounts: connect/disconnect the MangaDex account (with "Sync") and the
+// reading trackers (AniList, MyAnimeList, MangaUpdates), each via a popup.
 // Trackers with no public API (NovelUpdates) are hidden.
-import { Download, Link2 } from "lucide-vue-next";
+import { Link2, RefreshCw } from "lucide-vue-next";
 import { onMounted, onUnmounted, ref } from "vue";
 
 import { api } from "../../api/client";
@@ -78,14 +78,14 @@ async function setSyncOnRead(a: AccountRow): Promise<void> {
     body: { syncOnRead: a.syncOnRead },
   });
 }
-function importFollows(a: AccountRow): void {
-  void api.POST("/api/providers/{provider_id}/import", { params: { path: { provider_id: a.id } } });
-  toast("Importing your MangaDex follows…");
+function syncAccount(a: AccountRow): void {
+  void api.POST("/api/providers/{provider_id}/sync", { params: { path: { provider_id: a.id } } });
+  toast("Syncing your MangaDex account…");
 }
 
 const disposeDone = onTaskDone((task) => {
   if (task.kind === "import" && task.status === "done") {
-    toast(`Imported ${(task.result?.imported as number) ?? 0} series`);
+    toast(`Synced ${(task.result?.synced as number) ?? 0} series`);
   }
 });
 onUnmounted(disposeDone);
@@ -112,8 +112,8 @@ onMounted(load);
               Sync on read
               <input v-model="a.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" @change="setSyncOnRead(a)" />
             </label>
-            <button v-if="a.connected && a.kind === 'provider'" class="btn btn-primary btn-sm gap-1" @click="importFollows(a)">
-              <Download class="size-4" />Import follows
+            <button v-if="a.connected && a.kind === 'provider'" class="btn btn-primary btn-sm gap-1" @click="syncAccount(a)">
+              <RefreshCw class="size-4" />Sync
             </button>
             <button v-if="a.connected" class="btn btn-ghost btn-sm text-error" @click="disconnect(a)">Disconnect</button>
             <button v-else class="btn btn-primary btn-sm" @click="connect(a)">Connect</button>

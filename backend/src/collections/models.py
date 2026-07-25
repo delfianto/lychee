@@ -20,6 +20,9 @@ class Collection(BaseModel):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Provider linkage for synced lists (e.g. a MangaDex custom list); null = a local list.
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_list_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
 
     entries: Mapped[list[CollectionSeries]] = relationship(
         back_populates="collection",

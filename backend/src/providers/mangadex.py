@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata
+from src.downloads.provider import CustomList, MangaMatch, RemoteChapter, SeriesMetadata
 from src.providers.mangadex_client import MangaDexClient
 
 _CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
@@ -205,6 +205,38 @@ class MangaDexProvider:
     def reading_status(self) -> dict[str, str]:
         """Map of manga id → reading status for the authed user."""
         return self._api.get("/manga/status").json().get("statuses", {}) or {}
+
+    def list_custom_lists(self) -> list[CustomList]:
+        """The authed user's MDLists + their member manga ids (needs a Bearer token). The
+        manga ids ride in each list's relationships, so no per-list fetch is needed."""
+        results: list[CustomList] = []
+        offset = 0
+        while True:
+            body = self._api.get("/user/list", params={"limit": 100, "offset": offset}).json()
+            for data in body.get("data", []):
+                name = data.get("attributes", {}).get("name") or data["id"]  # MDList name is plain
+                manga_ids = [
+                    rel["id"] for rel in data.get("relationships", []) if rel.get("type") == "manga"
+                ]
+                results.append(
+                    CustomList(provider_list_id=data["id"], name=name, manga_ids=manga_ids)
+                )
+            offset += 100
+            if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
+                break
+        return results
+
+    def read_markers(self, manga_ids: list[str]) -> dict[str, list[str]]:
+        """Map of manga id → read chapter ids for the authed user (batched, grouped)."""
+        result: dict[str, list[str]] = {}
+        for start in range(0, len(manga_ids), 100):  # /manga/read caps the id list
+            chunk = manga_ids[start : start + 100]
+            body = self._api.get("/manga/read", params={"ids[]": chunk, "grouped": "true"}).json()
+            data = body.get("data", {})
+            if isinstance(data, dict):
+                for manga_id, chapter_ids in data.items():
+                    result[manga_id] = list(chapter_ids or [])
+        return result
 
     def _rating(self, provider_series_id: str) -> float | None:
         """Community rating via /statistics — best-effort (never blocks metadata)."""

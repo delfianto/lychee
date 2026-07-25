@@ -101,3 +101,51 @@ def test_fetch_pages_reassigns_node_on_403() -> None:
     pages = provider.fetch_pages(RemoteChapter("c1", "1", 1, None, "en"))
     assert pages == [b"OK"]
     assert state["athome"] == 2  # re-assigned a node after the 403
+
+
+def _provider_for(handler: object) -> MangaDexProvider:
+    return MangaDexProvider(
+        client=httpx.Client(base_url=API_BASE, transport=httpx.MockTransport(handler))  # type: ignore[arg-type]
+    )
+
+
+def test_list_custom_lists_parses_name_and_manga_ids() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/user/list"
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "list-1",
+                        "attributes": {"name": "Faves", "visibility": "private"},
+                        "relationships": [
+                            {"id": "m1", "type": "manga"},
+                            {"id": "u1", "type": "user"},  # ignored — not a manga rel
+                            {"id": "m2", "type": "manga"},
+                        ],
+                    }
+                ],
+                "total": 1,
+            },
+        )
+
+    lists = _provider_for(handler).list_custom_lists()
+    assert len(lists) == 1
+    assert (lists[0].provider_list_id, lists[0].name) == ("list-1", "Faves")
+    assert lists[0].manga_ids == ["m1", "m2"]  # only manga rels, in order
+
+
+def test_read_markers_groups_by_manga() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/manga/read"
+        return httpx.Response(200, json={"result": "ok", "data": {"m1": ["c1", "c3"], "m2": []}})
+
+    assert _provider_for(handler).read_markers(["m1", "m2"]) == {"m1": ["c1", "c3"], "m2": []}
+
+
+def test_read_markers_empty_input_makes_no_call() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not be called for an empty id list")
+
+    assert _provider_for(handler).read_markers([]) == {}
