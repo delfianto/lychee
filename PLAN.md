@@ -44,7 +44,9 @@
          via SSE. FE consumes `/api/events` (shared `EventSource`, activity indicator, refetch on
          `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
 3. **Coverage:**
-   - [ ] Containers RAR/7z/PDF/EPUB + `python-magic` content sniffing (ZIP/CBZ/image-dir/AVIF-dir only).
+   - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
+         image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
+         native-dep + licensing baggage (unrar/7z binaries, pymupdf AGPL).
    - [x] Search: **FTS5 trigram** over title / alt-titles / authors, bm25-ranked, trigger-maintained;
          LIKE fallback for <3-char queries (B6). ✅ done.
    - [ ] On-demand resize/transcode + disk render cache + page-list LRU (B3 caches).
@@ -102,8 +104,9 @@
       404 for missing / 400 for corrupt containers works.
 
 ## B1. Dependencies
-- [~] **Images:** Pillow 12 (native AVIF) ✅ · pyvips ❌ (Pillow-only) · python-magic ❌.
-- [ ] **Archives/formats:** only stdlib `zipfile` (CBZ/ZIP) + image dirs. rarfile/py7zr/pymupdf/ebooklib ❌.
+- [~] **Images:** Pillow 12 (native AVIF) ✅ · pyvips ❌ (Pillow-only). `python-magic` not planned (see B4).
+- [x] **Archives/formats:** stdlib `zipfile` (CBZ/ZIP) + image dirs + AVIF-dir. rarfile/py7zr/pymupdf/ebooklib
+      **not planned** (CBZ + directories cover the common cases).
 - [~] **Ingest utils:** `hashlib` sha1 sample (not xxhash) · regex natural-sort (not natsort).
 - [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); APScheduler (auto-sync) + ProcessPoolExecutor (encode) ❌.
 - [x] **Providers/trackers:** `httpx` ✅ · `cryptography` ✅ (Fernet token encryption) · custom 429/5xx retry + rate-limit buckets (no tenacity).
@@ -131,8 +134,8 @@
 
 ## B4. Ingest
 - [x] Filename / volume-chapter parser (ADR 06) — decimals, ranges, specials, series-name subtraction.
-- [~] `BookContainer` — image_dir + CBZ/ZIP + avif_dir ✅; RAR/7z/PDF/EPUB ❌; **extension-based**
-      (no content sniffing).
+- [x] `BookContainer` — image_dir + CBZ/ZIP + avif_dir ✅, extension-based. RAR/7z/PDF/EPUB + content
+      sniffing **not planned** (CBZ + directories cover the common cases).
 - [x] Scan pipeline (walk → diff → reconcile, soft-delete + (size, partial_hash) restore) + library
       CRUD/scan API. ⚠ restore doesn't migrate reading progress (chapters dropped on soft-delete).
 - [x] Task tracker + SSE progress events ✅; **background queue** ✅ — scans run on a worker thread
@@ -234,14 +237,14 @@
 3. [x] **B3 AVIF pipeline** (encode/presets/thumbnails/containers/serving). ADR 19.
 4. [x] **Read-only API slice + client + FE swap of every read view.**
 5. [x] **B4 ingest** — parser + scan + library API; scans run on the background queue (`202`, SSE
-       progress). (RAR/PDF/EPUB, content-sniff deferred.)
+       progress). (RAR/PDF/EPUB + content-sniff not planned.)
 6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
        ✅; downloads run on the background queue with SSE progress. Full MangaDex metadata / match /
        auth / sync done (PART F M0–M5); resumable download pause/resume ✅. (Local cover cache remains.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
        sync/about/taxonomy/collections APIs, SSE + task tracker + background queue + FE SSE consumption,
        MangaDex integration (PART F) + tracker OAuth/push (`src/trackers/`), FE Lists + Settings
-       swapped. **Remaining: extra containers, sync scheduler.**
+       swapped. **Remaining: sync scheduler.**
 
 ---
 
