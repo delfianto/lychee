@@ -16,6 +16,8 @@
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
   (ADR 01–19).
+- **Next (planned, spec'd not built):** PART H — on-disk `Cover.avif` storage + gallery
+  artist/model two-level scan. See PART H below.
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -512,6 +514,94 @@ Three related pieces of catalog-building polish:
 override; integration-test import end-to-end (tmp CBZ/folder → served AVIF + generated thumbnail) and config
 GET/PATCH — all offline, building real archives in `tmp_path` like `test_scan_api.py`. **New deps: none**
 (Pillow AVIF + stdlib `zipfile` cover it).
+
+# PART H — Cover.avif storage + gallery artist/model scan — planned (H0–H1)
+
+> Decided 2026-07-25: covers become an on-disk **`Cover.avif`** (the canonical source of
+> truth) with the small grid thumbnail still derived from it; **gallery** libraries scan
+> **two levels** (artist/model → gallery). Spec first — build after review. New deps: none.
+
+## H0 — `Cover.avif` as the canonical cover source
+
+**Today:** covers are *derived only* — AVIF thumbnails in a central sharded store keyed by
+series id (`storage/thumbnails/<id[:2]>/<series_id>.{cover,detail}.avif`, 320/640). The source
+is the matched provider cover (cached) or the series' first book's first page. No on-disk
+cover-file convention is read anywhere.
+
+**Target:** one canonical `Cover.avif` per series is the source of truth; the 320px grid
+thumbnail is still derived from it and cached.
+```
+storage/imports/<series_id>/
+  Cover.avif              ← canonical (~640px longest edge, normalized AVIF)
+  <hash>.cbz  <hash>.cbz  ← the books
+storage/thumbnails/<id[:2]>/<series_id>.cover.avif   ← derived 320px (grids only)
+```
+- [ ] **Managed libraries (import/download):** on transcode, write `<library>/<series_id>/Cover.avif`
+      — a normalized AVIF of the cover source (provider cover if matched, else first book's first
+      page). Atomic (temp + `os.replace`), same pattern as `write_cbz`. Books stay CBZ; the cover
+      sits beside them at the series dir.
+- [ ] **Scanned (in-place) libraries:** read a cover-file convention as the source — first of
+      `Cover.avif` / `cover.*` / `folder.*` (case-insensitive) in the series dir, else the current
+      fallback (provider cover / first page). Do **not** write into the user's originals (opt-in later).
+- [ ] **Source resolution** (`media.py::_cover_source_bytes`): precedence → (1) a `Cover.*`/`folder.*`
+      file at the series dir, (2) provider `cover_source` URL (cached), (3) first book's first page.
+      Cache the resolved pointer on `Series.cover_source` (already exists) to avoid re-resolving.
+- [ ] **Derived grid stays; drop `detail`:** keep `ThumbnailStore` for the 320px grid variant
+      (generated from `Cover.avif`); the canonical `Cover.avif` *is* the hero image — serve its bytes
+      for `?size=detail` instead of a 640 variant.
+- [ ] **Page-list exclusion (important):** exclude `Cover.avif`/`cover.*`/`folder.*` from
+      `resolve_books` image detection **and** `ImageDirContainer`/`ZipContainer` page lists — so a
+      cover file never (a) turns a series folder into a spurious 1-page image book, nor (b) shows up
+      as a readable page. (Directly fixes the "any image in a folder → image_dir book" gotcha.)
+- [ ] **Serving:** `GET /api/series/{id}/cover?size=cover|detail` — `cover` → derived 320; `detail` →
+      the `Cover.avif` bytes; ETag/Cache-Control/304 unchanged. Miss → generate from the source.
+- [ ] **Back-compat:** existing central thumbnails keep serving until regenerated; `Cover.avif` is
+      written on next import/download or cover request. No DB migration (reuses `Series.cover_source`).
+      Optional one-shot backfill task to emit `Cover.avif` for existing managed series.
+- [ ] **Tests:** managed import writes `<series>/Cover.avif` (AVIF ~640) + a 320 grid thumb; a scanned
+      lib with `folder.jpg` uses it as the source; a `Cover.avif` beside `.cbz`s is neither a book nor
+      a page; `?size=detail` serves the Cover.avif bytes.
+
+**Open (follow-up, not this scope):** per-volume covers. With books as CBZ there's no `Vol.01/`
+dir — a volume's cover is its cbz's first page (served on demand). Series-level `Cover.avif` is the
+scope here; per-book `<series>/<book>.cover.avif` can come later if wanted.
+
+## H1 — Gallery libraries: artist/model → gallery two-level scan
+
+**Today:** every kind uses one scan rule — first-level dir under the root = Series. For gallery
+libraries that makes `Root/GalleryName/imgs` → `GalleryName` the gallery; artists are metadata only
+(`SeriesCredit` role=artist). `Collection` (named, ordered group of series) already exists in
+`src/collections/`.
+
+**Target:** for `kind=gallery` libraries only, scan **two levels** — top folder = artist/model, each
+subfolder/cbz below = its own gallery.
+```
+/galleries/                 Library (kind=gallery)
+  Artist Name/              → artist credit (+ Collection "Artist Name")
+    Set A/  001.jpg…        → Series (kind=gallery)   [image_dir]
+    Set B.cbz               → Series (kind=gallery)   [cbz]
+  Loose Gallery.cbz         → Series (kind=gallery), no artist (root one-shot)
+```
+- [ ] **Kind-specific resolution** (`scanner.py`): gallery libraries iterate first-level dirs as
+      **artist groups**; within each, every image-dir / archive below is a gallery Series (reuse
+      `resolve_books` one level down). A loose archive/image-dir directly under the root stays a
+      one-shot gallery with no artist. Manga/comic rule unchanged.
+- [ ] **Artist wiring:** the artist folder name → `SeriesCredit(role="artist")` on each gallery Series
+      beneath it (deduped, like the importer). The existing artist filter/facets light up for free.
+- [ ] **Collection wiring:** get-or-create a `Collection` named after the artist and add each gallery
+      Series (ordered) — so the artist is browsable as a unit via `/api/collections` + the Lists UI.
+      Idempotent on re-scan.
+- [ ] **Series identity:** `path_rel` = the gallery's path relative to the library root
+      (`Artist Name/Set A`), so moves/renames + move-restore keep working. `image_count` as today.
+- [ ] **FE:** galleries already come from `/api/series?kind=gallery`; the grouping surfaces via credits
+      + the auto Collection. Confirm `GalleryView`/`GalleryDetail` show the artist + link the collection
+      (small wiring, no new screens).
+- [ ] **Tests:** `Artist/SetA` + `Artist/SetB.cbz` → two gallery Series, both credited "Artist", both
+      in Collection "Artist"; a root-level loose gallery → one Series, no artist; re-scan idempotent (no
+      dup credits/collections); a manga library is unaffected by the new rule.
+
+**Testing (both):** offline, building real dirs/CBZs in `tmp_path` like `test_scan_api.py` /
+`test_import_api.py`. New deps: none (Pillow AVIF + stdlib `zipfile`).
 
 ## Handy commands
 - Backend: `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates+seeds).
