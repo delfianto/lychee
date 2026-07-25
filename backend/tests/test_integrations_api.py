@@ -33,20 +33,16 @@ def test_providers_list_and_update(client: TestClient) -> None:
     assert client.patch("/api/providers/mangadex", json={"dataSaver": True}).json()["dataSaver"] is True
 
 
-def test_trackers_connect_disconnect_and_toggle(client: TestClient) -> None:
+def test_trackers_list_toggle_and_disconnect(client: TestClient) -> None:
+    # The OAuth connect flow (begin + callback) is covered in test_tracker_api.
     trackers = {t["id"]: t for t in client.get("/api/trackers").json()}
     assert {"anilist", "myanimelist", "mangaupdates", "novelupdates"} <= set(trackers)
     assert trackers["anilist"]["connected"] is False
-
-    connected = client.post("/api/trackers/anilist/connect").json()
-    assert connected["connected"] is True
-    assert connected["accountName"]
 
     toggled = client.patch("/api/trackers/anilist", json={"syncOnRead": False})
     assert toggled.json()["syncOnRead"] is False
 
     assert client.delete("/api/trackers/anilist").status_code == 204
-    assert client.get("/api/trackers").json()
     again = {t["id"]: t for t in client.get("/api/trackers").json()}
     assert again["anilist"]["connected"] is False
 

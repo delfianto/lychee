@@ -44,8 +44,11 @@ class Tracker(Base, TimestampMixin):
     connected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sync_on_read: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     account_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    access_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    refresh_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # OAuth2 (PART F trackers): client secret + tokens stored encrypted (see core.crypto).
+    client_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

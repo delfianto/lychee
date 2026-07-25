@@ -1,0 +1,42 @@
+"""Reading-tracker abstraction + registry (AniList / MyAnimeList / … ) — PART F.
+
+A tracker connects via OAuth2 (authorization-code) and can later push read
+progress. This module defines the contract + a registry; concrete trackers
+(AniList first) register at startup. ``external_id_key`` is the ``Series.
+external_ids`` key holding this tracker's media id (MangaDex M1 stored them).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class TokenPair:
+    access_token: str
+    refresh_token: str | None = None
+
+
+class Tracker(Protocol):
+    id: str
+    external_id_key: str
+
+    def authorize_url(self, *, client_id: str, redirect_uri: str, state: str) -> str: ...
+
+    def exchange_code(
+        self, *, code: str, client_id: str, client_secret: str, redirect_uri: str
+    ) -> TokenPair: ...
+
+    def account_name(self, access_token: str) -> str | None: ...
+
+
+_REGISTRY: dict[str, Tracker] = {}
+
+
+def register_tracker(tracker: Tracker) -> None:
+    _REGISTRY[tracker.id] = tracker
+
+
+def get_tracker(tracker_id: str) -> Tracker | None:
+    return _REGISTRY.get(tracker_id)

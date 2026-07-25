@@ -315,6 +315,10 @@ interface TrackerRow {
   syncOnRead: boolean;
 }
 const trackers = ref<TrackerRow[]>([]);
+// Two-step OAuth connect modal: enter client creds → open authorize URL → paste code.
+const trackerModal = reactive({
+  open: false, id: "", name: "", clientId: "", clientSecret: "", redirectUri: "", authorizeUrl: "", code: "", busy: false,
+});
 async function loadTrackers(): Promise<void> {
   const { data } = await api.GET("/api/trackers");
   trackers.value = (data ?? []).map((t) => ({
@@ -324,15 +328,47 @@ async function loadTrackers(): Promise<void> {
     syncOnRead: t.syncOnRead,
   }));
 }
+function openTrackerConnect(t: TrackerRow): void {
+  Object.assign(trackerModal, {
+    open: true, id: t.id, name: t.name,
+    clientId: "", clientSecret: "", redirectUri: window.location.origin, authorizeUrl: "", code: "", busy: false,
+  });
+}
+async function beginTrackerAuth(): Promise<void> {
+  trackerModal.busy = true;
+  const { data, error } = await api.POST("/api/trackers/{tracker_id}/connect", {
+    params: { path: { tracker_id: trackerModal.id } },
+    body: { clientId: trackerModal.clientId, clientSecret: trackerModal.clientSecret, redirectUri: trackerModal.redirectUri },
+  });
+  trackerModal.busy = false;
+  if (error || !data) {
+    toast("Couldn't start auth — check credentials & LYCHEE_SECRET_KEY", "error");
+    return;
+  }
+  trackerModal.authorizeUrl = data.authorizeUrl;
+}
+async function completeTrackerAuth(): Promise<void> {
+  trackerModal.busy = true;
+  const { error } = await api.POST("/api/trackers/{tracker_id}/callback", {
+    params: { path: { tracker_id: trackerModal.id } },
+    body: { code: trackerModal.code.trim(), redirectUri: trackerModal.redirectUri },
+  });
+  trackerModal.busy = false;
+  if (error) {
+    toast("Authorization failed — is the code correct?", "error");
+    return;
+  }
+  trackerModal.open = false;
+  await loadTrackers();
+  toast(`${trackerModal.name} connected`);
+}
 async function toggleTracker(t: TrackerRow): Promise<void> {
   if (t.connected) {
     await api.DELETE("/api/trackers/{tracker_id}", { params: { path: { tracker_id: t.id } } });
-    t.connected = false;
+    await loadTrackers();
+    toast(`${t.name} disconnected`, "info");
   } else {
-    const { data } = await api.POST("/api/trackers/{tracker_id}/connect", {
-      params: { path: { tracker_id: t.id } },
-    });
-    if (data) t.connected = data.connected;
+    openTrackerConnect(t);
   }
 }
 async function setSyncOnRead(t: TrackerRow): Promise<void> {
@@ -964,6 +1000,51 @@ onMounted(async () => {
           </section>
         </div>
         </Transition>
+      </div>
+    </div>
+
+    <!-- Tracker OAuth connect modal -->
+    <div v-if="trackerModal.open" class="modal modal-open" @click.self="trackerModal.open = false">
+      <div class="modal-box">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-bold">Connect {{ trackerModal.name }}</h3>
+          <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="trackerModal.open = false">
+            <X class="size-4" />
+          </button>
+        </div>
+        <p class="mb-3 text-xs text-base-content/50">
+          Create an OAuth client on {{ trackerModal.name }} with the redirect URI below, then paste its
+          client ID &amp; secret. Secrets are encrypted at rest.
+        </p>
+        <div class="flex flex-col gap-2">
+          <input v-model="trackerModal.clientId" class="input input-bordered input-sm" placeholder="Client ID" />
+          <input v-model="trackerModal.clientSecret" type="password" class="input input-bordered input-sm" placeholder="Client secret" />
+          <input v-model="trackerModal.redirectUri" class="input input-bordered input-sm" placeholder="Redirect URI" />
+          <button
+            v-if="!trackerModal.authorizeUrl"
+            class="btn btn-primary btn-sm self-start"
+            :disabled="trackerModal.busy || !trackerModal.clientId || !trackerModal.clientSecret"
+            @click="beginTrackerAuth"
+          >
+            {{ trackerModal.busy ? "Working…" : "Get authorize link" }}
+          </button>
+          <template v-else>
+            <a :href="trackerModal.authorizeUrl" target="_blank" rel="noopener" class="btn btn-outline btn-sm gap-1">
+              <Link2 class="size-4" />Authorize on {{ trackerModal.name }} ↗
+            </a>
+            <p class="text-xs text-base-content/50">After authorizing, paste the <code>code</code> from the redirect URL:</p>
+            <div class="flex gap-2">
+              <input v-model="trackerModal.code" class="input input-bordered input-sm grow" placeholder="Authorization code" />
+              <button
+                class="btn btn-primary btn-sm"
+                :disabled="trackerModal.busy || !trackerModal.code"
+                @click="completeTrackerAuth"
+              >
+                Complete
+              </button>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
   </div>
