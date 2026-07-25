@@ -1,4 +1,4 @@
-"""Filename parser regression corpus (ADR 06)."""
+"""Filename parser regression corpus."""
 
 from src.ingest.parser import parse, parse_pattern
 
