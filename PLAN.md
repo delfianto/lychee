@@ -1,7 +1,7 @@
 # lychee — Build Plan & TODO Tracker
 
 > **Build plan & status tracker** (tracked in git). Living doc; update as we go.
-> Legend: `[x]` done · `[~]` partial / needs wiring · `[ ]` not started
+> Legend: `[x]` done · `[~]` partial / needs wiring · `[ ]` not started · `[—]` not planned
 
 ## Status snapshot (2026-07-25)
 - **Frontend:** **fully API-driven** — `src/mocks/library.ts` is deleted; every view (Home,
@@ -43,6 +43,10 @@
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress
          via SSE. FE consumes `/api/events` (shared `EventSource`, activity indicator, refetch on
          `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
+   - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
+         download/scan (not lazy-on-request); a Settings "Local import" page that transcodes local
+         container files/folders to AVIF (UI quality + enable toggle); and a configurable, LANraragi-style
+         filename→metadata pattern to auto-fill series/volume/chapter/title. **Not started.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -370,6 +374,110 @@ override.
 **Testing:** all via `httpx.MockTransport` with canned fixtures per endpoint (search / get / feed /
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
+
+# PART G — Local import + eager thumbnails + filename metadata — planned (not started)
+
+Three related pieces of catalog-building polish:
+1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
+   the first `/cover` request.
+2. **Local import** — a Settings page to import container files/folders already on the server's disk,
+   transcoding pages to AVIF (like downloads do), with UI-configurable quality + an enable toggle.
+3. **Filename → metadata pattern** — a configurable, LANraragi-style pattern that fills
+   series/volume/chapter/title (and credits) from filenames during import.
+
+### Current state (what we build on)
+- **Thumbnails** (`media/thumbnails.py`): `ThumbnailStore.generate(thumb_id, source, variant, *,
+  content_class, overwrite)` + `generate_all(...)`; store keys by **`series_id`** (`thumb_id == series_id`),
+  sharded `<root>/<id[:2]>/<id>.<cover|detail>.avif`. Generated **only lazily** in `get_cover`
+  (`catalog/media.py:70-85`) on a miss; cover source = **first book, page 0** (`_first_book` +
+  `_read_page(book, 0)`). Store built as `ThumbnailStore(Path(settings.storage_path)/"thumbnails")`.
+- **AVIF** (`media/avif.py`): `encode(image, *, content_class)` / `encode_bytes(bytes, *, content_class)` —
+  **quality is not overridable** (hardcoded per-class in `_PRESETS`: line_art q63 mono, color_art q80 4:4:4,
+  photo q60 4:2:0; `ENCODE_SPEED=2`). Sole `encode_bytes` caller is `downloader.py:100`.
+- **Download transcode** (`downloads/downloader.py`): `_download_chapter` fetches pages → `encode_bytes` →
+  writes `NNN.avif` under `storage/downloads/<series>/<chapter>` → `Book(content_kind="avif_dir")` + `Chapter`
+  (flush at `:132`). Runs on the queue; `storage_root` in scope.
+- **Scan** (`ingest/scanner.py`): registers **in-place originals** (no transcode); `_ingest_series` creates
+  Series/Book/Chapter; `_sync_chapter` (`:277`) calls `parse(...)`. Series title = folder name.
+- **Filename parser** (`ingest/parser.py`): `parse(segments, series_name, kind) -> ParsedName{number,
+  number_sort, volume, year, special, label}` — number/volume/year/special via a regex cascade; **does not
+  extract series or title** (series is an input that's subtracted out).
+- **Config storage**: **no general settings table.** Template = the `Provider` row / `SyncState` singleton
+  (`id="default"`) + GET/PATCH + a reactive FE panel that `watch`es and PATCHes.
+- **Task queue**: `queue.submit_task(kind, label, work) -> TaskOut` (202 + SSE); FE follows `/api/events`
+  filtering by `task.kind`. ⚠ `"import"` kind is **already used** by MangaDex follows-import → the new job
+  must use a different kind (`"localimport"`).
+- **Managed library pattern**: `downloads_library(session, storage_root)` get-or-creates a "Downloads"
+  library at `storage/downloads`. Imports mirror this with an "Imports" library at `storage/imports`.
+
+### Decisions (proposed — confirm before G3)
+- Imported content is **transcoded to AVIF** (per the request) and lands in a managed **"Imports"** library
+  at `storage/imports/...` (mirrors Downloads), never registered in-place. The import **source** is a
+  **server-side path** (file or folder) the admin points at — consistent with how libraries already take a
+  server path. (Browser file-upload is a heavier, separate multipart flow — out of scope here.)
+- Config is a **global singleton `ImportConfig`** (`id="default"`): `enabled`, `quality`, `filename_pattern`.
+  (Per-library `Library.options_json` rejected — the import page is one global settings surface.)
+- **Quality** override replaces the per-class preset `quality` for import transcodes; **subsampling stays
+  per content-class** (keeps line-art crisp). UI exposes a few tiers → numbers (e.g. Higher 85 / Balanced
+  75 / Smaller 60).
+- Eager thumbnails **keep the lazy `get_cover` fallback** (warm, don't replace) — a missing thumb still
+  self-heals on request.
+
+### Phases
+
+**G0 — AVIF quality override (foundation)**
+- [ ] Add optional `quality: int | None` to `avif.encode` / `encode_bytes` (override `preset.quality` when
+      set; subsampling + speed unchanged). Thread an optional `quality` through `ThumbnailStore.generate` /
+      `generate_all`.
+- [ ] Tests: lower quality → smaller bytes; `None` keeps preset behavior (existing AVIF tests stay green).
+
+**G1 — Eager thumbnails on download + scan**
+- [ ] `catalog/covers.py` `generate_series_cover(session, store, series_id, *, overwrite=False)` — read
+      first-book page 0 → `generate_all(series_id, bytes, overwrite=...)`. Idempotent (no-op if present).
+- [ ] Hook downloader: after `_download_chapter` flush (`downloader.py:132`) warm the cover (first book;
+      `overwrite=False`), store = `ThumbnailStore(storage_root/"thumbnails")`.
+- [ ] Hook scan: construct the store from `settings.storage_path` inside the scan `Work`
+      (`library/service.py`) and warm each series' cover after `_ingest_series`.
+- [ ] Keep `get_cover` lazy fallback. Tests: after download/scan, thumb files exist with no `/cover` request.
+
+**G2 — Import config (storage + API + FE panel)**
+- [ ] `ImportConfig` singleton (`integrations/models.py`): `enabled: bool=False`, `quality: int=75`,
+      `filename_pattern: str=""`. Migration (`server_default`) + idempotent seed (like `SyncState`).
+- [ ] `ImportConfigOut`/`ImportConfigUpdate` (camel) + `GET/PATCH /api/import/config`; service maps +
+      partial-update-commits (copy `providers.update_provider`).
+- [ ] FE `views/settings/ImportPanel.vue` + a `sections` entry ("Local import") in `SettingsView.vue`;
+      reactive `watch → PATCH` like `ProviderPanel`. Quality select, enable toggle, pattern input (+ token
+      legend), and the import form (G3).
+- [ ] Tests: GET defaults; PATCH persists.
+
+**G3 — Local import job (walk → AVIF → catalog)**
+- [ ] `ingest/importer.py` `import_path(session, source, *, kind, storage_root, config, on_progress)` —
+      resolve books (reuse `parser` + `containers`; share the scanner's walk), transcode each page
+      `encode_bytes(raw, quality=config.quality)` → `NNN.avif` under `storage/imports/<series>/<book>`, create
+      `Book(content_kind="avif_dir")` + `Chapter` into a get-or-create **Imports** library, warm cover (G1).
+      Skip unreadable; per-book commit + progress.
+- [ ] `POST /api/import` `{path, kind?}` → validate `config.enabled` + path exists →
+      `queue.submit_task("localimport", f"Importing {name}", work)` → 202 + TaskOut. (Reject 400 when disabled.)
+- [ ] FE: import form in ImportPanel (server-path input + kind select + Import); follows SSE
+      (`activeTasks` / `onTaskDone` filter `kind === "localimport"`), toast on done.
+- [ ] Tests: import a tmp CBZ + a tmp image folder → `avif_dir` books created, pages serve as `image/avif`,
+      cover thumb generated; disabled → 400.
+
+**G4 — Filename → metadata pattern (LANraragi-style)**
+- [ ] Pattern engine in `parser.py`: `parse_pattern(filename, pattern) -> dict` — compile a token template
+      (`{series}`, `{title}`, `{volume}`, `{chapter}`, `{author}`, `{artist}`, `{group}`, `{year}`, `*`
+      ignore) to a regex with named groups; literals between tokens match literally; return matched fields
+      only, `None` on no-match.
+- [ ] Import integration: when `config.filename_pattern` is set, derive series title + volume/chapter/
+      (title/credits) from the filename; else fall back to folder-name-as-series + built-in `parse`. Wire in
+      `importer` (G3).
+- [ ] (Optional) extend the same pattern to the scanner's `_sync_chapter` behind the same config.
+- [ ] Tests: representative patterns fill fields; partial/no-match falls back; literals + ignore token work.
+
+**Testing:** unit-test the pattern compiler (tokens→regex, literal escaping, no-match) and the AVIF quality
+override; integration-test import end-to-end (tmp CBZ/folder → served AVIF + generated thumbnail) and config
+GET/PATCH — all offline, building real archives in `tmp_path` like `test_scan_api.py`. **New deps: none**
+(Pillow AVIF + stdlib `zipfile` cover it).
 
 ## Handy commands
 - Backend: `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates+seeds).
