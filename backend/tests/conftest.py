@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from src.catalog.deps import get_thumbnail_store
+from src.catalog.search_index import create_search_index
 from src.core.config import settings
 from src.core.persistence.base_model import Base
 from src.core.persistence.database import SessionLocal, get_db
@@ -64,6 +65,8 @@ def db_engine(tmp_path: Path) -> Iterator[Engine]:
         cursor.close()
 
     Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        create_search_index(connection)  # FTS5 table + triggers (raw SQL, not in metadata)
     with Session(engine) as session:
         seed_all(session)
         session.commit()
