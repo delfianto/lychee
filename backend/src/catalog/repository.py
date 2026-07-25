@@ -16,6 +16,7 @@ from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from src.catalog.models import Book, Chapter, Series, SeriesCredit
+from src.catalog.search_index import search_ids
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
 from src.taxonomy.models import series_tag
@@ -31,6 +32,7 @@ class SeriesFilters:
     shelf: str | None = None
     favorite: bool | None = None
     q: str | None = None
+    ids: list[str] | None = None  # restrict to these series (FTS search hydration)
     tags_include: list[str] = field(default_factory=list)
     tags_exclude: list[str] = field(default_factory=list)
     tag_mode: str = "and"
@@ -129,6 +131,8 @@ def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]
         conds.append(Series.favorite.is_(f.favorite))
     if f.q:
         conds.append(Series.title.ilike(f"%{f.q}%"))
+    if f.ids is not None:
+        conds.append(Series.id.in_(f.ids))
     if f.ratings:
         conds.append(Series.content_rating.in_(f.ratings))
     if f.demographics:
@@ -419,8 +423,21 @@ def recently_added(session: Session, *, limit: int = 12) -> list[SeriesRow]:
 
 
 def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRow]:
-    """Title search (a simple LIKE match)."""
-    rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
+    """Full-text search over title / alt-titles / authors (FTS5 trigram, ranked).
+
+    Falls back to a title LIKE match when FTS can't serve the query (index absent,
+    or a query too short to yield trigrams). FTS gives ranked ids; the grid builder
+    hydrates them (counts, tags, credits) and we restore the relevance order.
+    """
+    ranked = search_ids(session, q, limit=limit)
+    if ranked is None:
+        rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
+        return rows
+    if not ranked:
+        return []
+    rows, _ = list_series(session, SeriesFilters(ids=ranked), limit=len(ranked))
+    rank = {sid: i for i, sid in enumerate(ranked)}
+    rows.sort(key=lambda row: rank.get(row.series.id, len(ranked)))
     return rows
 
 
