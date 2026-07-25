@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **163
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **173
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -83,20 +83,23 @@
       `/api/series/{id}/images`.
 - [x] **Reading / Unread** — reading shelf reuses `LibraryView`; unread feed via `/api/updates/unread`.
 - [x] **Series detail** — hero + info panel + `ChapterList` (Related/Art tabs) from `/api/series/{id}`,
-      `/chapters`, `/related`, `/art`. ⚠ action row (favorite/shelf/rating) not yet persisted — see gap #1.
+      `/chapters`, `/related`, `/art`. Action row (favorite / shelf / rating) persists via `PATCH`.
 - [x] **Reader** — modes/direction/fit/background; serves `/api/chapters/{id}/pages/{n}`; chapter
       selector + next; **writes progress** as pages turn.
 - [x] **Lists** — `/lists` + `/lists/:id`, API-backed collections store.
 - [x] **Settings** — General (libraries CRUD/scan, provider, trackers), Content (taxonomy table),
       Downloads (queue + sync), About — all on the API.
 - [x] **Theming**, [x] **Transitions**.
-- **Remaining FE polish:**
-  - [~] Loading states (spinners on detail/gallery/home; grids show loading) — **error states largely
-        missing** (API failures fail silently / empty).
-  - [ ] Accessibility pass (focus rings, aria, keyboard nav).
+- **FE polish:**
+  - [x] Loading + **error states** — shared `ErrorState` (message + Retry) wired into dashboard,
+        series/gallery detail, and the library grid (`useSeriesList` tracks `failed`). No more
+        silent failures / infinite spinners. ✅
+  - [~] Accessibility — global `:focus-visible` ring + aria-labels on all search inputs done; a fuller
+        keyboard-nav / screen-reader sweep remains.
+  - [x] "Add to list" from series **cards** — reusable `AddToListMenu` (deduped from the two detail views),
+        on the default-density list card. ✅ (Gallery cover-card variant still to add.)
   - [ ] Reader page preload / long-strip lazy-load.
-  - [ ] Breakpoint/mobile QA sweep.
-  - [ ] "Add to list" from series **cards** (only from detail/gallery-detail today).
+  - [ ] Breakpoint / mobile QA sweep.
 
 ---
 
@@ -231,7 +234,8 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 163 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 173 pytest ✅; FE vitest set up (@vue/test-utils + happy-dom) with first
+      component/unit tests — **coverage still thin**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
