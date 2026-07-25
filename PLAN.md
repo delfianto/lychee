@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **173
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **175
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -55,7 +55,7 @@
          LIKE fallback for <3-char queries (B6). ✅ done.
    - [x] On-demand resize + disk render cache — `GET /api/chapters/{id}/pages/{n}?w=<width>` serves a
          width-capped AVIF re-encode, cached on disk (`RenderCache`); image-directory listings are
-         LRU-cached. (ProcessPool encode intentionally skipped — serial encode is adequate.) ✅
+         LRU-cached. Encode fans across a spawn ProcessPool when `LYCHEE_ENCODE_WORKERS` > 1. ✅
 4. **Fidelity / correctness:**
    - [x] Error shape: every error response is `{"error":{"code","message"}}` — domain (`LycheeError.code`),
          Pydantic validation (422), and framework HTTP errors (unknown route / method) all normalized. ✅
@@ -121,7 +121,8 @@
 - [x] **Archives/formats:** stdlib `zipfile` (CBZ/ZIP) + image dirs + AVIF-dir. rarfile/py7zr/pymupdf/ebooklib
       **not planned** (CBZ + directories cover the common cases).
 - [~] **Ingest utils:** `hashlib` sha1 sample (not xxhash) · regex natural-sort (not natsort).
-- [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); ProcessPoolExecutor (encode) ❌. APScheduler (auto-sync) not planned.
+- [x] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`) + opt-in ProcessPoolExecutor
+      for AVIF encode (`media/encode_pool.py`) ✅. APScheduler (auto-sync) not planned.
 - [x] **Providers/trackers:** `httpx` ✅ · `cryptography` ✅ (Fernet token encryption) · custom 429/5xx retry + rate-limit buckets (no tenacity).
 - [x] **Search:** SQLite **FTS5 trigram** (title / alt-titles / authors, bm25-ranked). ✅
 - [x] Present: fastapi, uvicorn, sqlalchemy 2, alembic, pydantic 2 + settings, structlog, nanoid, httpx, pillow, cryptography.
@@ -138,19 +139,21 @@
 - [x] Downloaded images → content-aware AVIF, original discarded.
 - [x] Content-aware presets (LINE_ART 4:0:0 / COLOR_ART 4:4:4 / PHOTO 4:2:0).
 - [x] AVIF thumbnails, content-addressed sharded store, 320/640, idempotent + atomic.
-- [~] Scanned archives not rewritten + AVIF thumbnails ✅; **on-demand resize/transcode → AVIF +
-      diskcache ❌** (scanned pages served as original bytes).
+- [x] Scanned archives not rewritten (pages served as original bytes) ✅; on-demand resize/transcode →
+      AVIF + disk render cache ✅ (`?w=<width>` on `pages/{n}`; `RenderCache`).
 - [x] Serving `pages/{n}` + `cover` with ETag + Cache-Control + 304.
 - [x] Browser support (AVIF, webapp-only, no fallback).
-- [~] Caches: thumbnail FS store ✅; page-list LRU + render/resize diskcache ❌.
-- [ ] Encode on a ProcessPoolExecutor (currently inline; `encode` is pool-ready).
+- [x] Caches: thumbnail FS store ✅; image-dir page-list LRU ✅; render/resize disk cache ✅.
+- [x] Encode on a ProcessPoolExecutor — `media/encode_pool.py` fans a chapter's page encodes across a
+      spawn pool (`encode` is a pure function). Opt-in via `LYCHEE_ENCODE_WORKERS` (default 1 = serial);
+      wired into the downloader + importer. ✅
 
 ## B4. Ingest
 - [x] Filename / volume-chapter parser (ADR 06) — decimals, ranges, specials, series-name subtraction.
 - [x] `BookContainer` — image_dir + CBZ/ZIP + avif_dir ✅, extension-based. RAR/7z/PDF/EPUB + content
       sniffing **not planned** (CBZ + directories cover the common cases).
 - [x] Scan pipeline (walk → diff → reconcile, soft-delete + (size, partial_hash) restore) + library
-      CRUD/scan API. ⚠ restore doesn't migrate reading progress (chapters dropped on soft-delete).
+      CRUD/scan API. Restore migrates reading progress (snapshotted on soft-delete; xxh3 hash).
 - [x] Task tracker + SSE progress events ✅; **background queue** ✅ — scans run on a worker thread
       (`src/tasks/queue.py`), POST returns `202 + TaskOut`. (In-process/serial; a persistent or
       ProcessPoolExecutor queue is a later scaling concern.)
@@ -239,7 +242,7 @@
 - **Infra — on hold** (deferred to last, by request):
   - [⏸] Auth & multi-user.
   - [⏸] Docker packaging.
-- [~] Tests: backend 173 pytest ✅; FE vitest set up (@vue/test-utils + happy-dom) with first
+- [~] Tests: backend 175 pytest ✅; FE vitest set up (@vue/test-utils + happy-dom) with first
       component/unit tests — **coverage still thin**.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
