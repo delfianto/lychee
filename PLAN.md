@@ -44,9 +44,9 @@
          via SSE. FE consumes `/api/events` (shared `EventSource`, activity indicator, refetch on
          `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
    - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
-         download/scan (not lazy-on-request); a Settings "Local import" page that transcodes local
-         container files/folders to AVIF (UI quality + enable toggle); and a configurable, LANraragi-style
-         filename→metadata pattern to auto-fill series/volume/chapter/title. **Not started.**
+         download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
+         AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
+         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **Not started.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -410,16 +410,19 @@ Three related pieces of catalog-building polish:
 - **Managed library pattern**: `downloads_library(session, storage_root)` get-or-creates a "Downloads"
   library at `storage/downloads`. Imports mirror this with an "Imports" library at `storage/imports`.
 
-### Decisions (proposed — confirm before G3)
+### Decisions (confirmed 2026-07-25)
 - Imported content is **transcoded to AVIF** (per the request) and lands in a managed **"Imports"** library
-  at `storage/imports/...` (mirrors Downloads), never registered in-place. The import **source** is a
-  **server-side path** (file or folder) the admin points at — consistent with how libraries already take a
-  server path. (Browser file-upload is a heavier, separate multipart flow — out of scope here.)
+  at `storage/imports/...` (mirrors Downloads), never registered in-place.
+- **Two import sources, phased:** **(Phase 1, G3) a server-side path** the admin points at (file or folder),
+  consistent with how libraries already take a server path; **(Phase 2, G5) browser upload** (multipart →
+  staged temp dir → the same transcode pipeline).
 - Config is a **global singleton `ImportConfig`** (`id="default"`): `enabled`, `quality`, `filename_pattern`.
   (Per-library `Library.options_json` rejected — the import page is one global settings surface.)
 - **Quality** override replaces the per-class preset `quality` for import transcodes; **subsampling stays
   per content-class** (keeps line-art crisp). UI exposes a few tiers → numbers (e.g. Higher 85 / Balanced
   75 / Smaller 60).
+- **Filename pattern = friendly token template** (`{series} - c{chapter} (v{volume})`) compiled to a regex —
+  not raw regex — and falls back to the built-in `parse` on no-match.
 - Eager thumbnails **keep the lazy `get_cover` fallback** (warm, don't replace) — a missing thumb still
   self-heals on request.
 
@@ -473,6 +476,15 @@ Three related pieces of catalog-building polish:
       `importer` (G3).
 - [ ] (Optional) extend the same pattern to the scanner's `_sync_chapter` behind the same config.
 - [ ] Tests: representative patterns fill fields; partial/no-match falls back; literals + ignore token work.
+
+**G5 — Browser upload (import source, Phase 2)**
+- [ ] `POST /api/import/upload` (multipart) — accept container file(s), stream to a staged temp dir under
+      `storage/imports/_staging/`, then run the same G3 `import_path` pipeline on the staged file and clean
+      up. Enforce an upload size cap + allowed extensions (cbz/zip).
+- [ ] FE: drag-and-drop / file-picker in ImportPanel alongside the server-path form; progress via SSE (same
+      `"localimport"` kind), toast on done.
+- [ ] Tests: upload a tmp CBZ (TestClient multipart) → staged, transcoded to an `avif_dir` book, cover thumb
+      generated; oversize / bad-type → 400.
 
 **Testing:** unit-test the pattern compiler (tokens→regex, literal escaping, no-match) and the AVIF quality
 override; integration-test import end-to-end (tmp CBZ/folder → served AVIF + generated thumbnail) and config
