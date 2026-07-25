@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Settings shell: the section rail + the active tab. Each tab's concerns live in
 // its own panel under views/settings/ (each owns its state, loads, and SSE wiring).
-import { Download, FolderInput, Info, SlidersHorizontal, Tag } from "lucide-vue-next";
+import { Download, Info, Library, SlidersHorizontal, Tag } from "lucide-vue-next";
 import { type Component, ref } from "vue";
 
 import AboutPanel from "./settings/AboutPanel.vue";
@@ -15,9 +15,9 @@ import ProviderPanel from "./settings/ProviderPanel.vue";
 
 const sections: { key: string; label: string; icon: Component }[] = [
   { key: "general", label: "General", icon: SlidersHorizontal },
+  { key: "libraries", label: "Libraries", icon: Library },
   { key: "content", label: "Content", icon: Tag },
   { key: "downloads", label: "Downloads", icon: Download },
-  { key: "import", label: "Local import", icon: FolderInput },
   { key: "about", label: "About", icon: Info },
 ];
 const active = ref("general");
@@ -47,7 +47,6 @@ const active = ref("general");
              keys are required or Vue reuses the <div> and skips the animation. -->
         <Transition name="page" mode="out-in">
           <div v-if="active === 'general'" key="general" class="flex flex-col gap-8">
-            <LibrariesPanel />
             <div class="grid gap-6 lg:grid-cols-2">
               <ProviderPanel />
               <AccountsPanel />
@@ -55,9 +54,13 @@ const active = ref("general");
             <AppearancePanel />
           </div>
 
+          <div v-else-if="active === 'libraries'" key="libraries" class="flex flex-col gap-8">
+            <LibrariesPanel />
+            <ImportPanel />
+          </div>
+
           <ContentPanel v-else-if="active === 'content'" key="content" />
           <DownloadsPanel v-else-if="active === 'downloads'" key="downloads" />
-          <ImportPanel v-else-if="active === 'import'" key="import" />
           <AboutPanel v-else-if="active === 'about'" key="about" />
         </Transition>
       </div>
