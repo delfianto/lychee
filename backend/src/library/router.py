@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Response, status
 
 from src.core.persistence.database import DbSession
+from src.downloads.deps import StorageRootDep
 from src.library import service
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
 from src.tasks.schema import TaskOut
@@ -23,9 +24,9 @@ def create_library(db: DbSession, data: LibraryCreate) -> LibraryOut:
 
 
 @router.post("/scan", status_code=status.HTTP_202_ACCEPTED)
-def scan_all(db: DbSession) -> TaskOut:
+def scan_all(db: DbSession, storage: StorageRootDep) -> TaskOut:
     """Scan every enabled library in the background; returns the task to follow via SSE."""
-    return service.enqueue_scan_all(db)
+    return service.enqueue_scan_all(db, storage)
 
 
 @router.patch("/{library_id}")
@@ -40,6 +41,6 @@ def delete_library(db: DbSession, library_id: str) -> Response:
 
 
 @router.post("/{library_id}/scan", status_code=status.HTTP_202_ACCEPTED)
-def scan_library(db: DbSession, library_id: str) -> TaskOut:
+def scan_library(db: DbSession, storage: StorageRootDep, library_id: str) -> TaskOut:
     """Scan one library in the background; returns the task to follow via /api/events."""
-    return service.enqueue_scan_one(db, library_id)
+    return service.enqueue_scan_one(db, library_id, storage)

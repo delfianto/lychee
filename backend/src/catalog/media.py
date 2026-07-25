@@ -17,9 +17,12 @@ from sqlalchemy.orm import Session
 
 from src.catalog.models import Book, Chapter, Library, Series
 from src.core.exceptions import NotFoundError
+from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
 from src.media.containers import open_container
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
+
+logger = get_logger(__name__)
 
 _MIME = {
     ".avif": "image/avif",
@@ -83,6 +86,40 @@ def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str
         if data is None:  # pragma: no cover - defensive
             raise NotFoundError("cover generation failed")
     return Served(data=data, media_type="image/avif", etag=_etag(data))
+
+
+def generate_series_cover(
+    session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
+) -> bool:
+    """Warm a series' cover thumbnails from its first book's first page.
+
+    Idempotent and best-effort: skips reading the page when every variant already
+    exists (unless ``overwrite``), no-ops when the series has no book yet, and
+    swallows an unreadable/undecodable first page (the lazy ``get_cover`` path
+    retries on request). Returns whether it generated. Callers use this to warm
+    covers eagerly on download/scan instead of on first request.
+    """
+    if not overwrite and all(store.exists(series_id, variant) for variant in ThumbVariant):
+        return False
+    book = _first_book(session, series_id)
+    if book is None:
+        return False
+    try:
+        source, _ = _read_page(session, book, 0)
+        store.generate_all(series_id, source, overwrite=overwrite)
+    except Exception as exc:  # noqa: BLE001 - warming must never break the download/scan
+        logger.warning("cover_warm_failed", series_id=series_id, error=str(exc))
+        return False
+    return True
+
+
+def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
+    """Warm covers for every series in a library (best-effort). Returns the count generated."""
+    warmed = 0
+    for series_id in session.scalars(select(Series.id).where(Series.library_id == library_id)):
+        if generate_series_cover(session, store, series_id):
+            warmed += 1
+    return warmed
 
 
 def get_page(session: Session, chapter_id: str, n: int) -> Served:
