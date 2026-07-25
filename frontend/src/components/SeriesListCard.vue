@@ -5,6 +5,7 @@ import { RouterLink } from "vue-router";
 
 import { contentRatingClass, contentRatingLabel, statusColor, statusLabel } from "../lib/display";
 import type { Series } from "../types";
+import AddToListMenu from "./AddToListMenu.vue";
 import CountryFlag from "./CountryFlag.vue";
 
 const props = defineProps<{ series: Series; compact?: boolean }>();
@@ -51,6 +52,9 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
               :class="statusColor[series.status]"
               :title="statusLabel[series.status]"
             ></span>
+            <div class="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+              <AddToListMenu :series-id="series.id" trigger-class="btn btn-ghost btn-xs btn-square" />
+            </div>
           </div>
         </div>
 

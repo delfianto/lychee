@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { Check, Heart, Images, ListPlus } from "lucide-vue-next";
+import { Heart, Images } from "lucide-vue-next";
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { fetchGalleryImages, fetchSeries, patchSeries } from "../api/queries";
+import AddToListMenu from "../components/AddToListMenu.vue";
 import ErrorState from "../components/ErrorState.vue";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
-import { toast } from "../lib/toast";
-import { useCollections } from "../stores/collections";
-import type { Collection, Series } from "../types";
+import type { Series } from "../types";
 
 const route = useRoute();
 const gallery = ref<Series | null>(null);
@@ -32,14 +31,6 @@ async function load(id: string): Promise<void> {
 const reload = (): void => void load(String(route.params.id));
 watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
 
-const collections = useCollections();
-function toggleList(l: Collection): void {
-  if (!gallery.value) return;
-  const gid = gallery.value.id;
-  const wasIn = collections.hasSeries(l.id, gid);
-  collections.toggleSeries(l.id, gid);
-  toast(wasIn ? `Removed from ${l.name}` : `Added to ${l.name}`, wasIn ? "info" : "success");
-}
 
 function toggleFavorite(): void {
   if (!gallery.value) return;
@@ -119,21 +110,7 @@ function openAt(i: number): void {
           >
             <Heart class="size-4" :class="{ 'fill-current': favorite }" />
           </button>
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-square btn-sm" aria-label="Add to list">
-              <ListPlus class="size-4" />
-            </div>
-            <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
-              <li class="menu-title">Add to list</li>
-              <li v-for="l in collections.lists" :key="l.id">
-                <a @click="toggleList(l)">
-                  <Check class="size-4" :class="collections.hasSeries(l.id, gallery.id) ? 'opacity-100' : 'opacity-0'" />
-                  {{ l.name }}
-                </a>
-              </li>
-              <li v-if="!collections.lists.length" class="px-2 py-1 text-xs text-base-content/50">No lists yet</li>
-            </ul>
-          </div>
+          <AddToListMenu :series-id="gallery.id" />
         </div>
       </div>
     </section>
