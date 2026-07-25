@@ -57,8 +57,9 @@
 4. **Fidelity / correctness:**
    - [x] Error shape: every error response is `{"error":{"code","message"}}` — domain (`LycheeError.code`),
          Pydantic validation (422), and framework HTTP errors (unknown route / method) all normalized. ✅
-   - [ ] Move-restore loses progress (chapters dropped on soft-delete; ADR 07 `tryRestore` migration
-         not implemented). `partial_hash` is sha1-of-sample, not xxh3.
+   - [x] Move-restore preserves reading progress — a soft-delete snapshots its chapters' progress onto
+         `Book.restore_progress_json`; a restore (matched by size + hash) re-applies it by chapter number.
+         `partial_hash` is now **xxh3-128** (xxhash dep). ✅
    - [~] Taxonomy seed is hand-curated MangaDex-aligned, not fetched from `/manga/tag`.
 5. **FE polish + backlog:** see PART A remaining and PART E.
 

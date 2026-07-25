@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from src.catalog.models import Series
+from src.catalog.models import Chapter, Series
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
+from src.progress.models import ReadingProgress
 from src.tasks.queue import queue
 
 
@@ -112,6 +113,37 @@ def test_rescan_after_title_change_keeps_one_series(
     after = client.get("/api/series").json()["items"]
     assert len(after) == before  # no duplicate "Berserk"
     assert any(s["title"] == "Berserk (Deluxe)" for s in after)
+
+
+def test_move_restore_preserves_reading_progress(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    root = tmp_path / "lib"
+    _cbz(root / "Kagurabachi" / "ch1.cbz", 3)
+    library_id, _ = _create_and_scan(client, root)
+
+    series = db_session.scalars(select(Series).where(Series.title == "Kagurabachi")).one()
+    chapter = db_session.scalars(select(Chapter).where(Chapter.series_id == series.id)).one()
+    db_session.add(
+        ReadingProgress(chapter_id=chapter.id, series_id=series.id, current_page=7, completed=True)
+    )
+    db_session.commit()
+
+    # Move the file across two scans: remove → rescan (soft-delete + snapshot), then add
+    # the identical content at a new name → rescan (restore by size+hash → re-apply progress).
+    (root / "Kagurabachi" / "ch1.cbz").unlink()
+    _scan(client, library_id)
+    _cbz(root / "Kagurabachi" / "ch1_moved.cbz", 3)  # byte-identical → same size + xxh3 hash
+    _scan(client, library_id)
+
+    db_session.expire_all()
+    restored = db_session.scalars(
+        select(ReadingProgress)
+        .join(Chapter, ReadingProgress.chapter_id == Chapter.id)
+        .where(Chapter.series_id == series.id)
+    ).all()
+    assert len(restored) == 1
+    assert (restored[0].current_page, restored[0].completed) == (7, True)
 
 
 def test_scan_warms_series_covers(client: TestClient, tmp_path: Path) -> None:

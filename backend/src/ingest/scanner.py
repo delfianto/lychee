@@ -14,12 +14,12 @@ planned — CBZ + image directories cover the common cases.)
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import xxhash
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.ingest.parser import parse
 from src.media.containers import IMAGE_EXTS, open_container
+from src.progress.models import ReadingProgress
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,7 @@ def _archive_kind(name: str) -> str | None:
 
 def _signature(path: Path) -> tuple[int, float, str]:
     """Return (size_bytes, mtime, partial_hash) for a file or an image directory."""
-    digest = hashlib.sha1()
+    digest = xxhash.xxh3_128()  # fast, low-collision content fingerprint
     if path.is_dir():
         images = sorted(p for p in path.iterdir() if p.is_file() and _is_image(p.name))
         size = 0
@@ -165,8 +166,9 @@ def scan_library(
     for path_rel, book in existing.items():
         if path_rel not in seen:
             book.deleted_at = utc_now()
-            # Drop the derived chapters (progress on them cascades away); a later
-            # restore of a moved book does not migrate that reading progress.
+            book.restore_progress_json = _snapshot_progress(session, book)
+            # Drop the derived chapters (their progress cascades away); the snapshot above
+            # lets a later restore of this moved book re-apply that progress.
             _ = session.execute(delete(Chapter).where(Chapter.book_id == book.id))
             summary.books_removed += 1
 
@@ -271,6 +273,47 @@ def _reconcile_book(
     return book
 
 
+def _snapshot_progress(session: Session, book: Book) -> list[dict[str, object]] | None:
+    """Capture a soft-deleted book's chapters' reading progress (keyed by chapter number)
+    before the chapters are deleted, so a restore can re-apply it. None when there's none."""
+    rows = session.execute(
+        select(Chapter.number, ReadingProgress.current_page, ReadingProgress.completed)
+        .join(ReadingProgress, ReadingProgress.chapter_id == Chapter.id)
+        .where(Chapter.book_id == book.id)
+    ).all()
+    snapshot: list[dict[str, object]] = [
+        {"number": number, "current_page": current_page, "completed": completed}
+        for number, current_page, completed in rows
+    ]
+    return snapshot or None
+
+
+def _restore_progress(session: Session, series: Series, book: Book, chapter: Chapter) -> None:
+    """Re-apply a snapshotted reading position (from a soft-delete) to a chapter recreated
+    on restore, matched by number. Consumes the entry and clears the snapshot when empty."""
+    snapshot = book.restore_progress_json
+    if not snapshot:
+        return
+    entry = next((row for row in snapshot if row.get("number") == chapter.number), None)
+    if entry is None:
+        return
+    has_progress = session.scalar(
+        select(ReadingProgress.id).where(ReadingProgress.chapter_id == chapter.id)
+    )
+    if has_progress is None:
+        page = entry.get("current_page")
+        session.add(
+            ReadingProgress(
+                chapter_id=chapter.id,
+                series_id=series.id,
+                current_page=page if isinstance(page, int) else 0,
+                completed=bool(entry.get("completed")),
+            )
+        )
+    remaining = [row for row in snapshot if row is not entry]
+    book.restore_progress_json = remaining or None
+
+
 def sync_chapter(
     session: Session, series: Series, book: Book, candidate: Candidate, title: str, kind: str
 ) -> Chapter:
@@ -287,6 +330,7 @@ def sync_chapter(
     chapter.page_start = 0
     chapter.page_count = book.page_count
     session.flush()
+    _restore_progress(session, series, book, chapter)
     return chapter
 
 
