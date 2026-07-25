@@ -17,9 +17,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.media import generate_series_cover
-from src.catalog.models import Book, Chapter, Library, Series
+from src.catalog.models import Book, Chapter, Library, Series, SeriesCredit
 from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
+from src.ingest.parser import PatternResult, parse_pattern
 from src.ingest.scanner import Candidate, order_chapters, resolve_books, sync_chapter
 from src.media.avif import encode_bytes
 from src.media.containers import open_container
@@ -45,9 +46,13 @@ def imports_library(session: Session, storage_root: Path) -> Library:
     return library
 
 
-def _get_or_create_series(session: Session, library: Library, title: str, kind: str) -> Series:
+def _get_or_create_series(
+    session: Session, library: Library, *, path_rel: str, title: str, kind: str
+) -> Series:
+    """Get-or-create by ``path_rel`` (stable source identity); ``title`` is the display
+    name (from the filename pattern, or the source name)."""
     series = session.scalar(
-        select(Series).where(Series.library_id == library.id, Series.path_rel == title)
+        select(Series).where(Series.library_id == library.id, Series.path_rel == path_rel)
     )
     if series is None:
         series = Series(
@@ -55,11 +60,58 @@ def _get_or_create_series(session: Session, library: Library, title: str, kind: 
             kind=kind,
             title=title,
             sort_title=title.lower(),
-            path_rel=title,
+            path_rel=path_rel,
         )
         session.add(series)
         session.flush()
     return series
+
+
+def _apply_series_fields(session: Session, series: Series, result: PatternResult) -> None:
+    """Apply series-level pattern fields (year + author/artist credits), deduping credits
+    so a re-import doesn't violate the (series, name, role) unique constraint."""
+    if result.year is not None:
+        series.year = result.year
+    existing = {
+        (credit.name, credit.role)
+        for credit in session.scalars(
+            select(SeriesCredit).where(SeriesCredit.series_id == series.id)
+        )
+    }
+    for role, name in (("author", result.author), ("artist", result.artist)):
+        if name and (name, role) not in existing:
+            session.add(SeriesCredit(series_id=series.id, name=name, role=role))
+            existing.add((name, role))
+
+
+def _import_chapter(
+    session: Session,
+    series: Series,
+    book: Book,
+    candidate: Candidate,
+    title: str,
+    kind: str,
+    pattern: str,
+) -> Chapter:
+    """Create/update the book's Chapter from the token pattern when it matches the
+    filename, else the built-in filename parser."""
+    result = parse_pattern(candidate.segments[-1], pattern) if pattern else None
+    if result is None:
+        return sync_chapter(session, series, book, candidate, title, kind)
+    chapter = session.scalar(select(Chapter).where(Chapter.book_id == book.id))
+    if chapter is None:
+        chapter = Chapter(series_id=series.id, book_id=book.id)
+        session.add(chapter)
+    chapter.series_id = series.id
+    chapter.volume = result.volume
+    chapter.number = result.number
+    chapter.number_sort = result.number_sort
+    chapter.title = result.title
+    chapter.group_name = result.group
+    chapter.page_start = 0
+    chapter.page_count = book.page_count
+    session.flush()
+    return chapter
 
 
 def _book_key(candidate: Candidate) -> str:
@@ -135,13 +187,16 @@ def import_path(
     kind: str,
     storage_root: Path,
     quality: int,
+    filename_pattern: str = "",
     on_progress: Callable[[int, str], None] | None = None,
 ) -> dict[str, int]:
     """Import a container file or series folder, transcoding its pages to AVIF.
 
     Creates/reuses one series in the managed "Imports" library; each source book
-    becomes an ``avif_dir`` Book (+ Chapter). Commits per book so progress is visible,
-    then warms the series cover. Returns ``{"booksImported": n}``.
+    becomes an ``avif_dir`` Book (+ Chapter). When ``filename_pattern`` is set, it fills
+    series/chapter/volume/title/credits from each filename (else the built-in parser).
+    Commits per book so progress is visible, then warms the series cover. Returns
+    ``{"booksImported": n}``.
     """
     if not source.exists():
         raise BadRequestError(f"import path not found: {source}")
@@ -149,8 +204,20 @@ def import_path(
     library = imports_library(session, storage_root)
     store = ThumbnailStore(storage_root / "thumbnails")
 
-    title, candidates = _resolve_source(source)
-    series = _get_or_create_series(session, library, title, series_kind)
+    source_name, candidates = _resolve_source(source)
+    # A pattern match on the first book can name the series (+ its year/credits); the
+    # source name stays the stable identity so re-import doesn't duplicate the series.
+    first = (
+        parse_pattern(candidates[0].segments[-1], filename_pattern)
+        if filename_pattern and candidates
+        else None
+    )
+    display_title = (first.series if first else None) or source_name
+    series = _get_or_create_series(
+        session, library, path_rel=source_name, title=display_title, kind=series_kind
+    )
+    if first is not None:
+        _apply_series_fields(session, series, first)
 
     chapters: list[Chapter] = []
     imported = 0
@@ -162,7 +229,11 @@ def import_path(
             if series_kind == "gallery":
                 series.image_count = book.page_count
             else:
-                chapters.append(sync_chapter(session, series, book, candidate, title, series_kind))
+                chapters.append(
+                    _import_chapter(
+                        session, series, book, candidate, display_title, series_kind, filename_pattern
+                    )
+                )
         session.commit()
         if on_progress is not None:
             on_progress(round(index / total * 100), candidate.segments[-1])
