@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **138
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **142
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -46,7 +46,8 @@
    - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
          AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
-         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **Not started.**
+         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G1 done
+         (quality override + eager thumbnails); G2–G5 remain.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -225,7 +226,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 138 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 142 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -375,7 +376,7 @@ override.
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
-# PART G — Local import + eager thumbnails + filename metadata — planned (not started)
+# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G1 done)
 
 Three related pieces of catalog-building polish:
 1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
@@ -428,20 +429,20 @@ Three related pieces of catalog-building polish:
 
 ### Phases
 
-**G0 — AVIF quality override (foundation)**
-- [ ] Add optional `quality: int | None` to `avif.encode` / `encode_bytes` (override `preset.quality` when
-      set; subsampling + speed unchanged). Thread an optional `quality` through `ThumbnailStore.generate` /
-      `generate_all`.
-- [ ] Tests: lower quality → smaller bytes; `None` keeps preset behavior (existing AVIF tests stay green).
+**G0 — AVIF quality override (foundation)** — ✅ done
+- [x] Optional `quality: int | None` on `avif.encode` / `encode_bytes` (override `preset.quality`, clamped
+      1–100; subsampling + speed unchanged), threaded through `ThumbnailStore.generate` / `generate_all`.
+- [x] Tests: lower quality → smaller bytes; `None` reproduces the preset path exactly.
 
-**G1 — Eager thumbnails on download + scan**
-- [ ] `catalog/covers.py` `generate_series_cover(session, store, series_id, *, overwrite=False)` — read
-      first-book page 0 → `generate_all(series_id, bytes, overwrite=...)`. Idempotent (no-op if present).
-- [ ] Hook downloader: after `_download_chapter` flush (`downloader.py:132`) warm the cover (first book;
-      `overwrite=False`), store = `ThumbnailStore(storage_root/"thumbnails")`.
-- [ ] Hook scan: construct the store from `settings.storage_path` inside the scan `Work`
-      (`library/service.py`) and warm each series' cover after `_ingest_series`.
-- [ ] Keep `get_cover` lazy fallback. Tests: after download/scan, thumb files exist with no `/cover` request.
+**G1 — Eager thumbnails on download + scan** — ✅ done
+- [x] `catalog/media.py` `generate_series_cover(session, store, series_id, *, overwrite=False)` (kept next to
+      `get_cover` to reuse `_first_book`/`_read_page`) + `warm_library_covers(...)` — first-book page 0 →
+      `generate_all`. Idempotent (skips reading when all variants exist) + best-effort (swallows a bad page).
+- [x] Downloader `run_download_queue` warms the cover after each finished chapter (store =
+      `ThumbnailStore(storage_root/"thumbnails")`).
+- [x] Scan work threads `storage_root` (via the shared `StorageRootDep` so the test override applies) and
+      `warm_library_covers` after auto-match. conftest: thumbnails now live under `storage_root/"thumbnails"`.
+- [x] `get_cover` lazy fallback kept. Tests: after download/scan, thumb files exist with no `/cover` request.
 
 **G2 — Import config (storage + API + FE panel)**
 - [ ] `ImportConfig` singleton (`integrations/models.py`): `enabled: bool=False`, `quality: int=75`,
