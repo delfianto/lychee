@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from src.catalog.models import Book, Chapter, Library, Series
 from src.core.config import settings
 from src.core.crypto import decrypt
 from src.downloads.provider import CustomList, SeriesMetadata
@@ -26,6 +27,9 @@ class _FakeAuthedProvider:
 
     def list_custom_lists(self) -> list[CustomList]:
         return [CustomList(provider_list_id="list-1", name="Faves", manga_ids=["md-1", "md-2"])]
+
+    def read_markers(self, manga_ids: list[str]) -> dict[str, list[str]]:
+        return {"md-1": ["c1"]}
 
 
 def test_connect_stores_encrypted_secrets(
@@ -86,6 +90,47 @@ def test_sync_creates_series_status_and_lists(
     row = db_session.get(Provider, "mangadex")
     assert row is not None
     assert decrypt(row.refresh_token_enc or "") == "refresh-2"  # rotated token persisted
+
+
+def test_sync_marks_read_chapters_of_downloaded_series(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    monkeypatch.setattr(mangadex_account, "password_grant", lambda **_kw: TokenPair("acc", "refresh-1"))
+    assert client.post(
+        "/api/providers/mangadex/connect",
+        json={"clientId": "cid", "clientSecret": "csecret", "username": "me", "password": "pw"},
+    ).status_code == 200
+    monkeypatch.setattr(mangadex_account, "refresh_grant", lambda **_kw: TokenPair("acc2", "refresh-2"))
+    monkeypatch.setattr(mangadex_account, "_authed_provider", lambda _token: _FakeAuthedProvider())
+
+    # a downloaded series+chapter for md-1 (as if matched to MangaDex + downloaded)
+    library = Library(name="Downloads", path="mangadex://dl", kind="mixed")
+    db_session.add(library)
+    db_session.flush()
+    series = Series(
+        library_id=library.id, kind="manga", title="Imported Manga", sort_title="imported manga",
+        provider="mangadex", provider_series_id="md-1",
+    )
+    db_session.add(series)
+    db_session.flush()
+    book = Book(series_id=series.id, library_id=library.id, path_rel="md-1/c1.cbz", content_kind="cbz", page_count=2)
+    db_session.add(book)
+    db_session.flush()
+    chapter = Chapter(
+        series_id=series.id, book_id=book.id, number="1", number_sort=1.0, page_count=2,
+        provider="mangadex", provider_chapter_id="c1",
+    )
+    db_session.add(chapter)
+    db_session.commit()
+    chapter_id = chapter.id
+
+    assert client.post("/api/providers/mangadex/sync").status_code == 202
+    queue.wait_idle()
+
+    groups = client.get(f"/api/series/{series.id}/chapters").json()
+    read = {c["id"]: c["read"] for group in groups for c in group["chapters"]}
+    assert read[chapter_id] is True  # MangaDex read marker → local chapter marked read
 
 
 def test_sync_requires_connection(client: TestClient) -> None:
