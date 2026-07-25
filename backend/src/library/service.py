@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.catalog import matching as catalog_matching
+from src.catalog.media import warm_library_covers
 from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.ingest.scanner import ScanSummary, scan_library
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.media.thumbnails import ThumbnailStore
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -81,20 +84,22 @@ def _summary_dict(summary: ScanSummary) -> dict[str, int]:
     }
 
 
-def _scan_one_work(library_id: str) -> Work:
+def _scan_one_work(library_id: str, storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         library = _get(session, library_id)
         summary = scan_library(session, library, on_progress=on_progress)
         # Auto-match new series to a provider + fetch metadata (no-op unless enabled).
         catalog_matching.auto_match_library(session, library_id)
+        _ = warm_library_covers(session, ThumbnailStore(storage_root / "thumbnails"), library_id)
         return _summary_dict(summary)
 
     return work
 
 
-def _scan_all_work() -> Work:
+def _scan_all_work(storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         total = ScanSummary()
+        store = ThumbnailStore(storage_root / "thumbnails")
         libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
         for index, library in enumerate(libraries, start=1):
             summary = scan_library(session, library)
@@ -103,17 +108,20 @@ def _scan_all_work() -> Work:
             total.books_updated += summary.books_updated
             total.books_removed += summary.books_removed
             catalog_matching.auto_match_library(session, library.id)
+            _ = warm_library_covers(session, store, library.id)
             on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
         return _summary_dict(total)
 
     return work
 
 
-def enqueue_scan_one(session: Session, library_id: str) -> TaskOut:
+def enqueue_scan_one(session: Session, library_id: str, storage_root: Path) -> TaskOut:
     """Validate the library exists (404 here), then run its scan on the task queue."""
     library = _get(session, library_id)
-    return queue.submit_task("scan", f"Scanning {library.name}", _scan_one_work(library_id))
+    return queue.submit_task(
+        "scan", f"Scanning {library.name}", _scan_one_work(library_id, storage_root)
+    )
 
 
-def enqueue_scan_all(session: Session) -> TaskOut:
-    return queue.submit_task("scan", "Scanning all libraries", _scan_all_work())
+def enqueue_scan_all(session: Session, storage_root: Path) -> TaskOut:
+    return queue.submit_task("scan", "Scanning all libraries", _scan_all_work(storage_root))

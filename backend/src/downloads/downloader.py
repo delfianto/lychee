@@ -27,10 +27,12 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.catalog.media import generate_series_cover
 from src.catalog.models import Book, Chapter, Library, Series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import Provider, RemoteChapter, get_provider
 from src.media.avif import encode_bytes
+from src.media.thumbnails import ThumbnailStore
 
 DOWNLOADS_LIBRARY = "Downloads"
 
@@ -206,6 +208,7 @@ def run_download_queue(
     if provider is None:
         return 0
     library = downloads_library(session, storage_root)
+    store = ThumbnailStore(storage_root / "thumbnails")
 
     processed = 0
     while True:
@@ -240,6 +243,8 @@ def run_download_queue(
             row.status = "failed"
             row.error = str(exc)
         session.commit()  # persist the row's final status so the table settles
+        if row.status == "done":
+            _ = generate_series_cover(session, store, series_id)  # warm cover from the new pages
         processed += 1
         if on_progress is not None:
             on_progress(100, row.chapter_label)

@@ -2,11 +2,13 @@
 
 import io
 import threading
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy.orm import Session
 from src.downloads.provider import RemoteChapter, register_provider
+from src.media.thumbnails import ThumbnailStore, ThumbVariant
 from src.tasks.queue import queue
 
 from tests.support import make_series
@@ -66,6 +68,19 @@ def test_download_creates_chapters_and_avif_pages(
     page = client.get(f"/api/chapters/{chapter_id}/pages/1")
     assert page.status_code == 200
     assert page.headers["content-type"] == "image/avif"
+
+
+def test_download_warms_series_cover(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series = _linked_series(db_session)
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
+
+    # The cover is warmed by the download worker (no /cover request made here).
+    store = ThumbnailStore(tmp_path / "storage" / "thumbnails")
+    assert store.exists(series.id, ThumbVariant.COVER)
+    assert store.exists(series.id, ThumbVariant.DETAIL)
 
 
 def test_download_is_idempotent_and_listed(client: TestClient, db_session: Session) -> None:

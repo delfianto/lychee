@@ -94,8 +94,13 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
             session.close()
 
     app.dependency_overrides[get_db] = _get_db
-    app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(tmp_path / "thumbnails")
+    # Thumbnails live under the storage root (as in production), so eager warming by
+    # the download/scan workers (which write to storage_root/"thumbnails") and lazy
+    # serving read the same place.
     app.dependency_overrides[get_storage_root] = lambda: tmp_path / "storage"
+    app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(
+        tmp_path / "storage" / "thumbnails"
+    )
     queue.configure(test_session)  # background workers use this test's temp DB
     with TestClient(app) as test_client:
         register_provider(_OfflineProvider())  # startup registers the real one; neutralise it
