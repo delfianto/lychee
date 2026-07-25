@@ -249,7 +249,7 @@ async function addLibrary(): Promise<void> {
 }
 
 // --- Metadata provider (MangaDex) ---
-const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true });
+const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true, dataSaver: false });
 const providerLanguages = ["en", "ja", "ko", "zh"];
 let providerLoaded = false;
 async function loadProvider(): Promise<void> {
@@ -261,6 +261,7 @@ async function loadProvider(): Promise<void> {
     provider.language = md.language;
     provider.autoMatch = md.autoMatch;
     provider.fetchCovers = md.fetchCovers;
+    provider.dataSaver = md.dataSaver;
   }
 }
 watch(
@@ -274,6 +275,7 @@ watch(
         language: provider.language,
         autoMatch: provider.autoMatch,
         fetchCovers: provider.fetchCovers,
+        dataSaver: provider.dataSaver,
       },
     });
   },
@@ -513,6 +515,16 @@ onMounted(async () => {
                       </div>
                     </div>
                     <input v-model="provider.fetchCovers" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                  </label>
+                  <label class="flex items-center justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                      <Download class="mt-0.5 size-5 shrink-0 text-primary" />
+                      <div>
+                        <div class="text-sm font-medium">Data saver</div>
+                        <div class="text-xs text-base-content/50">Download smaller, compressed pages instead of original quality</div>
+                      </div>
+                    </div>
+                    <input v-model="provider.dataSaver" type="checkbox" class="toggle toggle-primary toggle-sm" />
                   </label>
                 </div>
               </div>

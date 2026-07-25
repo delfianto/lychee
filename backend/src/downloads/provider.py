@@ -18,6 +18,8 @@ class RemoteChapter:
     volume: int | None
     title: str | None
     language: str
+    group_name: str | None = None
+    published_at: str | None = None  # ISO 8601 from the provider (→ source_uploaded_at)
 
 
 class Provider(Protocol):
@@ -26,7 +28,7 @@ class Provider(Protocol):
     def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
         ...
 
-    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
         ...
 
 

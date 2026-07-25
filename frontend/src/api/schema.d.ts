@@ -1115,6 +1115,8 @@ export interface components {
             autoMatch: boolean;
             /** Fetchcovers */
             fetchCovers: boolean;
+            /** Datasaver */
+            dataSaver: boolean;
         };
         /** ProviderUpdate */
         ProviderUpdate: {
@@ -1126,6 +1128,8 @@ export interface components {
             autoMatch?: boolean | null;
             /** Fetchcovers */
             fetchCovers?: boolean | null;
+            /** Datasaver */
+            dataSaver?: boolean | null;
         };
         /** RecentUpdateOut */
         RecentUpdateOut: {

@@ -16,7 +16,7 @@ class _FakeMetaProvider:
     def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
         raise NotImplementedError
 
-    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
         raise NotImplementedError
 
     def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:

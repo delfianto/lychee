@@ -12,6 +12,7 @@ class ProviderOut(CamelModel):
     language: str
     auto_match: bool
     fetch_covers: bool
+    data_saver: bool
 
 
 class ProviderUpdate(CamelModel):
@@ -19,6 +20,7 @@ class ProviderUpdate(CamelModel):
     language: str | None = None
     auto_match: bool | None = None
     fetch_covers: bool | None = None
+    data_saver: bool | None = None
 
 
 class TrackerOut(CamelModel):

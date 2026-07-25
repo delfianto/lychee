@@ -16,6 +16,7 @@ from src.downloads.downloader import download_series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadTaskOut
+from src.integrations.models import Provider as ProviderConfig
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -53,7 +54,11 @@ def _download_work(series_id: str, storage_root: Path) -> Work:
         provider = get_provider(series.provider)
         if provider is None:
             raise BadRequestError(f"provider {series.provider!r} is not available")
-        tasks = download_series(session, series, provider, storage_root, on_progress=on_progress)
+        config = session.get(ProviderConfig, series.provider)
+        data_saver = config.data_saver if config else False
+        tasks = download_series(
+            session, series, provider, storage_root, data_saver=data_saver, on_progress=on_progress
+        )
         return {"downloaded": len(tasks)}
 
     return work

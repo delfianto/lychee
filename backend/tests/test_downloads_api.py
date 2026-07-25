@@ -23,11 +23,11 @@ class _FakeProvider:
 
     def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
         return [
-            RemoteChapter("fc1", "1", 1, "First", "en"),
-            RemoteChapter("fc2", "2", 1, None, "en"),
+            RemoteChapter("fc1", "1", 1, "First", "en", group_name="Scan Team", published_at="2020-05-05T00:00:00+00:00"),
+            RemoteChapter("fc2", "2", 1, None, "en", group_name="Scan Team"),
         ]
 
-    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
         return [_png(), _png()]
 
 
@@ -58,6 +58,8 @@ def test_download_creates_chapters_and_avif_pages(
     chapters = client.get(f"/api/series/{series.id}/chapters").json()
     numbers = [c["number"] for group in chapters for c in group["chapters"]]
     assert set(numbers) == {"1", "2"}
+    groups = [c["group"] for group in chapters for c in group["chapters"]]
+    assert "Scan Team" in groups  # scanlation group carried through from the feed
 
     # a downloaded page is served as AVIF
     chapter_id = chapters[0]["chapters"][0]["id"]
@@ -100,7 +102,7 @@ class _BlockingProvider:
     def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
         return [RemoteChapter("bc1", "1", 1, None, "en")]
 
-    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
         self.started.set()
         _ = self.gate.wait(timeout=5)
         return [_png(), _png()]

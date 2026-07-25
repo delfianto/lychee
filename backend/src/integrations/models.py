@@ -25,6 +25,8 @@ class Provider(Base, TimestampMixin):
     language: Mapped[str] = mapped_column(String(16), default="en", nullable=False)
     auto_match: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     fetch_covers: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Download the lighter "data-saver" (JPEG) pages instead of original quality.
+    data_saver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Tracker(Base, TimestampMixin):
