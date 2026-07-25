@@ -50,6 +50,8 @@ class _OfflineProvider:
 
 # Tests manage their own schema per fixture; never migrate/seed the real database.
 settings.auto_bootstrap = False
+# Encode serially in-process — no worker processes spawned during the suite.
+settings.encode_workers = 1
 
 
 @pytest.fixture

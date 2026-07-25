@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # Run migrations + seed on startup. Disabled in tests (they manage schema).
     auto_bootstrap: bool = True
 
+    # AVIF encoding — worker processes for the encode pool. 1 = serial (in-process);
+    # >1 fans a chapter's page encodes across a spawn ProcessPoolExecutor to use
+    # multiple cores (encode is a pure function). Opt-in via LYCHEE_ENCODE_WORKERS.
+    encode_workers: int = Field(default=1, ge=1, validation_alias="LYCHEE_ENCODE_WORKERS")
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000

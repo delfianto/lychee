@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Throwaway DB for the alembic drift check; pytest uses its own temp DBs.
-      LYCHEE_DATABASE_URL: sqlite:///./ci.db
+      DATABASE_URL: sqlite:///./ci.db
     steps:
       - uses: actions/checkout@v4
 

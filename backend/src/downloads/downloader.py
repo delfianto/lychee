@@ -31,7 +31,7 @@ from src.catalog.media import generate_series_cover
 from src.catalog.models import Book, Chapter, Library, Series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import Provider, RemoteChapter, get_provider
-from src.media.avif import encode_bytes
+from src.media.encode_pool import encode_pages
 from src.media.thumbnails import ThumbnailStore
 
 DOWNLOADS_LIBRARY = "Downloads"
@@ -98,8 +98,8 @@ def _download_chapter(
 
     total = len(pages) or 1
     size = 0
-    for index, raw in enumerate(pages):
-        data = encode_bytes(raw)  # content-aware AVIF (discard original)
+    # content-aware AVIF (discard original), possibly fanned across the encode pool
+    for index, data in enumerate(encode_pages(pages)):
         _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
         size += len(data)
         task.progress = int((index + 1) / total * 100)

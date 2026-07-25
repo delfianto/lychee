@@ -22,8 +22,8 @@ from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.ingest.parser import PatternResult, parse_pattern
 from src.ingest.scanner import Candidate, order_chapters, resolve_books, sync_chapter
-from src.media.avif import encode_bytes
 from src.media.containers import open_container
+from src.media.encode_pool import encode_pages
 from src.media.thumbnails import ThumbnailStore
 
 logger = get_logger(__name__)
@@ -138,26 +138,26 @@ def _import_book(
     )
     if already is not None:
         return None  # already imported — nothing to do this run
-    out_dir = storage_root / "imports" / rel
     try:
         with open_container(candidate.path, candidate.kind) as container:
-            count = container.page_count()
-            out_dir.mkdir(parents=True, exist_ok=True)
-            size = 0
-            for index in range(count):
-                data = encode_bytes(container.read_page(index), quality=quality)
-                _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
-                size += len(data)
+            raws = [container.read_page(index) for index in range(container.page_count())]
     except LycheeError as exc:
         logger.warning("import_skip_unreadable", path=str(candidate.path), error=str(exc))
         return None
+    out_dir = storage_root / "imports" / rel
+    out_dir.mkdir(parents=True, exist_ok=True)
+    size = 0
+    # transcode to AVIF at the configured quality, possibly across the encode pool
+    for index, data in enumerate(encode_pages(raws, quality=quality)):
+        _ = (out_dir / f"{index + 1:03d}.avif").write_bytes(data)
+        size += len(data)
     book = Book(
         series_id=series.id,
         library_id=library.id,
         path_rel=rel,
         content_kind="avif_dir",
         file_size=size,
-        page_count=count,
+        page_count=len(raws),
     )
     session.add(book)
     session.flush()
