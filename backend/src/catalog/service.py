@@ -40,11 +40,9 @@ _LIBRARY_STATUSES = {
 _MAX_LIMIT = 100
 
 
-def cover_url(series_id: str, cover_source: str | None = None) -> str:
-    # A remote provider cover (MangaDex) is hotlinked directly; local content is
-    # served (and thumbnailed) by our own cover endpoint.
-    if cover_source and cover_source.startswith("http"):
-        return cover_source
+def cover_url(series_id: str) -> str:
+    # Covers — provider art or local page — are downloaded once and served by our own
+    # endpoint as cached AVIF thumbnails (never hotlinked).
     return f"/api/series/{series_id}/cover"
 
 
@@ -66,7 +64,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
     return SeriesOut(
         id=s.id,
         title=s.title,
-        cover_url=cover_url(s.id, s.cover_source),
+        cover_url=cover_url(s.id),
         authors=[c.name for c in s.credits if c.role == "author"],
         artists=[c.name for c in s.credits if c.role == "artist"],
         status=s.status,

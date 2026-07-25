@@ -152,7 +152,7 @@
 
 ## B5. Providers + downloader
 - [x] MangaDex provider: chapter listing + page download ✅; metadata fetch + search + auto/manual match
-      + field mapping (`catalog.metadata`) + covers ✅ (M1/M2). Covers hotlinked (local cache pending).
+      + field mapping (`catalog.metadata`) + covers ✅ (M1/M2). Covers downloaded + cached locally as AVIF thumbnails.
 - [x] Chapter downloader → AVIF + DownloadTask rows ✅; runs on the background queue with per-page SSE
       progress (`download.progress`). Rows commit as each chapter downloads, so the Downloads table
       climbs mid-chapter (FE reloads on throttled progress events). Planned as one queued row per
@@ -332,8 +332,9 @@ override.
       Scanner now keys series identity on `path_rel`, so an adopted title can't duplicate on rescan.
 - [x] Tag reconciliation against the seeded taxonomy by slug/name (group→`Tag.group`); missing tags
       created. (The manga's own tag list carries the group, so a `/manga/tag` cache isn't needed.)
-- [~] Cover: `fetch_covers` stores the remote `.512.jpg` URL in `cover_source`; `coverUrl` hotlinks it.
-      **Downloading + local thumbnailing deferred** (`get_cover` still generates from local pages).
+- [x] Cover: the provider cover is **downloaded once and served locally** as a cached AVIF thumbnail
+      (never hotlinked). `generate_series_cover` prefers `cover_source` over the first page; `coverUrl`
+      always points at `/api/series/{id}/cover`. ✅
 - [x] `POST /api/series/{id}/refresh` → enqueues a `metadata` task (queue + SSE); returns 202 + TaskOut.
 
 **M2 — Matching (auto + manual)** — ✅ done
