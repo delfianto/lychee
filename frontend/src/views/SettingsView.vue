@@ -5,13 +5,13 @@ import { Download, FolderInput, Info, SlidersHorizontal, Tag } from "lucide-vue-
 import { type Component, ref } from "vue";
 
 import AboutPanel from "./settings/AboutPanel.vue";
+import AccountsPanel from "./settings/AccountsPanel.vue";
 import AppearancePanel from "./settings/AppearancePanel.vue";
 import ContentPanel from "./settings/ContentPanel.vue";
 import DownloadsPanel from "./settings/DownloadsPanel.vue";
 import ImportPanel from "./settings/ImportPanel.vue";
 import LibrariesPanel from "./settings/LibrariesPanel.vue";
 import ProviderPanel from "./settings/ProviderPanel.vue";
-import TrackersPanel from "./settings/TrackersPanel.vue";
 
 const sections: { key: string; label: string; icon: Component }[] = [
   { key: "general", label: "General", icon: SlidersHorizontal },
@@ -50,7 +50,7 @@ const active = ref("general");
             <LibrariesPanel />
             <div class="grid gap-6 lg:grid-cols-2">
               <ProviderPanel />
-              <TrackersPanel />
+              <AccountsPanel />
             </div>
             <AppearancePanel />
           </div>
