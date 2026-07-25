@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **142
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **146
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -46,8 +46,8 @@
    - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
          AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
-         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G1 done
-         (quality override + eager thumbnails); G2–G5 remain.**
+         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G2 done
+         (quality override + eager thumbnails + import config/panel); G3–G5 remain.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -226,7 +226,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 142 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 146 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -376,7 +376,7 @@ override.
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
-# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G1 done)
+# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G2 done)
 
 Three related pieces of catalog-building polish:
 1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
@@ -444,15 +444,15 @@ Three related pieces of catalog-building polish:
       `warm_library_covers` after auto-match. conftest: thumbnails now live under `storage_root/"thumbnails"`.
 - [x] `get_cover` lazy fallback kept. Tests: after download/scan, thumb files exist with no `/cover` request.
 
-**G2 — Import config (storage + API + FE panel)**
-- [ ] `ImportConfig` singleton (`integrations/models.py`): `enabled: bool=False`, `quality: int=75`,
-      `filename_pattern: str=""`. Migration (`server_default`) + idempotent seed (like `SyncState`).
-- [ ] `ImportConfigOut`/`ImportConfigUpdate` (camel) + `GET/PATCH /api/import/config`; service maps +
-      partial-update-commits (copy `providers.update_provider`).
-- [ ] FE `views/settings/ImportPanel.vue` + a `sections` entry ("Local import") in `SettingsView.vue`;
-      reactive `watch → PATCH` like `ProviderPanel`. Quality select, enable toggle, pattern input (+ token
-      legend), and the import form (G3).
-- [ ] Tests: GET defaults; PATCH persists.
+**G2 — Import config (storage + API + FE panel)** — ✅ done
+- [x] `ImportConfig` singleton (`integrations/models.py`): `enabled=False`, `quality=75`,
+      `filename_pattern=""`. Migration `2f54a96b80db` (new table) + idempotent seed (like `SyncState`).
+- [x] `ImportConfigOut`/`ImportConfigUpdate` (camel, quality validated 1–100) + `GET/PATCH
+      /api/import/config` in `integrations/import_config.py` (copies `providers.update_provider`).
+- [x] FE `views/settings/ImportPanel.vue` + a "Local import" `sections` entry in `SettingsView.vue`;
+      reactive `watch → PATCH`. Enable toggle, quality tiers (Higher/Balanced/Smaller), pattern input +
+      token legend. Screenshot-verified, zero JS errors. (Import form itself lands in G3.)
+- [x] Tests: defaults, PATCH persists, partial update, quality out-of-range → 422.
 
 **G3 — Local import job (walk → AVIF → catalog)**
 - [ ] `ingest/importer.py` `import_path(session, source, *, kind, storage_root, config, on_progress)` —
