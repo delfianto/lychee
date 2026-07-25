@@ -30,6 +30,7 @@ dependencies = [
     # relevant ADR as those features land — see ../notes/decisions/.
     "cryptography>=49.0.0",
     "python-multipart>=0.0.32",
+    "xxhash>=3.8.1",
 ]
 
 [project.optional-dependencies]

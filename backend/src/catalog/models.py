@@ -194,6 +194,11 @@ class Book(BaseModel):
         DateTime(timezone=True), nullable=True
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Reading-progress snapshot captured on soft-delete, re-applied if the book is
+    # restored at a new path (a move/rename). Cleared once re-applied.
+    restore_progress_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     series: Mapped[Series] = relationship(back_populates="books")
     chapters: Mapped[list[Chapter]] = relationship(back_populates="book")
