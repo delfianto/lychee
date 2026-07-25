@@ -1,6 +1,23 @@
 """Tests for providers, trackers, sync, and about endpoints."""
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+from src.downloads.provider import RemoteChapter, register_provider
+from src.tasks.queue import queue
+
+from tests.support import make_series
+
+
+class _SyncProvider:
+    """A 'mangadex' provider whose feed has chapters 1–3."""
+
+    id = "mangadex"
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        return [RemoteChapter(f"r{n}", str(n), 1, None, "en") for n in (1, 2, 3)]
+
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+        return []
 
 
 def test_providers_list_and_update(client: TestClient) -> None:
@@ -39,9 +56,26 @@ def test_sync_get_and_run(client: TestClient) -> None:
     assert initial["lastSync"] is None
     assert initial["autoEveryMinutes"] == 360
 
-    ran = client.post("/api/sync").json()
-    assert ran["lastSync"] is not None
-    assert ran["syncing"] is False
+    ran = client.post("/api/sync")
+    assert ran.status_code == 202  # runs on the background queue now
+    assert ran.json()["kind"] == "sync"
+    queue.wait_idle()
+    assert client.get("/api/sync").json()["lastSync"] is not None
+
+
+def test_sync_flags_new_chapters(client: TestClient, db_session: Session) -> None:
+    register_provider(_SyncProvider())  # remote feed has chapters 1–3
+    series = make_series(db_session, title="Ongoing", kind="manga", chapter_count=1)  # local: ch 1
+    series.provider = "mangadex"
+    series.provider_series_id = "md-x"
+    db_session.commit()
+
+    assert client.post("/api/sync").status_code == 202
+    queue.wait_idle()
+
+    detail = client.get(f"/api/series/{series.id}").json()
+    assert detail["availableChapters"] == 2  # chapters 2 & 3 are new upstream
+    assert client.get("/api/sync").json()["newChapters"] == 2
 
 
 def test_about(client: TestClient) -> None:

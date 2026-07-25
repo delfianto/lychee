@@ -99,6 +99,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
         characters=s.characters_json,
         library_status=s.library_status,
         provider=s.provider,
+        available_chapters=s.available_chapters,
     )
 
 

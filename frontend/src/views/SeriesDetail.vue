@@ -295,6 +295,13 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
               </div>
             </div>
 
+            <span
+              v-if="(series.availableChapters ?? 0) > 0"
+              class="badge badge-warning gap-1"
+              :title="`${series.availableChapters} new chapters available upstream`"
+            >
+              {{ series.availableChapters }} new
+            </span>
             <div class="join">
               <button class="btn btn-sm join-item">Track</button>
               <div class="dropdown dropdown-end">

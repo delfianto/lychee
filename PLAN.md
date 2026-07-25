@@ -10,7 +10,8 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs. **86 pytest, ruff + basedpyright clean.**
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F). **113
+  pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
@@ -22,9 +23,9 @@
          b6a9fd5d added `user_rating`; SeriesDetail + GalleryDetail wired). ✅ done.
    - [ ] Download `pause`/`resume` endpoints (FE toggles status locally); `PUT /api/collections/{id}/series` reorder.
 2. **Larger features (genuinely new work):**
-   - [ ] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
+   - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
-         **Planned in detail in PART F below.**
+         **PART F M0–M5 done** (only the automatic sync scheduler is deferred).
    - [ ] **Tracker OAuth + outbound sync** for AniList/MangaUpdates/MAL (connect is a stub; nothing
          pushes read status) — distinct from MangaDex; MangaDex `links` (PART F/M1) feed the match.
    - [x] **SSE** `/api/events` + `/api/tasks` + task tracker — scans emit live progress events. ✅ done.
@@ -337,14 +338,15 @@ override.
 - [x] `POST /api/providers/{id}/import` → background `import` task: `list_follows` + `reading_status`
       (authed) upsert into a virtual "MangaDex" library, apply metadata, map status → `library_status`.
 
-**M5 — Sync (new-chapter checks; "flag as available")**
-- [ ] Real `POST /api/sync` → enqueue a **`sync`** task (queue + SSE). For matched series, compare
-      remote (`latestUploadedChapter` / `aggregate` / `feed`, or authed `GET /user/follows/manga/feed`
-      for a bulk check) vs local → count new; persist availability (a lightweight `remote_chapter`
-      table or the updates feed) → `SyncState.new_chapters` + a per-series badge + an updates-feed
-      "download" affordance (reuses the existing download flow, which skips already-present chapters).
-- [ ] Scheduler honouring `SyncState.auto_every_minutes` (periodic asyncio task / APScheduler).
-- [ ] FE: wire the Settings → Sync card to real results; SeriesDetail "new chapters" badge; updates markers.
+**M5 — Sync (new-chapter checks; "flag as available")** — ✅ core done
+- [x] Real `POST /api/sync` → enqueues a **`sync`** task (queue + SSE). For each matched series it
+      diffs the provider feed vs local chapters and stores the count on `Series.available_chapters`
+      (migration `a368507`), summing into `SyncState.new_chapters`. Reusing the download flow (which
+      skips already-present chapters) is the "download" affordance.
+- [x] FE: Settings → Sync card runs the async sync + reloads on the task's `done`; SeriesDetail shows
+      a "N new" badge from `availableChapters`.
+- [ ] **Scheduler** honouring `SyncState.auto_every_minutes` (periodic task) — **deferred** (manual
+      sync works; automatic interval sync is a follow-up).
 
 **Testing:** all via `httpx.MockTransport` with canned fixtures per endpoint (search / get / feed /
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper

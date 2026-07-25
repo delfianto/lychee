@@ -42,6 +42,7 @@ class SeriesOut(CamelModel):
     characters: list[str] | None = None
     library_status: str | None = None
     provider: str | None = None  # matched metadata provider slug, or null if unmatched
+    available_chapters: int = 0  # remote chapters not yet local (from the last sync)
 
 
 class SeriesUpdate(CamelModel):
