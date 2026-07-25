@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **131
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **138
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -45,7 +45,8 @@
          `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
 3. **Coverage:**
    - [ ] Containers RAR/7z/PDF/EPUB + `python-magic` content sniffing (ZIP/CBZ/image-dir/AVIF-dir only).
-   - [~] Search is `LIKE`; **FTS5** (B6) for ranking/typo tolerance.
+   - [x] Search: **FTS5 trigram** over title / alt-titles / authors, bm25-ranked, trigger-maintained;
+         LIKE fallback for <3-char queries (B6). ✅ done.
    - [ ] On-demand resize/transcode + disk render cache + page-list LRU (B3 caches).
 4. **Fidelity / correctness:**
    - [~] Error shape is FastAPI `{"detail"}`, not the planned `{error:{code,message}}`.
@@ -106,7 +107,7 @@
 - [~] **Ingest utils:** `hashlib` sha1 sample (not xxhash) · regex natural-sort (not natsort).
 - [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); APScheduler (auto-sync) + ProcessPoolExecutor (encode) ❌.
 - [x] **Providers/trackers:** `httpx` ✅ · `cryptography` ✅ (Fernet token encryption) · custom 429/5xx retry + rate-limit buckets (no tenacity).
-- [~] **Search:** SQLite `LIKE` (FTS5 ❌).
+- [x] **Search:** SQLite **FTS5 trigram** (title / alt-titles / authors, bm25-ranked). ✅
 - [x] Present: fastapi, uvicorn, sqlalchemy 2, alembic, pydantic 2 + settings, structlog, nanoid, httpx, pillow, cryptography.
 
 ## B2. Domain model → first migration
@@ -149,7 +150,9 @@
       + a global count (M5). Auto-scheduler deferred.
 
 ## B6. Search
-- [~] `GET /api/search` works via `LIKE` over titles; **FTS5 trigram over title/alt-titles/authors ❌**.
+- [x] `GET /api/search` — **FTS5 trigram** over title / alt-titles / authors, bm25-ranked (title weighted
+      highest), kept in sync by triggers on series/title_variant/series_credit; LIKE fallback for short
+      queries. Shared DDL in `catalog/search_index.py` (migration + test harness). ✅ done.
 
 ## B7. Reading progress + trackers
 - [x] Progress writes (`PUT /api/chapters/{id}/progress`) → unread / lastRead / continue-reading.
@@ -181,7 +184,7 @@
 - [x] `GET /api/updates`, [x] `GET /api/updates/unread`, [x] `GET /api/dashboard`.
 
 ### Search
-- [~] `GET /api/search` (LIKE, not FTS5).
+- [x] `GET /api/search` (FTS5 trigram, bm25-ranked).
 
 ### Collections (Lists)
 - [x] GET/POST `/api/collections`, [x] GET/PATCH/DELETE `/api/collections/{id}`,
@@ -215,7 +218,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 131 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 138 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -231,14 +234,14 @@
 3. [x] **B3 AVIF pipeline** (encode/presets/thumbnails/containers/serving). ADR 19.
 4. [x] **Read-only API slice + client + FE swap of every read view.**
 5. [x] **B4 ingest** — parser + scan + library API; scans run on the background queue (`202`, SSE
-       progress). (RAR/PDF/EPUB, content-sniff, FTS deferred.)
+       progress). (RAR/PDF/EPUB, content-sniff deferred.)
 6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
        ✅; downloads run on the background queue with SSE progress. Full MangaDex metadata / match /
        auth / sync done (PART F M0–M5); resumable download pause/resume ✅. (Local cover cache remains.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
        sync/about/taxonomy/collections APIs, SSE + task tracker + background queue + FE SSE consumption,
        MangaDex integration (PART F) + tracker OAuth/push (`src/trackers/`), FE Lists + Settings
-       swapped. **Remaining: FTS5, extra containers, sync scheduler.**
+       swapped. **Remaining: extra containers, sync scheduler.**
 
 ---
 
