@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **129
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **131
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -21,7 +21,10 @@
 1. **Functional (user-facing, small backend):**
    - [x] `PATCH /api/series/{id}` — favorite / library-status / personal rating now persist (migration
          b6a9fd5d added `user_rating`; SeriesDetail + GalleryDetail wired). ✅ done.
-   - [ ] Download `pause`/`resume` endpoints (FE toggles status locally).
+   - [x] Download `pause`/`resume` — downloads plan one queued row per chapter (carrying
+         provider + remote_json); a serial runner drains them, pause/resume flip a row
+         queued↔paused. Endpoints `POST /api/downloads/{id}/pause` and `/resume`; the
+         Downloads panel calls them. ✅ done.
 2. **Larger features (genuinely new work):**
    - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
@@ -39,7 +42,7 @@
    - [x] **Background execution queue** — `src/tasks/queue.py` runs scans + downloads on a worker
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress
          via SSE. FE consumes `/api/events` (shared `EventSource`, activity indicator, refetch on
-         `*.done`). ✅ done. (Only a persistent/multiprocess queue + pause/resume remain — see below.)
+         `*.done`). ✅ done. (Only a persistent/multiprocess queue remains — see below.)
 3. **Coverage:**
    - [ ] Containers RAR/7z/PDF/EPUB + `python-magic` content sniffing (ZIP/CBZ/image-dir/AVIF-dir only).
    - [~] Search is `LIKE`; **FTS5** (B6) for ranking/typo tolerance.
@@ -140,7 +143,8 @@
       + field mapping (`catalog.metadata`) + covers ✅ (M1/M2). Covers hotlinked (local cache pending).
 - [x] Chapter downloader → AVIF + DownloadTask rows ✅; runs on the background queue with per-page SSE
       progress (`download.progress`). Rows commit as each chapter downloads, so the Downloads table
-      climbs mid-chapter (FE reloads on throttled progress events). ⚠ pause/resume not implemented.
+      climbs mid-chapter (FE reloads on throttled progress events). Planned as one queued row per
+      chapter (carrying provider + remote_json) so a serial runner can drain them and pause/resume ✅.
 - [x] **Sync** ✅ — `/api/sync` diffs each matched series' feed vs local chapters → `Series.available_chapters`
       + a global count (M5). Auto-scheduler deferred.
 
@@ -189,7 +193,7 @@
 - [x] **Taxonomy** GET(paged)/POST/PATCH/DELETE (system rows protected; uses counts).
 - [x] **Providers** GET/PATCH + connect/disconnect/import (MangaDex OAuth account + follows import).
 - [x] **Trackers** GET/PATCH + connect(→authorize URL)/callback/login/disconnect ✅ — real OAuth2 ± PKCE + credentials login.
-- [~] **Downloads** GET/POST/DELETE/clear-completed/retry ✅ — **pause/resume endpoints ❌**.
+- [x] **Downloads** GET/POST/DELETE/clear-completed/retry/pause/resume ✅.
 - [x] **Sync** GET/POST ✅ — real new-chapter check on the queue (M5).
 - [x] **About** GET.
 - [x] Appearance/Reader/Theme/Density/Language client-side (localStorage).
@@ -211,7 +215,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 129 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 131 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -230,11 +234,11 @@
        progress). (RAR/PDF/EPUB, content-sniff, FTS deferred.)
 6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
        ✅; downloads run on the background queue with SSE progress. Full MangaDex metadata / match /
-       auth / sync done (PART F M0–M5). (pause/resume + local cover cache remain.)
+       auth / sync done (PART F M0–M5); resumable download pause/resume ✅. (Local cover cache remains.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
        sync/about/taxonomy/collections APIs, SSE + task tracker + background queue + FE SSE consumption,
        MangaDex integration (PART F) + tracker OAuth/push (`src/trackers/`), FE Lists + Settings
-       swapped. **Remaining: FTS5, extra containers, sync scheduler, download pause/resume.**
+       swapped. **Remaining: FTS5, extra containers, sync scheduler.**
 
 ---
 
