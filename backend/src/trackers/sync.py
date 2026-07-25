@@ -25,15 +25,18 @@ logger = get_logger(__name__)
 _PUSHABLE = {"reading", "completed", "on_hold", "dropped", "plan_to_read", "re_reading"}
 
 
-def _connected(session: Session) -> int:
-    return (
-        session.scalar(
-            select(func.count())
-            .select_from(Tracker)
-            .where(Tracker.connected.is_(True), Tracker.sync_on_read.is_(True))
-        )
-        or 0
+def _connected(session: Session) -> bool:
+    """Is any outbound sink connected — a sync-on-read tracker, or the MangaDex account?"""
+    trackers = session.scalar(
+        select(func.count())
+        .select_from(Tracker)
+        .where(Tracker.connected.is_(True), Tracker.sync_on_read.is_(True))
     )
+    if trackers:
+        return True
+    from src.providers import mangadex_account  # lazy import to avoid an import cycle
+
+    return mangadex_account.is_connected(session)
 
 
 def push_series_progress(session: Session, series_id: str) -> int:
@@ -83,7 +86,11 @@ def push_series_progress(session: Session, series_id: str) -> int:
 
 def _push_work(series_id: str) -> Work:
     def work(session: Session, _on_progress: Callable[[int, str], None]) -> dict[str, int]:
-        return {"pushed": push_series_progress(session, series_id)}
+        from src.providers import mangadex_account  # lazy import to avoid an import cycle
+
+        pushed = push_series_progress(session, series_id)  # AniList / MyAnimeList / MangaUpdates
+        _ = mangadex_account.push_series(session, series_id)  # MangaDex (two-way)
+        return {"pushed": pushed}
 
     return work
 

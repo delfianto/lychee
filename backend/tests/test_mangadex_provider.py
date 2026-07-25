@@ -1,5 +1,7 @@
 """MangaDex provider tests (httpx mock transport — no network)."""
 
+import json
+
 import httpx
 from src.downloads.provider import RemoteChapter
 from src.providers.mangadex import MangaDexProvider
@@ -149,3 +151,34 @@ def test_read_markers_empty_input_makes_no_call() -> None:
         raise AssertionError("should not be called for an empty id list")
 
     assert _provider_for(handler).read_markers([]) == {}
+
+
+def test_push_status_posts_status() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "ok"})
+
+    _provider_for(handler).push_status("m1", "completed")
+    assert seen == {"path": "/manga/m1/status", "body": {"status": "completed"}}
+
+
+def test_push_read_posts_chapter_ids() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"result": "ok"})
+
+    _provider_for(handler).push_read("m1", ["c1", "c2"])
+    assert seen == {"path": "/manga/m1/read", "body": {"chapterIdsRead": ["c1", "c2"]}}
+
+
+def test_push_read_empty_makes_no_call() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not POST for an empty chapter list")
+
+    _provider_for(handler).push_read("m1", [])  # no exception = no call
