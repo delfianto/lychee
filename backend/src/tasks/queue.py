@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.logging import get_logger
 from src.core.persistence.database import SessionLocal
+from src.tasks.schema import TaskOut
 from src.tasks.tracker import TaskInfo, tracker
 
 logger = get_logger(__name__)
@@ -54,6 +55,10 @@ class TaskQueue:
             self._futures = {f for f in self._futures if not f.done()}
             self._futures.add(future)
         return task
+
+    def submit_task(self, kind: str, label: str, work: Work) -> TaskOut:
+        """``submit`` for API handlers: enqueue and return the serialisable task."""
+        return TaskOut.model_validate(self.submit(kind, label, work))
 
     def _run(self, task: TaskInfo, work: Work) -> None:
         # expire_on_commit=False: work (esp. downloads) commits repeatedly to expose

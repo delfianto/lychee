@@ -74,8 +74,7 @@ def create_downloads(session: Session, series_id: str, storage_root: Path) -> Ta
     provider = get_provider(series.provider)
     if provider is None:
         raise BadRequestError(f"provider {series.provider!r} is not available")
-    task = queue.submit("download", f"Downloading {series.title}", _download_work(series_id, storage_root))
-    return TaskOut.model_validate(task)
+    return queue.submit_task("download", f"Downloading {series.title}", _download_work(series_id, storage_root))
 
 
 def retry_download(session: Session, task_id: str, storage_root: Path) -> TaskOut:

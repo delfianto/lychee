@@ -112,10 +112,8 @@ def _scan_all_work() -> Work:
 def enqueue_scan_one(session: Session, library_id: str) -> TaskOut:
     """Validate the library exists (404 here), then run its scan on the task queue."""
     library = _get(session, library_id)
-    task = queue.submit("scan", f"Scanning {library.name}", _scan_one_work(library_id))
-    return TaskOut.model_validate(task)
+    return queue.submit_task("scan", f"Scanning {library.name}", _scan_one_work(library_id))
 
 
 def enqueue_scan_all(session: Session) -> TaskOut:
-    task = queue.submit("scan", "Scanning all libraries", _scan_all_work())
-    return TaskOut.model_validate(task)
+    return queue.submit_task("scan", "Scanning all libraries", _scan_all_work())

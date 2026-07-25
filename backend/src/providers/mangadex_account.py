@@ -138,5 +138,4 @@ def import_follows(session: Session, provider_id: str) -> TaskOut:
     config = get_provider_row(session, provider_id)
     if not (config.client_id and config.refresh_token_enc):
         raise BadRequestError("MangaDex account is not connected")
-    task = queue.submit("import", "Importing MangaDex follows", _import_work())
-    return TaskOut.model_validate(task)
+    return queue.submit_task("import", "Importing MangaDex follows", _import_work())
