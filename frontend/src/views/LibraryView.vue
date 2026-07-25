@@ -167,11 +167,18 @@ const queryParams = computed(() =>
   buildLibraryQuery(props.libraryKey, { activeTab: activeTab.value, filters, sort: sort.value }),
 );
 
-// Refetch (debounced) whenever the library, tab, filters, or sort change.
+// Load immediately on mount; debounce later library/tab/filter/sort changes so typing
+// in the search box doesn't fire a request per keystroke.
 let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+let firstLoad = true;
 watch(
   queryParams,
   (q) => {
+    if (firstLoad) {
+      firstLoad = false;
+      void reload(q);
+      return;
+    }
     if (reloadTimer) clearTimeout(reloadTimer);
     reloadTimer = setTimeout(() => void reload(q), 200);
   },

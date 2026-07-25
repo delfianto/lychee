@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { BrowseFilters } from "../types";
-import { buildLibraryQuery } from "./queries";
+import { buildLibraryQuery, useSeriesList } from "./queries";
+
+vi.mock("./client", () => ({
+  api: { GET: vi.fn(async () => ({ data: { items: [], nextCursor: null }, error: undefined })) },
+}));
 
 function filters(overrides: Partial<BrowseFilters> = {}): BrowseFilters {
   return {
@@ -46,5 +50,19 @@ describe("buildLibraryQuery", () => {
   it("maps sort labels via SORT_MAP, defaulting unknown", () => {
     expect(buildLibraryQuery("manga", { ...base, sort: "Title" }).sort).toBe("title");
     expect(buildLibraryQuery("manga", { ...base, sort: "Nonsense" }).sort).toBe("recentlyAdded");
+  });
+});
+
+describe("useSeriesList paging guard", () => {
+  it("does not fetch on loadMore before the first reload", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.GET).mockClear();
+
+    const list = useSeriesList();
+    list.loadMore(); // sentinel fires on an empty grid — must be a no-op
+    expect(api.GET).not.toHaveBeenCalled();
+
+    await list.reload({ kind: "manga" }); // first real (filtered) load
+    expect(api.GET).toHaveBeenCalledTimes(1);
   });
 });
