@@ -8,6 +8,7 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.media.containers import (
     ImageDirContainer,
     ZipContainer,
+    is_cover_file,
     natural_key,
     open_container,
 )
@@ -55,6 +56,35 @@ def test_zip_container_rejects_corrupt(tmp_path: Path) -> None:
     _ = bad.write_bytes(b"not a zip file at all")
     with pytest.raises(BadRequestError):
         _ = ZipContainer(bad)
+
+
+def test_is_cover_file() -> None:
+    assert is_cover_file("Cover.avif")
+    assert is_cover_file("cover.jpg")
+    assert is_cover_file("folder.png")
+    assert not is_cover_file("001.jpg")  # a real page
+    assert not is_cover_file("cover.txt")  # not an image
+
+
+def test_cover_files_are_not_pages_in_image_dir(tmp_path: Path) -> None:
+    for name, body in [("001.png", b"one"), ("002.png", b"two")]:
+        _ = (tmp_path / name).write_bytes(body)
+    _ = (tmp_path / "Cover.avif").write_bytes(b"cover")  # conventional cover — not a page
+    _ = (tmp_path / "folder.jpg").write_bytes(b"folder")
+    container = ImageDirContainer(tmp_path)
+    assert container.page_count() == 2
+    assert [container.page_name(i) for i in range(2)] == ["001.png", "002.png"]
+
+
+def test_cover_files_are_not_pages_in_zip(tmp_path: Path) -> None:
+    archive = tmp_path / "ch.cbz"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("Cover.avif", b"cover")
+        zf.writestr("001.jpg", b"first")
+        zf.writestr("002.jpg", b"second")
+    with ZipContainer(archive) as container:
+        assert container.page_count() == 2
+        assert container.page_name(0) == "001.jpg"
 
 
 def test_open_container_dispatch_and_errors(tmp_path: Path) -> None:

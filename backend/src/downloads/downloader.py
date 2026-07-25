@@ -27,7 +27,7 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.catalog.media import generate_series_cover
+from src.catalog.media import generate_series_cover, write_series_cover
 from src.catalog.models import Book, Chapter, Library, Series
 from src.downloads.models import DownloadTask
 from src.downloads.provider import Provider, RemoteChapter, get_provider
@@ -245,6 +245,8 @@ def run_download_queue(
             row.error = str(exc)
         session.commit()  # persist the row's final status so the table settles
         if row.status == "done":
+            # portable Cover.avif beside the chapters, then the derived grid thumbnail
+            _ = write_series_cover(session, series_id, storage_root / "downloads" / series_id)
             _ = generate_series_cover(session, store, series_id)  # warm cover from the new pages
         processed += 1
         if on_progress is not None:

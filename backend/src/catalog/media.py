@@ -1,14 +1,17 @@
 """Binary media serving: covers, chapter pages, and gallery images.
 
-Covers are AVIF thumbnails: served from the store, and lazily generated from the
-first page of the series' first book on a miss. Pages and gallery images are read
-straight from their book container (downloaded content is already AVIF; scanned
-originals are served as-is). Every response carries a content-hash ETag.
+Covers are AVIF: a series' canonical cover is a ``Cover.avif`` file beside its books
+(written for managed libraries; a ``cover.*``/``folder.*`` convention read for scanned
+ones), falling back to the provider cover or the first page. The hero (``?size=detail``)
+serves that canonical image; grids serve a 320px thumbnail derived into the store. Pages
+and gallery images are read straight from their book container. Every response carries a
+content-hash ETag.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +23,8 @@ from src.catalog.models import Book, Chapter, Library, Series
 from src.core.exceptions import LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
-from src.media.containers import open_container
+from src.media.avif import ContentClass, encode, load_image
+from src.media.containers import is_cover_file, open_container
 from src.media.render_cache import RenderCache, render_width
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
 
@@ -89,9 +93,9 @@ def _download_image(url: str) -> bytes | None:
     return None
 
 
-def _cover_source_bytes(session: Session, series_id: str) -> bytes | None:
-    """The best cover image bytes for a series: the provider cover (downloaded once) if
-    set, else the first book's first page. None when neither is available/readable."""
+def _raw_cover_source(session: Session, series_id: str) -> bytes | None:
+    """Raw bytes to *build* a cover from: the provider cover (downloaded once) if set,
+    else the series' first book's first page. None when neither is available/readable."""
     series = session.get(Series, series_id)
     if series is None:
         return None
@@ -109,23 +113,104 @@ def _cover_source_bytes(session: Session, series_id: str) -> bytes | None:
     return data
 
 
+# The canonical cover: a `Cover.avif` beside a series' books (written for managed
+# libraries; a `cover.*`/`folder.*` convention read for scanned ones).
+_COVER_MAX_EDGE = 640
+_COVER_FILE = "Cover.avif"
+
+
+def _series_dir(session: Session, series: Series) -> Path | None:
+    """The on-disk directory holding a series' books + its ``Cover.avif``: the scanned
+    series folder (``<library>/<path_rel>``) or the managed ``<library>/<series_id>`` dir.
+    None for a loose one-shot (a bare archive with no folder of its own)."""
+    library = session.get(Library, series.library_id)
+    if library is None:
+        return None
+    root = Path(library.path)
+    if series.path_rel:
+        folder = root / series.path_rel
+        if folder.is_dir():
+            return folder
+    managed = root / series.id
+    return managed if managed.is_dir() else None
+
+
+def _on_disk_cover(series_dir: Path) -> Path | None:
+    """A cover file in ``series_dir`` — ``Cover.avif`` first, else a ``cover.*``/``folder.*``
+    image (case-insensitive)."""
+    preferred = series_dir / _COVER_FILE
+    if preferred.is_file():
+        return preferred
+    return next(
+        (p for p in sorted(series_dir.iterdir()) if p.is_file() and is_cover_file(p.name)),
+        None,
+    )
+
+
+def _normalize_cover_avif(data: bytes) -> bytes:
+    """Resize (longest edge ≤ 640, never upscaling) + AVIF-encode arbitrary image bytes."""
+    image = load_image(data)
+    image.thumbnail((_COVER_MAX_EDGE, _COVER_MAX_EDGE))
+    return encode(image, content_class=ContentClass.COLOR_ART)
+
+
+def _canonical_cover_bytes(session: Session, series_id: str) -> bytes | None:
+    """The canonical hero cover (AVIF): the on-disk ``Cover.avif``/``cover.*``/``folder.*``
+    if present (normalized when not already AVIF), else the raw source normalized. None
+    when there's no cover source at all. Read-only — never writes."""
+    series = session.get(Series, series_id)
+    if series is None:
+        return None
+    directory = _series_dir(session, series)
+    if directory is not None:
+        cover = _on_disk_cover(directory)
+        if cover is not None:
+            data = cover.read_bytes()
+            return data if cover.suffix.lower() == ".avif" else _normalize_cover_avif(data)
+    raw = _raw_cover_source(session, series_id)
+    return _normalize_cover_avif(raw) if raw is not None else None
+
+
+def write_series_cover(session: Session, series_id: str, series_dir: Path) -> bool:
+    """Write ``<series_dir>/Cover.avif`` (normalized AVIF of the raw source) so a managed
+    series' cover is a portable file beside its books. Best-effort (swallows failures);
+    returns whether it wrote."""
+    raw = _raw_cover_source(session, series_id)
+    if raw is None:
+        return False
+    try:
+        _write_bytes_atomic(series_dir / _COVER_FILE, _normalize_cover_avif(raw))
+    except Exception as exc:  # noqa: BLE001 - cover writing must never break import/download
+        logger.warning("cover_write_failed", series_id=series_id, error=str(exc))
+        return False
+    return True
+
+
+def _write_bytes_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp")
+    _ = tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
 def generate_series_cover(
     session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
 ) -> bool:
-    """Generate a series' cover thumbnails — the provider cover if the series has one
-    (downloaded + cached locally, never hotlinked), else its first book's first page.
+    """Generate a series' derived 320px grid thumbnail from its canonical cover (the
+    on-disk ``Cover.avif``/``cover.*``/``folder.*``, else the provider cover / first page).
 
-    Idempotent and best-effort: skips when every variant already exists (unless
-    ``overwrite``), no-ops when there's no cover source, and swallows failures. Returns
-    whether it generated. Used to warm covers eagerly on download/scan.
+    Idempotent + best-effort: skips when the thumbnail exists (unless ``overwrite``),
+    no-ops with no cover source, swallows failures. Returns whether it generated. The
+    hero (``?size=detail``) is served straight from the canonical cover, so it needs no
+    store variant.
     """
-    if not overwrite and all(store.exists(series_id, variant) for variant in ThumbVariant):
+    if not overwrite and store.exists(series_id, ThumbVariant.COVER):
         return False
-    source = _cover_source_bytes(session, series_id)
+    source = _canonical_cover_bytes(session, series_id)
     if source is None:
         return False
     try:
-        store.generate_all(series_id, source, overwrite=overwrite)
+        store.generate(series_id, source, ThumbVariant.COVER, overwrite=overwrite)
     except Exception as exc:  # noqa: BLE001 - warming must never break the download/scan
         logger.warning("cover_generate_failed", series_id=series_id, error=str(exc))
         return False
@@ -133,15 +218,19 @@ def generate_series_cover(
 
 
 def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str) -> Served:
-    """Serve a series cover thumbnail (cached AVIF), generating it on a miss from the
-    provider cover or the first page."""
-    variant = ThumbVariant.DETAIL if size == "detail" else ThumbVariant.COVER
-    data = store.read(series_id, variant)
+    """Serve a series cover: ``detail`` → the canonical hero cover bytes; ``cover`` → the
+    cached 320px grid thumbnail (generated on a miss). Both AVIF, with a content ETag."""
+    if session.get(Series, series_id) is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    if size == "detail":
+        data = _canonical_cover_bytes(session, series_id)
+        if data is None:
+            raise NotFoundError("no cover source for series")
+        return Served(data=data, media_type="image/avif", etag=_etag(data))
+    data = store.read(series_id, ThumbVariant.COVER)
     if data is None:
-        if session.get(Series, series_id) is None:
-            raise NotFoundError(f"series {series_id!r} not found")
         _ = generate_series_cover(session, store, series_id)
-        data = store.read(series_id, variant)
+        data = store.read(series_id, ThumbVariant.COVER)
         if data is None:
             raise NotFoundError("no cover source for series")
     return Served(data=data, media_type="image/avif", etag=_etag(data))

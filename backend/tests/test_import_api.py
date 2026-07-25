@@ -217,3 +217,39 @@ def test_import_output_is_stored_cbz(client: TestClient, tmp_path: Path) -> None
         assert len(infos) == 3
         assert all(info.filename.endswith(".avif") for info in infos)
         assert all(info.compress_type == zipfile.ZIP_STORED for info in infos)
+
+
+def test_import_writes_portable_cover_avif(client: TestClient, tmp_path: Path) -> None:
+    _enable(client)
+    cbz = tmp_path / "incoming" / "Spy x Family.cbz"
+    _cbz(cbz, 3)
+    assert client.post("/api/import", json={"path": str(cbz), "kind": "manga"}).status_code == 202
+    queue.wait_idle()
+
+    series = _series_by_title(client, "Spy x Family")
+    # a portable Cover.avif sits beside the imported book(s), AVIF-encoded
+    cover = tmp_path / "storage" / "imports" / series["id"] / "Cover.avif"
+    assert cover.is_file()
+    assert b"ftyp" in cover.read_bytes()[:16]
+    # ?size=detail serves that canonical cover
+    detail = client.get(f"/api/series/{series['id']}/cover", params={"size": "detail"})
+    assert detail.status_code == 200
+    assert detail.headers["content-type"] == "image/avif"
+
+
+def test_import_excludes_cover_file_from_pages(client: TestClient, tmp_path: Path) -> None:
+    _enable(client)
+    cbz = tmp_path / "incoming" / "Oshi no Ko.cbz"
+    cbz.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(cbz, "w") as archive:
+        archive.writestr("Cover.png", _png(10))  # a cover in the source — not a page
+        archive.writestr("001.png", _png(20))
+        archive.writestr("002.png", _png(30))
+    assert client.post("/api/import", json={"path": str(cbz), "kind": "manga"}).status_code == 202
+    queue.wait_idle()
+
+    series = _series_by_title(client, "Oshi no Ko")
+    chapters = client.get(f"/api/series/{series['id']}/chapters").json()
+    chapter_id = chapters[0]["chapters"][0]["id"]
+    detail = client.get(f"/api/chapters/{chapter_id}").json()
+    assert detail["pageCount"] == 2  # Cover.png excluded from the pages
