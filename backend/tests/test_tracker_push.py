@@ -17,10 +17,14 @@ from tests.support import make_series
 class _RecordingTracker:
     id = "anilist"
     external_id_key = "al"
+    auth_kind = "oauth"
     uses_pkce = False
 
     def __init__(self) -> None:
         self.pushes: list[dict[str, object]] = []
+
+    def login(self, *, username: str, password: str) -> TokenPair:
+        raise NotImplementedError
 
     def authorize_url(
         self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None

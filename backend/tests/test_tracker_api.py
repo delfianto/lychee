@@ -12,7 +12,11 @@ from src.trackers.base import TokenPair, register_tracker
 class _FakeAniList:
     id = "anilist"
     external_id_key = "al"
+    auth_kind = "oauth"
     uses_pkce = False
+
+    def login(self, *, username: str, password: str) -> TokenPair:
+        raise NotImplementedError
 
     def authorize_url(
         self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
@@ -33,6 +37,38 @@ class _FakeAniList:
 
     def account_name(self, access_token: str) -> str | None:
         return "AniUser"
+
+    def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
+        pass
+
+
+class _FakeMangaUpdates:
+    id = "mangaupdates"
+    external_id_key = "mu"
+    auth_kind = "credentials"
+    uses_pkce = False
+
+    def authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
+    ) -> str:
+        raise NotImplementedError
+
+    def exchange_code(
+        self,
+        *,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
+    ) -> TokenPair:
+        raise NotImplementedError
+
+    def login(self, *, username: str, password: str) -> TokenPair:
+        return TokenPair(f"sess-{username}")
+
+    def account_name(self, access_token: str) -> str | None:
+        return "u"
 
     def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
         pass
@@ -105,3 +141,28 @@ def test_connect_unsupported_tracker_is_rejected(
         json={"clientId": "c", "clientSecret": "s", "redirectUri": "u"},
     )
     assert resp.status_code == 400  # no implementation registered (NovelUpdates has no public API)
+
+
+def test_credentials_login_connects_and_encrypts_token(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    register_tracker(_FakeMangaUpdates())
+
+    resp = client.post("/api/trackers/mangaupdates/login", json={"username": "me", "password": "pw"})
+    assert resp.status_code == 200
+    assert resp.json()["connected"] is True
+    assert resp.json()["accountName"] == "me"
+
+    row = db_session.get(Tracker, "mangaupdates")
+    assert row is not None
+    assert decrypt(row.access_token_enc or "") == "sess-me"
+
+
+def test_oauth_tracker_rejects_password_login(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    # AniList is OAuth → the credentials login endpoint refuses it.
+    resp = client.post("/api/trackers/anilist/login", json={"username": "u", "password": "p"})
+    assert resp.status_code == 400

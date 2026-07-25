@@ -26,14 +26,15 @@
    - [x] **MangaDex full integration** — metadata match/import + `/refresh` + covers, download
          enhancements, OAuth2 account + follows/status import, and real sync (flag new chapters).
          **PART F M0–M5 done** (only the automatic sync scheduler is deferred).
-   - [~] **Tracker OAuth + outbound sync.** `src/trackers/` — Tracker protocol + registry + PKCE
-         support; tokens/secrets encrypted (Tracker cols, migrations `a453837`/`999d293`); `POST
-         /api/trackers/{id}/connect` (→ authorize URL) + `/callback`; FE two-step connect modal.
-         **AniList** (OAuth2) and **MyAnimeList** (OAuth2 + PKCE `plain`) are **fully done — connect +
-         outbound push** on chapter completion (`SaveMediaListEntry` / `my_list_status`), gated by
-         `sync_on_read`, media id resolved from `Series.external_ids` (M1). Push runs on the queue,
-         best-effort. **Remaining:** MangaUpdates (password-login / session-token — a *credentials*
-         connect variant, not OAuth) and NovelUpdates (**no public API → unsupported**).
+   - [x] **Tracker outbound sync.** `src/trackers/` — Tracker protocol + registry supporting two auth
+         kinds (`oauth` with optional PKCE, `credentials`); tokens/secrets encrypted (Tracker cols,
+         migrations `a453837`/`999d293`). Endpoints: `/connect`→authorize URL, `/callback`, `/login`;
+         FE connect modal branches on `authKind`. **AniList** (OAuth2), **MyAnimeList** (OAuth2 + PKCE),
+         and **MangaUpdates** (password login → session token) all do connect **+ outbound push** on
+         chapter completion (`SaveMediaListEntry` / `my_list_status` / `lists/series/update`), gated by
+         `sync_on_read`, media id from `Series.external_ids` (M1); push runs on the queue, best-effort.
+         **NovelUpdates has no public API → unsupported** (`authKind: "unsupported"`, connect rejected).
+         ⚠ MangaUpdates' list-update follows the Mihon/Tachiyomi shape — worth a live sanity check.
    - [x] **SSE** `/api/events` + `/api/tasks` + task tracker — scans emit live progress events. ✅ done.
    - [x] **Background execution queue** — `src/tasks/queue.py` runs scans + downloads on a worker
          thread (own session, serial for SQLite); POSTs return `202 + TaskOut` and stream progress

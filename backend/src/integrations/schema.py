@@ -53,12 +53,20 @@ class TrackerCallback(CamelModel):
     redirect_uri: str
 
 
+class TrackerLogin(CamelModel):
+    """Credentials login for non-OAuth trackers (e.g. MangaUpdates)."""
+
+    username: str
+    password: str
+
+
 class TrackerOut(CamelModel):
     id: str
     name: str
     connected: bool
     sync_on_read: bool
     account_name: str | None = None
+    auth_kind: str = "oauth"  # "oauth" | "credentials" | "unsupported" — drives the connect UI
 
 
 class TrackerUpdate(CamelModel):

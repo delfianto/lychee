@@ -651,6 +651,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trackers/{tracker_id}/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Tracker
+         * @description Connect a credentials-based tracker (MangaUpdates) with username/password.
+         */
+        post: operations["login_tracker_api_trackers__tracker_id__login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sync": {
         parameters: {
             query?: never;
@@ -1418,6 +1438,16 @@ export interface components {
             /** Redirecturi */
             redirectUri: string;
         };
+        /**
+         * TrackerLogin
+         * @description Credentials login for non-OAuth trackers (e.g. MangaUpdates).
+         */
+        TrackerLogin: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
         /** TrackerOut */
         TrackerOut: {
             /** Id */
@@ -1430,6 +1460,11 @@ export interface components {
             syncOnRead: boolean;
             /** Accountname */
             accountName?: string | null;
+            /**
+             * Authkind
+             * @default oauth
+             */
+            authKind: string;
         };
         /** TrackerUpdate */
         TrackerUpdate: {
@@ -2604,6 +2639,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TrackerCallback"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_tracker_api_trackers__tracker_id__login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tracker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackerLogin"];
             };
         };
         responses: {
