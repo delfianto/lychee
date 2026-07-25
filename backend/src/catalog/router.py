@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request, Response, status
 
 from src.catalog import matching, media, service
-from src.catalog.deps import ThumbnailStoreDep
+from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
 from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterDetailOut,
@@ -21,6 +21,7 @@ from src.catalog.schema import (
 )
 from src.core.persistence.database import DbSession
 from src.core.schema import Page
+from src.media.render_cache import clamp_width
 from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api", tags=["catalog"])
@@ -196,6 +197,17 @@ def gallery_image(request: Request, db: DbSession, series_id: str, index: int) -
 
 
 @router.get("/chapters/{chapter_id}/pages/{n}")
-def chapter_page(request: Request, db: DbSession, chapter_id: str, n: int) -> Response:
-    """A single chapter page (1-based); ETag + Cache-Control + 304."""
-    return _image_response(request, media.get_page(db, chapter_id, n))
+def chapter_page(
+    request: Request,
+    db: DbSession,
+    render_cache: RenderCacheDep,
+    chapter_id: str,
+    n: int,
+    w: int | None = Query(None),
+) -> Response:
+    """A single chapter page (1-based); ETag + Cache-Control + 304. ``w`` requests an
+    AVIF re-encoded to at most that width (cached on disk)."""
+    width = clamp_width(w) if w is not None else None
+    return _image_response(
+        request, media.get_page(db, chapter_id, n, width=width, render_cache=render_cache)
+    )

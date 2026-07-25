@@ -151,3 +151,35 @@ def test_provider_cover_is_downloaded_and_served_locally(
     listed = client.get("/api/series").json()["items"]
     assert next(s for s in listed if s["id"] == series.id)["coverUrl"] == f"/api/series/{series.id}/cover"
     assert ThumbnailStore(tmp_path / "storage" / "thumbnails").exists(series.id, ThumbVariant.COVER)
+
+
+def test_page_render_with_width_downscales_and_caches(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series, chapter = _make_book_series(db_session, tmp_path, kind="manga", pages=1, with_chapter=True)
+    assert chapter is not None
+    # replace page 1 with a wide image so a width cap actually downscales
+    wide = io.BytesIO()
+    Image.new("RGB", (400, 600), (30, 60, 90)).save(wide, "PNG")
+    _ = (tmp_path / "lib" / series.id / "001.png").write_bytes(wide.getvalue())
+
+    resp = client.get(f"/api/chapters/{chapter.id}/pages/1", params={"w": 150})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/avif"  # re-encoded
+    rendered = Image.open(io.BytesIO(resp.content))
+    rendered.load()
+    assert rendered.width == 150  # downscaled from 400
+
+    # second request is served from the disk render cache (identical bytes)
+    again = client.get(f"/api/chapters/{chapter.id}/pages/1", params={"w": 150})
+    assert again.content == resp.content
+    assert list((tmp_path / "storage" / "renders").rglob("*.avif"))  # cached on disk
+
+
+def test_page_without_width_serves_original(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    _, chapter = _make_book_series(db_session, tmp_path, kind="manga", pages=1, with_chapter=True)
+    assert chapter is not None
+    resp = client.get(f"/api/chapters/{chapter.id}/pages/1")
+    assert resp.headers["content-type"] == "image/png"  # untouched original
