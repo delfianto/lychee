@@ -9,7 +9,7 @@ import src.models  # noqa: F401  (register every model on Base.metadata)
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
-from src.catalog.deps import get_thumbnail_store
+from src.catalog.deps import get_render_cache, get_thumbnail_store
 from src.catalog.search_index import create_search_index
 from src.core.config import settings
 from src.core.persistence.base_model import Base
@@ -17,6 +17,7 @@ from src.core.persistence.database import SessionLocal, get_db
 from src.downloads.deps import get_storage_root
 from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata, register_provider
 from src.main import app
+from src.media.render_cache import RenderCache
 from src.media.thumbnails import ThumbnailStore
 from src.seed import seed_all
 from src.tasks.queue import queue
@@ -104,6 +105,7 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
     app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(
         tmp_path / "storage" / "thumbnails"
     )
+    app.dependency_overrides[get_render_cache] = lambda: RenderCache(tmp_path / "storage" / "renders")
     queue.configure(test_session)  # background workers use this test's temp DB
     with TestClient(app) as test_client:
         register_provider(_OfflineProvider())  # startup registers the real one; neutralise it

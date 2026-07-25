@@ -53,7 +53,9 @@
          native-dep + licensing baggage (unrar/7z binaries, pymupdf AGPL).
    - [x] Search: **FTS5 trigram** over title / alt-titles / authors, bm25-ranked, trigger-maintained;
          LIKE fallback for <3-char queries (B6). ✅ done.
-   - [ ] On-demand resize/transcode + disk render cache + page-list LRU (B3 caches).
+   - [x] On-demand resize + disk render cache — `GET /api/chapters/{id}/pages/{n}?w=<width>` serves a
+         width-capped AVIF re-encode, cached on disk (`RenderCache`); image-directory listings are
+         LRU-cached. (ProcessPool encode intentionally skipped — serial encode is adequate.) ✅
 4. **Fidelity / correctness:**
    - [x] Error shape: every error response is `{"error":{"code","message"}}` — domain (`LycheeError.code`),
          Pydantic validation (422), and framework HTTP errors (unknown route / method) all normalized. ✅

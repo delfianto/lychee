@@ -378,7 +378,8 @@ export interface paths {
         };
         /**
          * Chapter Page
-         * @description A single chapter page (1-based); ETag + Cache-Control + 304.
+         * @description A single chapter page (1-based); ETag + Cache-Control + 304. ``w`` requests an
+         *     AVIF re-encoded to at most that width (cached on disk).
          */
         get: operations["chapter_page_api_chapters__chapter_id__pages__n__get"];
         put?: never;
@@ -2284,7 +2285,9 @@ export interface operations {
     };
     chapter_page_api_chapters__chapter_id__pages__n__get: {
         parameters: {
-            query?: never;
+            query?: {
+                w?: number | null;
+            };
             header?: never;
             path: {
                 chapter_id: string;

@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.core.config import settings
+from src.media.render_cache import RenderCache
 from src.media.thumbnails import ThumbnailStore
 
 
@@ -17,3 +18,11 @@ def get_thumbnail_store() -> ThumbnailStore:
 
 
 ThumbnailStoreDep = Annotated[ThumbnailStore, Depends(get_thumbnail_store)]
+
+
+def get_render_cache() -> RenderCache:
+    """The on-disk AVIF page-render cache (overridable in tests)."""
+    return RenderCache(Path(settings.storage_path) / "renders")
+
+
+RenderCacheDep = Annotated[RenderCache, Depends(get_render_cache)]

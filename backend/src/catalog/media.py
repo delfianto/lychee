@@ -21,6 +21,7 @@ from src.core.exceptions import LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
 from src.media.containers import open_container
+from src.media.render_cache import RenderCache, render_width
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
 
 logger = get_logger(__name__)
@@ -155,8 +156,16 @@ def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str
     return warmed
 
 
-def get_page(session: Session, chapter_id: str, n: int) -> Served:
-    """Serve page ``n`` (1-based) of a chapter."""
+def get_page(
+    session: Session,
+    chapter_id: str,
+    n: int,
+    *,
+    width: int | None = None,
+    render_cache: RenderCache | None = None,
+) -> Served:
+    """Serve page ``n`` (1-based) of a chapter. With ``width`` + a ``render_cache``, serve
+    an AVIF re-encoded to at most that width (cached on disk); otherwise the raw page."""
     chapter = session.get(Chapter, chapter_id)
     if chapter is None:
         raise NotFoundError(f"chapter {chapter_id!r} not found")
@@ -165,7 +174,18 @@ def get_page(session: Session, chapter_id: str, n: int) -> Served:
     book = session.get(Book, chapter.book_id)
     if book is None:
         raise NotFoundError("book missing for chapter")
-    data, name = _read_page(session, book, chapter.page_start + n - 1)
+    index = chapter.page_start + n - 1
+
+    if width is not None and render_cache is not None:
+        cached = render_cache.get(book.id, index, width)
+        if cached is not None:
+            return Served(data=cached, media_type="image/avif", etag=_etag(cached))
+        raw, _ = _read_page(session, book, index)
+        rendered = render_width(raw, width)
+        render_cache.put(book.id, index, width, rendered)
+        return Served(data=rendered, media_type="image/avif", etag=_etag(rendered))
+
+    data, name = _read_page(session, book, index)
     return Served(data=data, media_type=_mime(name), etag=_etag(data))
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import zipfile
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from pathlib import Path
 from typing import Self
 
@@ -60,15 +61,25 @@ class BookContainer(ABC):
             raise NotFoundError(f"page {index} out of range (0–{self.page_count() - 1})")
 
 
+@lru_cache(maxsize=512)
+def _dir_page_names(path_str: str, _mtime: float) -> tuple[str, ...]:
+    """Sorted image names in a directory, cached per (path, mtime) — so the repeated page
+    requests for one book skip re-scanning + re-sorting the directory each time."""
+    directory = Path(path_str)
+    return tuple(
+        sorted(
+            (p.name for p in directory.iterdir() if p.is_file() and _is_image(p.name)),
+            key=natural_key,
+        )
+    )
+
+
 class ImageDirContainer(BookContainer):
     """A directory whose direct children are page images (also serves AVIF dirs)."""
 
     def __init__(self, path: Path) -> None:
         self._dir = path
-        self._names = sorted(
-            (p.name for p in path.iterdir() if p.is_file() and _is_image(p.name)),
-            key=natural_key,
-        )
+        self._names = _dir_page_names(str(path), path.stat().st_mtime)
 
     def page_count(self) -> int:
         return len(self._names)
