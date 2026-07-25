@@ -29,6 +29,7 @@ dependencies = [
     # python-magic, xxhash, natsort, APScheduler, tenacity, …) are added per the
     # relevant ADR as those features land — see ../notes/decisions/.
     "cryptography>=49.0.0",
+    "python-multipart>=0.0.32",
 ]
 
 [project.optional-dependencies]

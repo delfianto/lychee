@@ -730,6 +730,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/import/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Import
+         * @description Import an uploaded container file in the background (transcode → AVIF).
+         */
+        post: operations["upload_import_api_import_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/about": {
         parameters: {
             query?: never;
@@ -1039,6 +1059,16 @@ export interface components {
             started: string;
             /** Uptimeseconds */
             uptimeSeconds: number;
+        };
+        /** Body_upload_import_api_import_upload_post */
+        Body_upload_import_api_import_upload_post: {
+            /** File */
+            file: string;
+            /**
+             * Kind
+             * @default manga
+             */
+            kind: string;
         };
         /** ChapterDetailOut */
         ChapterDetailOut: {
@@ -2909,6 +2939,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_import_api_import_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_import_api_import_upload_post"];
             };
         };
         responses: {
