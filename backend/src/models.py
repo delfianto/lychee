@@ -16,7 +16,7 @@ from src.catalog.models import (
 )
 from src.collections.models import Collection, CollectionSeries
 from src.downloads.models import DownloadTask
-from src.integrations.models import Provider, SyncState, Tracker
+from src.integrations.models import ImportConfig, Provider, SyncState, Tracker
 from src.progress.models import ReadingProgress
 from src.taxonomy.models import Tag, series_tag
 
@@ -26,6 +26,7 @@ __all__ = [
     "Collection",
     "CollectionSeries",
     "DownloadTask",
+    "ImportConfig",
     "Library",
     "Provider",
     "ReadingProgress",

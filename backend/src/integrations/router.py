@@ -6,11 +6,14 @@ from fastapi import APIRouter, Response, status
 
 from src.core.persistence.database import DbSession
 from src.integrations import about as about_svc
+from src.integrations import import_config as import_svc
 from src.integrations import providers as providers_svc
 from src.integrations import sync as sync_svc
 from src.integrations import trackers as trackers_svc
 from src.integrations.schema import (
     AboutOut,
+    ImportConfigOut,
+    ImportConfigUpdate,
     ProviderConnect,
     ProviderOut,
     ProviderUpdate,
@@ -98,6 +101,16 @@ def get_sync(db: DbSession) -> SyncOut:
 def run_sync(db: DbSession) -> TaskOut:
     """Check matched series for new remote chapters in the background."""
     return sync_svc.run_sync(db)
+
+
+@router.get("/import/config")
+def get_import_config(db: DbSession) -> ImportConfigOut:
+    return import_svc.get_import_config(db)
+
+
+@router.patch("/import/config")
+def update_import_config(db: DbSession, data: ImportConfigUpdate) -> ImportConfigOut:
+    return import_svc.update_import_config(db, data)
 
 
 @router.get("/about")

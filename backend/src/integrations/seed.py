@@ -9,7 +9,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.integrations.models import Provider, SyncState, Tracker
+from src.integrations.import_config import IMPORT_CONFIG_ID
+from src.integrations.models import ImportConfig, Provider, SyncState, Tracker
 
 SYNC_STATE_ID = "default"
 
@@ -36,3 +37,6 @@ def seed_integrations(session: Session) -> None:
 
     if session.get(SyncState, SYNC_STATE_ID) is None:
         session.add(SyncState(id=SYNC_STATE_ID))
+
+    if session.get(ImportConfig, IMPORT_CONFIG_ID) is None:
+        session.add(ImportConfig(id=IMPORT_CONFIG_ID))
