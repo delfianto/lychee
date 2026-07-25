@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **151
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **159
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -46,8 +46,8 @@
    - [ ] **Local import + eager thumbnails + filename metadata** (PART G) — warm cover thumbnails on
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
          AVIF (server-path first, browser upload later; UI quality + enable toggle); and a configurable
-         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G3 done
-         (quality override + eager thumbnails + import config/panel + the import job); G4–G5 remain.**
+         token-template filename→metadata pattern to auto-fill series/volume/chapter/title. **G0–G4 done
+         (thumbnails + import config/panel + the import job + the filename pattern); only G5 (browser upload) remains.**
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -226,7 +226,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 151 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 159 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -376,7 +376,7 @@ override.
 at-home / statistics / tag / auth / follows). Unit-test the rate limiter (429 / Retry-After), the mapper
 (locked fields, language fallback, tag reconcile), and best-effort reporting. No network in tests.
 
-# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G3 done)
+# PART G — Local import + eager thumbnails + filename metadata — in progress (G0–G4 done)
 
 Three related pieces of catalog-building polish:
 1. **Eager thumbnails** — warm cover thumbnails when content lands (download / scan), instead of lazily on
@@ -468,16 +468,18 @@ Three related pieces of catalog-building polish:
 - [x] Verified live (CBZ → served AVIF pages + warmed cover) + 5 tests: file, folder, idempotent,
       disabled → 400, bad path → 400.
 
-**G4 — Filename → metadata pattern (LANraragi-style)**
-- [ ] Pattern engine in `parser.py`: `parse_pattern(filename, pattern) -> dict` — compile a token template
-      (`{series}`, `{title}`, `{volume}`, `{chapter}`, `{author}`, `{artist}`, `{group}`, `{year}`, `*`
-      ignore) to a regex with named groups; literals between tokens match literally; return matched fields
-      only, `None` on no-match.
-- [ ] Import integration: when `config.filename_pattern` is set, derive series title + volume/chapter/
-      (title/credits) from the filename; else fall back to folder-name-as-series + built-in `parse`. Wire in
-      `importer` (G3).
-- [ ] (Optional) extend the same pattern to the scanner's `_sync_chapter` behind the same config.
-- [ ] Tests: representative patterns fill fields; partial/no-match falls back; literals + ignore token work.
+**G4 — Filename → metadata pattern (LANraragi-style)** — ✅ done
+- [x] Pattern engine in `parser.py`: `parse_pattern(filename, pattern) -> PatternResult | None` — compiles a
+      token template (`{series}`, `{title}`, `{volume}`, `{chapter}`, `{author}`, `{artist}`, `{group}`,
+      `{year}`, `*` ignore) to a regex and **fullmatches** the extension-stripped name (text tokens lazy so a
+      literal delimits them; `*` = `.*?` for extra text). Unknown/duplicate/no-token → None.
+- [x] Import integration: when `config.filename_pattern` is set, the first book names the series (+ year /
+      author / artist credits, deduped); each book's chapter number/volume/title/group come from the pattern,
+      else the built-in `parse`. Source name stays the stable series identity (no dup on re-import).
+- [—] (Optional) extend the same pattern to the scanner — not done; scoped to import for now.
+- [x] Verified live (`{author} - {series} - c{chapter}` → series/author/chapter) + 8 tests (pattern unit
+      cases: series/chapter/volume, author, title/year, whole-name, trailing `*`, no-match, invalid; plus a
+      pattern-driven import).
 
 **G5 — Browser upload (import source, Phase 2)**
 - [ ] `POST /api/import/upload` (multipart) — accept container file(s), stream to a staged temp dir under
