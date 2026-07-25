@@ -89,24 +89,39 @@ def classify(image: Image.Image) -> ContentClass:
     return ContentClass.COLOR_ART
 
 
-def encode(image: Image.Image, *, content_class: ContentClass | None = None) -> bytes:
-    """Encode a PIL image to AVIF bytes using the (given or inferred) content preset."""
+def encode(
+    image: Image.Image,
+    *,
+    content_class: ContentClass | None = None,
+    quality: int | None = None,
+) -> bytes:
+    """Encode a PIL image to AVIF bytes using the (given or inferred) content preset.
+
+    ``quality`` overrides the preset's quality (0–100, clamped) — e.g. for a
+    user-configurable import quality — while subsampling stays per content class.
+    """
     cls = content_class or classify(image)
     preset = _PRESETS[cls]
+    q = preset.quality if quality is None else min(100, max(1, quality))
     buffer = io.BytesIO()
     if cls is ContentClass.LINE_ART:
-        image.convert("L").save(buffer, format="AVIF", quality=preset.quality, speed=ENCODE_SPEED)
+        image.convert("L").save(buffer, format="AVIF", quality=q, speed=ENCODE_SPEED)
     else:
         image.convert("RGB").save(
             buffer,
             format="AVIF",
-            quality=preset.quality,
+            quality=q,
             speed=ENCODE_SPEED,
             subsampling=preset.subsampling,
         )
     return buffer.getvalue()
 
 
-def encode_bytes(source: bytes, *, content_class: ContentClass | None = None) -> bytes:
+def encode_bytes(
+    source: bytes,
+    *,
+    content_class: ContentClass | None = None,
+    quality: int | None = None,
+) -> bytes:
     """Decode raw image bytes and re-encode as AVIF."""
-    return encode(load_image(source), content_class=content_class)
+    return encode(load_image(source), content_class=content_class, quality=quality)

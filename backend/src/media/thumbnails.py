@@ -54,13 +54,14 @@ class ThumbnailStore:
         *,
         content_class: ContentClass = ContentClass.COLOR_ART,
         overwrite: bool = False,
+        quality: int | None = None,
     ) -> Path:
         """Resize + AVIF-encode ``source`` into the store; idempotent unless ``overwrite``."""
         path = self.path_for(thumb_id, variant)
         if path.is_file() and not overwrite:
             return path
         image = _resized(load_image(source), _MAX_EDGE[variant])
-        _atomic_write(path, encode(image, content_class=content_class))
+        _atomic_write(path, encode(image, content_class=content_class, quality=quality))
         return path
 
     def generate_all(
@@ -70,12 +71,18 @@ class ThumbnailStore:
         *,
         content_class: ContentClass = ContentClass.COLOR_ART,
         overwrite: bool = False,
+        quality: int | None = None,
     ) -> None:
         """Generate every variant from one decode of the source."""
         image = load_image(source)
         for variant in ThumbVariant:
             self.generate(
-                thumb_id, image, variant, content_class=content_class, overwrite=overwrite
+                thumb_id,
+                image,
+                variant,
+                content_class=content_class,
+                overwrite=overwrite,
+                quality=quality,
             )
 
 
