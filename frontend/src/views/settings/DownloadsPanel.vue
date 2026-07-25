@@ -7,6 +7,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { api } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
+import type { components } from "../../api/schema";
 import { toast } from "../../lib/toast";
 
 interface DlRow {
@@ -38,9 +39,8 @@ function formatBytes(n: number | null | undefined): string {
   if (!n) return "—";
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
 }
-async function loadDownloads(): Promise<void> {
-  const { data } = await api.GET("/api/downloads");
-  dl.value = (data ?? []).map((d) => ({
+function mapRows(rows: components["schemas"]["DownloadTaskOut"][] | undefined): DlRow[] {
+  return (rows ?? []).map((d) => ({
     id: d.id,
     series: { coverUrl: d.series.coverUrl, title: d.series.title },
     chapter: d.chapter,
@@ -48,6 +48,10 @@ async function loadDownloads(): Promise<void> {
     progress: d.progress,
     size: formatBytes(d.sizeBytes),
   }));
+}
+async function loadDownloads(): Promise<void> {
+  const { data } = await api.GET("/api/downloads");
+  dl.value = mapRows(data);
 }
 async function loadSync(): Promise<void> {
   const { data } = await api.GET("/api/sync");
@@ -64,6 +68,14 @@ async function syncNow(): Promise<void> {
 async function retryDownload(d: DlRow): Promise<void> {
   await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: d.id } } });
   toast("Download queued"); // the list refreshes when the download.done event arrives
+}
+async function pauseDownload(d: DlRow): Promise<void> {
+  const { data } = await api.POST("/api/downloads/{task_id}/pause", { params: { path: { task_id: d.id } } });
+  if (data) dl.value = mapRows(data); // endpoint returns the refreshed list
+}
+async function resumeDownload(d: DlRow): Promise<void> {
+  const { data } = await api.POST("/api/downloads/{task_id}/resume", { params: { path: { task_id: d.id } } });
+  if (data) dl.value = mapRows(data); // resumed chapter drains on the queue; rows climb on download.* events
 }
 async function removeDownload(d: DlRow): Promise<void> {
   await api.DELETE("/api/downloads/{task_id}", { params: { path: { task_id: d.id } } });
@@ -157,7 +169,7 @@ onMounted(() => {
               <span class="text-base-content/50">{{ d.size }}</span>
             </div>
             <progress
-              v-if="d.status === 'downloading' || d.status === 'paused'"
+              v-if="d.status === 'downloading'"
               class="progress progress-primary mt-1.5 h-1"
               :value="d.progress"
               max="100"
@@ -165,10 +177,10 @@ onMounted(() => {
           </div>
           <div class="flex shrink-0 items-center gap-1">
             <button
-              v-if="d.status === 'downloading'"
+              v-if="d.status === 'queued'"
               class="btn btn-square btn-ghost btn-xs"
               aria-label="Pause"
-              @click="d.status = 'paused'"
+              @click="pauseDownload(d)"
             >
               <Pause class="size-4" />
             </button>
@@ -176,7 +188,7 @@ onMounted(() => {
               v-else-if="d.status === 'paused'"
               class="btn btn-square btn-ghost btn-xs"
               aria-label="Resume"
-              @click="d.status = 'downloading'"
+              @click="resumeDownload(d)"
             >
               <Play class="size-4" />
             </button>

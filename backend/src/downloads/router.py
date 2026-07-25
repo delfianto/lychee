@@ -35,6 +35,18 @@ def retry_download(db: DbSession, storage: StorageRootDep, task_id: str) -> Task
     return service.retry_download(db, task_id, storage)
 
 
+@router.post("/{task_id}/pause")
+def pause_download(db: DbSession, task_id: str) -> list[DownloadTaskOut]:
+    """Hold a queued chapter; returns the refreshed download list."""
+    return service.pause_download(db, task_id)
+
+
+@router.post("/{task_id}/resume")
+def resume_download(db: DbSession, storage: StorageRootDep, task_id: str) -> list[DownloadTaskOut]:
+    """Re-queue a paused chapter and start draining; returns the refreshed download list."""
+    return service.resume_download(db, task_id, storage)
+
+
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_download(db: DbSession, task_id: str) -> Response:
     service.delete_download(db, task_id)

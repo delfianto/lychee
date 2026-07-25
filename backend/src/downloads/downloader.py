@@ -1,26 +1,35 @@
 """Chapter downloader → AVIF pipeline.
 
-For each remote chapter: fetch page bytes from the provider, encode each to AVIF
-(discarding the original), write to ``<storage>/downloads/<series>/<chapter>`` as
-an ``avif_dir`` Book, and create the Chapter. Downloaded books live in a
-"Downloads" library so serving resolves their path independently of the series'
-own (scan) library. Runs on the background task queue, committing per chapter so
-progress is visible mid-download.
+A download runs in two phases so it can be paused and resumed:
+
+* :func:`plan_downloads` lists the series' remote chapters and inserts one
+  ``queued`` :class:`DownloadTask` per pending chapter, stashing the remote
+  chapter in ``remote_json`` so it can be fetched later.
+* :func:`run_download_queue` drains those rows one at a time — for each, fetch
+  page bytes from the provider, encode each to AVIF (discarding the original),
+  write to ``<storage>/downloads/<series>/<chapter>`` as an ``avif_dir`` Book,
+  and create the Chapter. It commits per chapter (and per page), so a pause
+  takes effect at the next chapter boundary and progress is visible live.
+
+Downloaded books live in a "Downloads" library so serving resolves their path
+independently of the series' own (scan) library.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime
 from functools import partial
 from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Book, Chapter, Library, Series
 from src.downloads.models import DownloadTask
-from src.downloads.provider import Provider, RemoteChapter
+from src.downloads.provider import Provider, RemoteChapter, get_provider
 from src.media.avif import encode_bytes
 
 DOWNLOADS_LIBRARY = "Downloads"
@@ -55,20 +64,17 @@ def _parse_published(value: str | None) -> datetime | None:
         return None
 
 
-def _report_page(
+def _report_page_row(
     session: Session,
     on_progress: Callable[[int, str], None] | None,
-    index: int,
-    total: int,
-    number: str,
+    label: str,
     chapter_pct: int,
 ) -> None:
-    """Commit the in-flight chapter row (so /api/downloads sees it climb) and emit an
-    overall-progress SSE event. Bound per chapter via functools.partial."""
+    """Commit the in-flight chapter row (so /api/downloads sees its progress climb)
+    and emit a progress SSE event. Bound per chapter via functools.partial."""
     session.commit()
     if on_progress is not None:
-        overall = round(((index - 1) + chapter_pct / 100) / total * 100)
-        on_progress(overall, f"Ch. {number}")
+        on_progress(chapter_pct, label)
 
 
 def _download_chapter(
@@ -129,41 +135,94 @@ def _download_chapter(
     return chapter
 
 
-def download_series(
+def plan_downloads(
     session: Session,
     series: Series,
     provider: Provider,
-    storage_root: Path,
     *,
     language: str = "en",
     limit: int | None = None,
-    data_saver: bool = False,
-    on_progress: Callable[[int, str], None] | None = None,
-) -> list[DownloadTask]:
-    """Download every remote chapter of ``series`` not already present.
-
-    ``on_progress(percent, label)`` fires after each chapter so callers can
-    surface live download progress (SSE).
+) -> int:
+    """Insert one ``queued`` DownloadTask per pending remote chapter and return the
+    count added. A chapter is pending when it is neither already in the library nor
+    already carried by a live (queued/downloading/paused) row, so re-planning a
+    partially-finished or paused series is a safe no-op for what's in flight.
     """
-    library = downloads_library(session, storage_root)
     remotes = provider.list_chapters(series.provider_series_id or "", language=language)
-    existing = {
-        c.number for c in session.scalars(select(Chapter).where(Chapter.series_id == series.id))
+    local = set(
+        session.scalars(select(Chapter.number).where(Chapter.series_id == series.id))
+    )
+    in_flight = {
+        row.chapter_label
+        for row in session.scalars(
+            select(DownloadTask).where(
+                DownloadTask.series_id == series.id,
+                DownloadTask.status.in_(("queued", "downloading", "paused")),
+            )
+        )
     }
-    pending = [remote for remote in remotes if remote.number not in existing]
+    pending = [remote for remote in remotes if remote.number not in local]
     if limit is not None:
         pending = pending[:limit]
-    total = len(pending)
 
-    tasks: list[DownloadTask] = []
-    for index, remote in enumerate(pending, start=1):
-        task = DownloadTask(
-            series_id=series.id, chapter_label=f"Ch. {remote.number}", status="downloading"
+    queued = 0
+    for remote in pending:
+        label = f"Ch. {remote.number}"
+        if label in in_flight:
+            continue
+        session.add(
+            DownloadTask(
+                series_id=series.id,
+                chapter_label=label,
+                status="queued",
+                provider=provider.id,
+                remote_json=cast("dict[str, object]", asdict(remote)),
+            )
         )
-        session.add(task)
-        session.flush()
-        session.commit()  # the row shows up as "downloading" in /api/downloads at once
+        queued += 1
+    session.commit()
+    return queued
+
+
+def run_download_queue(
+    session: Session,
+    series_id: str,
+    storage_root: Path,
+    *,
+    data_saver: bool = False,
+    on_progress: Callable[[int, str], None] | None = None,
+) -> int:
+    """Drain the series' ``queued`` rows one at a time, returning the count processed.
+
+    Each row is claimed (``downloading``), its chapter downloaded, then marked
+    ``done``/``failed``; ``paused`` rows are skipped, so pausing simply stops the
+    drain from picking a chapter up. Safe to run serially (the task queue uses a
+    single worker), which is why claiming a row need not be atomic.
+    """
+    series = session.get(Series, series_id)
+    if series is None:
+        return 0
+    provider = get_provider(series.provider or "")
+    if provider is None:
+        return 0
+    library = downloads_library(session, storage_root)
+
+    processed = 0
+    while True:
+        row = session.scalar(
+            select(DownloadTask)
+            .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
+            .order_by(DownloadTask.created_at)
+        )
+        if row is None:
+            break
+        row.status = "downloading"
+        row.progress = 0
+        session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
         try:
+            if not row.remote_json:
+                raise ValueError("queued download is missing chapter data")
+            remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
             _download_chapter(
                 session,
                 series=series,
@@ -171,17 +230,17 @@ def download_series(
                 remote=remote,
                 provider=provider,
                 storage_root=storage_root,
-                task=task,
+                task=row,
                 data_saver=data_saver,
-                on_page=partial(_report_page, session, on_progress, index, total, remote.number),
+                on_page=partial(_report_page_row, session, on_progress, row.chapter_label),
             )
-            task.status = "done"
-            task.progress = 100
-        except Exception as exc:  # noqa: BLE001 - record failure on the task, keep going
-            task.status = "failed"
-            task.error = str(exc)
+            row.status = "done"
+            row.progress = 100
+        except Exception as exc:  # noqa: BLE001 - record failure on the row, keep draining
+            row.status = "failed"
+            row.error = str(exc)
         session.commit()  # persist the row's final status so the table settles
-        tasks.append(task)
+        processed += 1
         if on_progress is not None:
-            on_progress(round(index / total * 100), f"Ch. {remote.number}")
-    return tasks
+            on_progress(100, row.chapter_label)
+    return processed

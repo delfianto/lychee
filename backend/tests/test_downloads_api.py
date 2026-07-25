@@ -130,6 +130,70 @@ def test_download_row_visible_while_running(client: TestClient, db_session: Sess
     assert client.get("/api/downloads").json()[0]["status"] == "done"
 
 
+class _GatedMultiProvider:
+    """Two chapters; blocks inside the first chapter's fetch so the second sits queued."""
+
+    id = "gated"
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.gate = threading.Event()
+
+    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+        return [RemoteChapter("gc1", "1", 1, None, "en"), RemoteChapter("gc2", "2", 1, None, "en")]
+
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+        if chapter.provider_chapter_id == "gc1":
+            self.started.set()
+            _ = self.gate.wait(timeout=5)
+        return [_png(), _png()]
+
+
+def test_pause_holds_queued_chapter_then_resume_downloads_it(
+    client: TestClient, db_session: Session
+) -> None:
+    provider = _GatedMultiProvider()
+    register_provider(provider)
+    series = make_series(db_session, title="Gated", kind="manga")
+    series.provider = "gated"
+    series.provider_series_id = "remote-g"
+    db_session.commit()
+
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    assert provider.started.wait(2)  # Ch.1 fetch began (blocked); Ch.2 sits queued behind it
+    try:
+        rows = {r["chapter"]: r for r in client.get("/api/downloads").json()}
+        assert rows["Ch. 1"]["status"] == "downloading"
+        assert rows["Ch. 2"]["status"] == "queued"
+
+        paused = client.post(f"/api/downloads/{rows['Ch. 2']['id']}/pause")
+        assert paused.status_code == 200
+        assert {r["chapter"]: r["status"] for r in paused.json()}["Ch. 2"] == "paused"
+    finally:
+        provider.gate.set()  # release Ch.1 regardless of the assertions
+    queue.wait_idle()
+
+    # Ch.1 finished; the runner skipped the paused Ch.2 rather than downloading it
+    held = {r["chapter"]: r["status"] for r in client.get("/api/downloads").json()}
+    assert held == {"Ch. 1": "done", "Ch. 2": "paused"}
+
+    ch2_id = next(r["id"] for r in client.get("/api/downloads").json() if r["chapter"] == "Ch. 2")
+    assert client.post(f"/api/downloads/{ch2_id}/resume").status_code == 200
+    queue.wait_idle()
+
+    done = {r["chapter"]: r["status"] for r in client.get("/api/downloads").json()}
+    assert done == {"Ch. 1": "done", "Ch. 2": "done"}
+
+
+def test_pause_rejects_non_queued_download(client: TestClient, db_session: Session) -> None:
+    series = _linked_series(db_session)
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
+    done_id = client.get("/api/downloads").json()[0]["id"]  # a completed row
+    assert client.post(f"/api/downloads/{done_id}/pause").status_code == 400
+    assert client.post(f"/api/downloads/{done_id}/resume").status_code == 400  # not paused
+
+
 def test_delete_and_clear_completed(client: TestClient, db_session: Session) -> None:
     series = _linked_series(db_session)
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
