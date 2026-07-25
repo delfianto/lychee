@@ -31,6 +31,7 @@ def _provider_out(p: Provider) -> ProviderOut:
         language=p.language,
         auto_match=p.auto_match,
         fetch_covers=p.fetch_covers,
+        data_saver=p.data_saver,
     )
 
 
@@ -50,6 +51,8 @@ def update_provider(session: Session, provider_id: str, data: ProviderUpdate) ->
         provider.auto_match = data.auto_match
     if data.fetch_covers is not None:
         provider.fetch_covers = data.fetch_covers
+    if data.data_saver is not None:
+        provider.data_saver = data.data_saver
     session.commit()
     return _provider_out(provider)
 

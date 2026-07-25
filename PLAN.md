@@ -318,12 +318,13 @@ override.
       task), `DELETE …/match` (unlink); FE match-picker modal (covers) + Refresh/Unlink menu on
       SeriesDetail, reloading on the `metadata` task's `done` event.
 
-**M3 — Download enhancements** (pipeline on the queue; M0 added rate limiting + per-page reporting)
-- [ ] Feed: `contentRating[]` (all, filtered to the library's policy), `includes[]=scanlation_group`,
-      capture `publishAt`→`source_uploaded_at`, title, volume; feed `limit=500`; respect the offset cap.
-- [ ] Provider `data_saver` (quality) config (migration or `options_json`) + `fetch_pages` picks
-      `data` vs `data-saver`; on 403 re-fetch `/at-home/server` and retry. (Per-page report + the
-      40/min at-home bucket are already done in M0.)
+**M3 — Download enhancements** (pipeline on the queue; M0 added rate limiting + per-page reporting) — ✅ done
+- [x] Feed: `contentRating[]` (all — else erotica/pornographic drop), `includes[]=scanlation_group`,
+      `publishAt`→`Chapter.source_uploaded_at`, `scanlation_group.name`→`group_name`, title, volume;
+      feed `limit=500`; offset capped at 10000. `RemoteChapter` carries group + published_at.
+- [x] Provider `data_saver` config (migration `c32e0a9`, ProviderOut/Update + Settings toggle) →
+      `fetch_pages` picks `data` vs `data-saver`; on 403 re-fetches `/at-home/server` + retries once.
+      (Per-page report + the 40/min at-home bucket were already done in M0.)
 
 **M4 — Account auth (OAuth2) + follows / status import**
 - [ ] OAuth2 personal-client flow (password → refresh grant); auto-refresh inside the client.

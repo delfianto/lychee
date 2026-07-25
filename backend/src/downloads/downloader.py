@@ -11,6 +11,7 @@ is a follow-up.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 
@@ -45,6 +46,15 @@ def _number_sort(number: str) -> float | None:
         return None
 
 
+def _parse_published(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)  # handles the trailing 'Z' on 3.11+
+    except ValueError:
+        return None
+
+
 def _report_page(
     session: Session,
     on_progress: Callable[[int, str], None] | None,
@@ -70,9 +80,10 @@ def _download_chapter(
     provider: Provider,
     storage_root: Path,
     task: DownloadTask,
+    data_saver: bool = False,
     on_page: Callable[[int], None] | None = None,
 ) -> Chapter:
-    pages = provider.fetch_pages(remote)
+    pages = provider.fetch_pages(remote, data_saver=data_saver)
     rel = f"{series.id}/{remote.provider_chapter_id}"
     out_dir = storage_root / "downloads" / rel
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -105,6 +116,8 @@ def _download_chapter(
         number_sort=_number_sort(remote.number),
         title=remote.title,
         language=remote.language,
+        group_name=remote.group_name,
+        source_uploaded_at=_parse_published(remote.published_at),
         page_count=len(pages),
         provider=provider.id,
         provider_chapter_id=remote.provider_chapter_id,
@@ -124,6 +137,7 @@ def download_series(
     *,
     language: str = "en",
     limit: int | None = None,
+    data_saver: bool = False,
     on_progress: Callable[[int, str], None] | None = None,
 ) -> list[DownloadTask]:
     """Download every remote chapter of ``series`` not already present.
@@ -158,6 +172,7 @@ def download_series(
                 provider=provider,
                 storage_root=storage_root,
                 task=task,
+                data_saver=data_saver,
                 on_page=partial(_report_page, session, on_progress, index, total, remote.number),
             )
             task.status = "done"

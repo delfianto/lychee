@@ -19,6 +19,8 @@ from src.providers.mangadex_client import MangaDexClient
 _CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
 _PAGE_LIMIT = 100
+_FEED_LIMIT = 500  # the feed endpoint allows up to 500 per page
+_MAX_OFFSET = 10000  # MangaDex caps offset + limit at 10000
 _COVERS_BASE = "https://uploads.mangadex.org/covers"
 _TRACKER_LINKS = {"al", "mal", "mu", "ap", "kt", "nu"}  # links we keep for tracker matching
 
@@ -75,14 +77,16 @@ class MangaDexProvider:
                 f"/manga/{provider_series_id}/feed",
                 params={
                     "translatedLanguage[]": language,
+                    "contentRating[]": _CONTENT_RATINGS,  # else erotica/pornographic are dropped
+                    "includes[]": ["scanlation_group"],
                     "order[chapter]": "asc",
-                    "limit": _PAGE_LIMIT,
+                    "limit": _FEED_LIMIT,
                     "offset": offset,
                 },
             )
             body = response.json()
             for item in body.get("data", []):
-                attributes = item.get("attributes", {})
+                attributes: dict[str, Any] = item.get("attributes", {})
                 number = attributes.get("chapter")
                 if not number or number in seen:
                     continue
@@ -94,10 +98,14 @@ class MangaDexProvider:
                         volume=_volume(attributes.get("volume")),
                         title=attributes.get("title") or None,
                         language=attributes.get("translatedLanguage", language),
+                        group_name=_relationship_attr(
+                            item.get("relationships", []), "scanlation_group", "name"
+                        ),
+                        published_at=attributes.get("publishAt"),
                     )
                 )
-            offset += _PAGE_LIMIT
-            if offset >= int(body.get("total", 0)):
+            offset += _FEED_LIMIT
+            if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
                 break
         return chapters
 
@@ -178,25 +186,52 @@ class MangaDexProvider:
         except (httpx.HTTPError, KeyError, TypeError, ValueError):
             return None
 
-    def fetch_pages(self, chapter: RemoteChapter) -> list[bytes]:
-        response = self._api.get(f"/at-home/server/{chapter.provider_chapter_id}", athome=True)
-        body = response.json()
-        base_url = body["baseUrl"]
-        chapter_hash = body["chapter"]["hash"]
+    def _at_home(self, chapter_id: str) -> dict[str, Any]:
+        return self._api.get(f"/at-home/server/{chapter_id}", athome=True).json()
+
+    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+        server = self._at_home(chapter.provider_chapter_id)
+        quality = "data-saver" if data_saver else "data"
+        chapter_hash = server["chapter"]["hash"]
+        files: list[str] = server["chapter"]["dataSaver" if data_saver else "data"]
+        base = server["baseUrl"]  # mutated if a node expires (403) mid-chapter
         pages: list[bytes] = []
-        for filename in body["chapter"]["data"]:
-            url = f"{base_url}/data/{chapter_hash}/{filename}"
-            started = time.monotonic()
+        for filename in files:
+            content, base = self._fetch_page(
+                chapter.provider_chapter_id, base, quality, chapter_hash, filename
+            )
+            pages.append(content)
+        return pages
+
+    def _fetch_page(
+        self, chapter_id: str, base_url: str, quality: str, chapter_hash: str, filename: str
+    ) -> tuple[bytes, str]:
+        """Download one page; on 403 (expired baseUrl) re-assign a node and retry once.
+
+        Returns (bytes, base_url) so the caller reuses a refreshed node for later pages.
+        """
+        url = f"{base_url}/{quality}/{chapter_hash}/{filename}"
+        started = time.monotonic()
+        try:
+            page = self._api.get_bytes(url)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 403:
+                self._report(url, success=False, nbytes=0, started=started, cached=False)
+                raise
+            base_url = self._at_home(chapter_id)["baseUrl"]  # node expired → re-assign
+            url = f"{base_url}/{quality}/{chapter_hash}/{filename}"
             try:
                 page = self._api.get_bytes(url)
             except httpx.HTTPError:
                 self._report(url, success=False, nbytes=0, started=started, cached=False)
                 raise
-            content = page.content
-            cached = page.headers.get("X-Cache", "").upper().startswith("HIT")
-            self._report(url, success=True, nbytes=len(content), started=started, cached=cached)
-            pages.append(content)
-        return pages
+        except httpx.HTTPError:
+            self._report(url, success=False, nbytes=0, started=started, cached=False)
+            raise
+        content = page.content
+        cached = page.headers.get("X-Cache", "").upper().startswith("HIT")
+        self._report(url, success=True, nbytes=len(content), started=started, cached=cached)
+        return content, base_url
 
     def _report(self, url: str, *, success: bool, nbytes: int, started: float, cached: bool) -> None:
         self._api.report(

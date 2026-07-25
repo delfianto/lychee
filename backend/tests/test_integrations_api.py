@@ -12,6 +12,9 @@ def test_providers_list_and_update(client: TestClient) -> None:
     assert updated.json()["enabled"] is False
     assert updated.json()["language"] == "ja"
 
+    # data_saver (download quality) round-trips
+    assert client.patch("/api/providers/mangadex", json={"dataSaver": True}).json()["dataSaver"] is True
+
 
 def test_trackers_connect_disconnect_and_toggle(client: TestClient) -> None:
     trackers = {t["id"]: t for t in client.get("/api/trackers").json()}
