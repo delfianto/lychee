@@ -21,6 +21,7 @@ class TokenPair:
 class Tracker(Protocol):
     id: str
     external_id_key: str
+    auth_kind: str  # "oauth" (authorize + callback) | "credentials" (username/password login)
     uses_pkce: bool  # MAL requires PKCE; the service generates a verifier when true
 
     def authorize_url(
@@ -36,6 +37,8 @@ class Tracker(Protocol):
         redirect_uri: str,
         code_verifier: str | None = None,
     ) -> TokenPair: ...
+
+    def login(self, *, username: str, password: str) -> TokenPair: ...
 
     def account_name(self, access_token: str) -> str | None: ...
 

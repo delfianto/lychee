@@ -15,6 +15,7 @@ from src.integrations.schema import (
     TrackerAuthUrl,
     TrackerCallback,
     TrackerConnect,
+    TrackerLogin,
     TrackerOut,
     TrackerUpdate,
 )
@@ -70,6 +71,12 @@ def connect_tracker(db: DbSession, tracker_id: str, data: TrackerConnect) -> Tra
 def tracker_callback(db: DbSession, tracker_id: str, data: TrackerCallback) -> TrackerOut:
     """Complete OAuth with the code from the redirect; stores the token encrypted."""
     return service.complete_tracker_connect(db, tracker_id, data)
+
+
+@router.post("/trackers/{tracker_id}/login")
+def login_tracker(db: DbSession, tracker_id: str, data: TrackerLogin) -> TrackerOut:
+    """Connect a credentials-based tracker (MangaUpdates) with username/password."""
+    return service.login_tracker(db, tracker_id, data)
 
 
 @router.delete("/trackers/{tracker_id}", status_code=status.HTTP_204_NO_CONTENT)

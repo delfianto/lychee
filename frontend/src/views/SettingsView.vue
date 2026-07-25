@@ -313,11 +313,15 @@ interface TrackerRow {
   name: string;
   connected: boolean;
   syncOnRead: boolean;
+  authKind: string;
 }
 const trackers = ref<TrackerRow[]>([]);
-// Two-step OAuth connect modal: enter client creds → open authorize URL → paste code.
+// Connect modal: OAuth trackers do client-creds → authorize URL → code; credentials
+// trackers (MangaUpdates) do a one-step username/password login.
 const trackerModal = reactive({
-  open: false, id: "", name: "", clientId: "", clientSecret: "", redirectUri: "", authorizeUrl: "", code: "", busy: false,
+  open: false, id: "", name: "", authKind: "oauth",
+  clientId: "", clientSecret: "", redirectUri: "", authorizeUrl: "", code: "",
+  username: "", password: "", busy: false,
 });
 async function loadTrackers(): Promise<void> {
   const { data } = await api.GET("/api/trackers");
@@ -326,13 +330,34 @@ async function loadTrackers(): Promise<void> {
     name: t.name,
     connected: t.connected,
     syncOnRead: t.syncOnRead,
+    authKind: t.authKind,
   }));
 }
 function openTrackerConnect(t: TrackerRow): void {
+  if (t.authKind === "unsupported") {
+    toast(`${t.name} has no public API`, "info");
+    return;
+  }
   Object.assign(trackerModal, {
-    open: true, id: t.id, name: t.name,
-    clientId: "", clientSecret: "", redirectUri: window.location.origin, authorizeUrl: "", code: "", busy: false,
+    open: true, id: t.id, name: t.name, authKind: t.authKind,
+    clientId: "", clientSecret: "", redirectUri: window.location.origin, authorizeUrl: "", code: "",
+    username: "", password: "", busy: false,
   });
+}
+async function loginTracker(): Promise<void> {
+  trackerModal.busy = true;
+  const { error } = await api.POST("/api/trackers/{tracker_id}/login", {
+    params: { path: { tracker_id: trackerModal.id } },
+    body: { username: trackerModal.username, password: trackerModal.password },
+  });
+  trackerModal.busy = false;
+  if (error) {
+    toast("Login failed — check credentials & LYCHEE_SECRET_KEY", "error");
+    return;
+  }
+  trackerModal.open = false;
+  await loadTrackers();
+  toast(`${trackerModal.name} connected`);
 }
 async function beginTrackerAuth(): Promise<void> {
   trackerModal.busy = true;
@@ -1012,11 +1037,28 @@ onMounted(async () => {
             <X class="size-4" />
           </button>
         </div>
-        <p class="mb-3 text-xs text-base-content/50">
-          Create an OAuth client on {{ trackerModal.name }} with the redirect URI below, then paste its
-          client ID &amp; secret. Secrets are encrypted at rest.
-        </p>
-        <div class="flex flex-col gap-2">
+        <!-- Credentials trackers (MangaUpdates): one-step username/password login -->
+        <div v-if="trackerModal.authKind === 'credentials'" class="flex flex-col gap-2">
+          <p class="mb-1 text-xs text-base-content/50">
+            Sign in with your {{ trackerModal.name }} account. Your session token is encrypted at rest.
+          </p>
+          <input v-model="trackerModal.username" class="input input-bordered input-sm" placeholder="Username" />
+          <input v-model="trackerModal.password" type="password" class="input input-bordered input-sm" placeholder="Password" />
+          <button
+            class="btn btn-primary btn-sm self-start"
+            :disabled="trackerModal.busy || !trackerModal.username || !trackerModal.password"
+            @click="loginTracker"
+          >
+            {{ trackerModal.busy ? "Signing in…" : "Sign in" }}
+          </button>
+        </div>
+
+        <!-- OAuth trackers (AniList, MyAnimeList): client creds → authorize → code -->
+        <div v-else class="flex flex-col gap-2">
+          <p class="mb-1 text-xs text-base-content/50">
+            Create an OAuth client on {{ trackerModal.name }} with the redirect URI below, then paste its
+            client ID &amp; secret. Secrets are encrypted at rest.
+          </p>
           <input v-model="trackerModal.clientId" class="input input-bordered input-sm" placeholder="Client ID" />
           <input v-model="trackerModal.clientSecret" type="password" class="input input-bordered input-sm" placeholder="Client secret" />
           <input v-model="trackerModal.redirectUri" class="input input-bordered input-sm" placeholder="Redirect URI" />

@@ -27,6 +27,7 @@ from src.integrations.schema import (
     TrackerAuthUrl,
     TrackerCallback,
     TrackerConnect,
+    TrackerLogin,
     TrackerOut,
     TrackerUpdate,
 )
@@ -202,12 +203,14 @@ def import_follows(session: Session, provider_id: str) -> TaskOut:
 
 
 def _tracker_out(t: Tracker) -> TrackerOut:
+    impl = get_tracker(t.id)
     return TrackerOut(
         id=t.id,
         name=t.name,
         connected=t.connected,
         sync_on_read=t.sync_on_read,
         account_name=t.account_name,
+        auth_kind=impl.auth_kind if impl else "unsupported",
     )
 
 
@@ -275,6 +278,20 @@ def complete_tracker_connect(
     row.refresh_token_enc = encrypt(tokens.refresh_token) if tokens.refresh_token else None
     row.account_name = impl.account_name(tokens.access_token)
     row.pkce_verifier = None  # one-time use
+    row.connected = True
+    session.commit()
+    return _tracker_out(row)
+
+
+def login_tracker(session: Session, tracker_id: str, data: TrackerLogin) -> TrackerOut:
+    """Connect a credentials-based tracker (e.g. MangaUpdates) via username/password."""
+    row = _get_tracker(session, tracker_id)
+    impl = get_tracker(tracker_id)
+    if impl is None or impl.auth_kind != "credentials":
+        raise BadRequestError(f"tracker {tracker_id!r} does not use password login")
+    tokens = impl.login(username=data.username, password=data.password)
+    row.access_token_enc = encrypt(tokens.access_token)  # requires LYCHEE_SECRET_KEY
+    row.account_name = data.username
     row.connected = True
     session.commit()
     return _tracker_out(row)

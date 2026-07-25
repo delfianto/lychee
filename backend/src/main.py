@@ -37,11 +37,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     from src.providers.mangadex import MangaDexProvider
     from src.trackers.anilist import AniListTracker
     from src.trackers.base import register_tracker
+    from src.trackers.mangaupdates import MangaUpdatesTracker
     from src.trackers.myanimelist import MyAnimeListTracker
 
     register_provider(MangaDexProvider())
     register_tracker(AniListTracker())
     register_tracker(MyAnimeListTracker())
+    register_tracker(MangaUpdatesTracker())
     broker.bind_loop(asyncio.get_running_loop())
     yield
     queue.shutdown()

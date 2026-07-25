@@ -37,7 +37,11 @@ _SAVE_ENTRY = (
 class AniListTracker:
     id = "anilist"
     external_id_key = "al"  # Series.external_ids["al"] is the AniList media id
+    auth_kind = "oauth"
     uses_pkce = False
+
+    def login(self, *, username: str, password: str) -> TokenPair:
+        raise NotImplementedError("AniList uses OAuth")
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "lychee/0.0.1"})

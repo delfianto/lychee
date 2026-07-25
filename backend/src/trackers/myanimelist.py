@@ -33,7 +33,11 @@ _STATUS = {
 class MyAnimeListTracker:
     id = "myanimelist"
     external_id_key = "mal"
+    auth_kind = "oauth"
     uses_pkce = True
+
+    def login(self, *, username: str, password: str) -> TokenPair:
+        raise NotImplementedError("MyAnimeList uses OAuth")
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "lychee/0.0.1"})
