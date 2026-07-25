@@ -47,7 +47,7 @@ class ScanSummary:
 
 
 @dataclass
-class _Candidate:
+class Candidate:
     path: Path  # absolute path on disk
     rel: str  # path relative to the library root (stored on Book)
     kind: str  # content_kind
@@ -86,15 +86,15 @@ def _signature(path: Path) -> tuple[int, float, str]:
     return stat.st_size, stat.st_mtime, digest.hexdigest()[:40]
 
 
-def _candidate(item: Path, root: Path, series_dir: Path, kind: str) -> _Candidate:
+def _candidate(item: Path, root: Path, series_dir: Path, kind: str) -> Candidate:
     parts = list(item.relative_to(series_dir).parts) or [series_dir.name]
-    return _Candidate(path=item, rel=str(item.relative_to(root)), kind=kind, segments=parts)
+    return Candidate(path=item, rel=str(item.relative_to(root)), kind=kind, segments=parts)
 
 
-def _resolve_books(series_dir: Path, root: Path) -> list[_Candidate]:
+def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
     """Walk a series folder (hybrid rule): image-only dir → book; archive →
     book; a folder holding archives/sub-folders is a grouping level (recurse)."""
-    found: list[_Candidate] = []
+    found: list[Candidate] = []
 
     def visit(directory: Path) -> None:
         entries = sorted(p for p in directory.iterdir() if not p.name.startswith("."))
@@ -115,7 +115,7 @@ def _series_kind(library: Library) -> str:
     return library.kind if library.kind in {"manga", "comic", "gallery"} else "manga"
 
 
-def _page_count(candidate: _Candidate) -> int | None:
+def _page_count(candidate: Candidate) -> int | None:
     """Open the container to count pages; None if it can't be read (skip it)."""
     try:
         with open_container(candidate.path, candidate.kind) as container:
@@ -152,7 +152,7 @@ def scan_library(
     entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".")]
     for index, entry in enumerate(entries, start=1):
         if entry.is_dir():
-            candidates = _resolve_books(entry, root)
+            candidates = resolve_books(entry, root)
             if candidates:
                 _ingest_series(session, library, entry.name, candidates, existing, seen, summary)
         elif entry.is_file() and (kind := _archive_kind(entry.name)):
@@ -179,7 +179,7 @@ def _ingest_series(
     session: Session,
     library: Library,
     title: str,
-    candidates: list[_Candidate],
+    candidates: list[Candidate],
     existing: dict[str, Book],
     seen: set[str],
     summary: ScanSummary,
@@ -210,17 +210,17 @@ def _ingest_series(
         if kind == "gallery":
             series.image_count = book.page_count
         else:
-            chapters.append(_sync_chapter(session, series, book, candidate, title, kind))
+            chapters.append(sync_chapter(session, series, book, candidate, title, kind))
 
     if chapters:
-        _order_chapters(chapters)
+        order_chapters(chapters)
 
 
 def _reconcile_book(
     session: Session,
     library: Library,
     series: Series,
-    candidate: _Candidate,
+    candidate: Candidate,
     existing: dict[str, Book],
     seen: set[str],
     summary: ScanSummary,
@@ -271,8 +271,8 @@ def _reconcile_book(
     return book
 
 
-def _sync_chapter(
-    session: Session, series: Series, book: Book, candidate: _Candidate, title: str, kind: str
+def sync_chapter(
+    session: Session, series: Series, book: Book, candidate: Candidate, title: str, kind: str
 ) -> Chapter:
     parsed = parse(candidate.segments, title, kind)
     chapter = session.scalar(select(Chapter).where(Chapter.book_id == book.id))
@@ -290,7 +290,7 @@ def _sync_chapter(
     return chapter
 
 
-def _order_chapters(chapters: list[Chapter]) -> None:
+def order_chapters(chapters: list[Chapter]) -> None:
     """Assign a number_sort to chapters that lacked one (base-less specials, volume
     -only books), placing them after their sorted neighbours."""
     ordered = sorted(chapters, key=lambda c: (c.number_sort is None, c.number_sort or 0.0))

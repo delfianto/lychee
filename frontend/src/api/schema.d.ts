@@ -710,6 +710,26 @@ export interface paths {
         patch: operations["update_import_config_api_import_config_patch"];
         trace?: never;
     };
+    "/api/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Import
+         * @description Import a local container file or folder in the background (transcode → AVIF).
+         */
+        post: operations["start_import_api_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/about": {
         parameters: {
             query?: never;
@@ -1167,6 +1187,19 @@ export interface components {
             quality?: number | null;
             /** Filenamepattern */
             filenamePattern?: string | null;
+        };
+        /**
+         * ImportRequest
+         * @description Import a container file or folder from a path on the server.
+         */
+        ImportRequest: {
+            /** Path */
+            path: string;
+            /**
+             * Kind
+             * @default manga
+             */
+            kind: string;
         };
         /** LibraryCreate */
         LibraryCreate: {
@@ -2853,6 +2886,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_import_api_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */

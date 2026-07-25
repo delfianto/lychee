@@ -1,12 +1,14 @@
 <script setup lang="ts">
 // Settings → Local import: configure importing local container files/folders and
 // transcoding their pages to AVIF — the enable toggle, page quality, and the
-// filename→metadata token pattern. Config persists on change (watch → PATCH); the
-// import action itself lands in a later phase.
-import { FileText, FolderInput, Gauge } from "lucide-vue-next";
-import { onMounted, reactive, watch } from "vue";
+// filename→metadata token pattern — plus the import action itself. Config persists
+// on change (watch → PATCH); imports run on the queue and report via SSE.
+import { FileText, FolderInput, Gauge, HardDriveDownload } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
 
 import { api } from "../../api/client";
+import { activeTasks, onTaskDone } from "../../api/events";
+import { toast } from "../../lib/toast";
 
 const config = reactive({ enabled: false, quality: 75, filenamePattern: "" });
 const qualityTiers = [
@@ -15,6 +17,9 @@ const qualityTiers = [
   { value: 60, label: "Smaller files" },
 ];
 let loaded = false;
+
+const importForm = reactive({ path: "", kind: "manga" });
+const importing = computed(() => activeTasks.value.some((t) => t.kind === "localimport"));
 
 async function loadConfig(): Promise<void> {
   const { data } = await api.GET("/api/import/config");
@@ -37,6 +42,26 @@ watch(
     });
   },
 );
+async function startImport(): Promise<void> {
+  const { error } = await api.POST("/api/import", {
+    body: { path: importForm.path.trim(), kind: importForm.kind },
+  });
+  if (error) {
+    toast("Import failed — check the path and that import is enabled", "error");
+    return;
+  }
+  toast("Import started…"); // progress + result arrive via the localimport task's SSE
+}
+const disposeDone = onTaskDone((task) => {
+  if (task.kind !== "localimport") return;
+  if (task.status === "done") {
+    toast(`Imported ${(task.result?.booksImported as number) ?? 0} book(s)`);
+    importForm.path = "";
+  } else if (task.status === "failed") {
+    toast("Import failed", "error");
+  }
+});
+onUnmounted(disposeDone);
 onMounted(async () => {
   await loadConfig();
   loaded = true;
@@ -49,7 +74,7 @@ onMounted(async () => {
       <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Local import</h3>
       <p class="max-w-2xl text-xs text-base-content/50">
         Import comic/manga containers (CBZ/ZIP) or image folders from the server's disk and transcode
-        their pages to AVIF. Set the defaults here — the import action arrives next.
+        their pages to AVIF. Configure it here, then import from a path below.
       </p>
       <div class="card bg-base-100">
         <div class="card-body gap-4 p-4">
@@ -101,6 +126,40 @@ onMounted(async () => {
               · <code class="text-primary/70">*</code> ignores a segment
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Import action -->
+      <div class="card bg-base-100">
+        <div class="card-body gap-3 p-4">
+          <div class="flex items-start gap-3">
+            <HardDriveDownload class="mt-0.5 size-5 shrink-0 text-primary" />
+            <div>
+              <div class="text-sm font-medium">Import from a path</div>
+              <div class="text-xs text-base-content/50">A container file (.cbz/.zip) or a folder on the server</div>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <input
+              v-model="importForm.path"
+              class="input input-bordered input-sm flex-1 font-mono"
+              placeholder="/data/incoming/Series   or   /data/file.cbz"
+              :disabled="!config.enabled"
+            />
+            <select v-model="importForm.kind" class="select select-bordered select-sm sm:w-32" :disabled="!config.enabled">
+              <option value="manga">Manga</option>
+              <option value="comic">Comic</option>
+              <option value="gallery">Gallery</option>
+            </select>
+            <button
+              class="btn btn-primary btn-sm gap-1"
+              :disabled="!config.enabled || !importForm.path.trim() || importing"
+              @click="startImport"
+            >
+              <FolderInput class="size-4" />{{ importing ? "Importing…" : "Import" }}
+            </button>
+          </div>
+          <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import above to use this.</p>
         </div>
       </div>
     </section>
