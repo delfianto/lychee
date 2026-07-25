@@ -17,15 +17,24 @@ from tests.support import make_series
 class _RecordingTracker:
     id = "anilist"
     external_id_key = "al"
+    uses_pkce = False
 
     def __init__(self) -> None:
         self.pushes: list[dict[str, object]] = []
 
-    def authorize_url(self, *, client_id: str, redirect_uri: str, state: str) -> str:
+    def authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
+    ) -> str:
         return "x"
 
     def exchange_code(
-        self, *, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        *,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
     ) -> TokenPair:
         raise NotImplementedError
 

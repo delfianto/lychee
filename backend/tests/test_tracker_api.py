@@ -12,12 +12,21 @@ from src.trackers.base import TokenPair, register_tracker
 class _FakeAniList:
     id = "anilist"
     external_id_key = "al"
+    uses_pkce = False
 
-    def authorize_url(self, *, client_id: str, redirect_uri: str, state: str) -> str:
+    def authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
+    ) -> str:
         return f"https://fake/authorize?client_id={client_id}&state={state}"
 
     def exchange_code(
-        self, *, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        *,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
     ) -> TokenPair:
         assert code == "the-code"
         return TokenPair("access-1", "refresh-1")
@@ -70,6 +79,23 @@ def test_callback_completes_and_stores_encrypted_token(
     assert decrypt(row.access_token_enc or "") == "access-1"
 
 
+def test_myanimelist_connect_uses_pkce(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    resp = client.post(
+        "/api/trackers/myanimelist/connect",
+        json={"clientId": "cid", "clientSecret": "csec", "redirectUri": "http://cb"},
+    )
+    assert resp.status_code == 200
+    url = resp.json()["authorizeUrl"]
+    assert "code_challenge_method=plain" in url
+
+    row = db_session.get(Tracker, "myanimelist")
+    assert row is not None and row.pkce_verifier  # a verifier is stored for the callback
+    assert f"code_challenge={row.pkce_verifier}" in url  # plain PKCE: challenge == verifier
+
+
 def test_connect_unsupported_tracker_is_rejected(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -78,4 +104,4 @@ def test_connect_unsupported_tracker_is_rejected(
         "/api/trackers/novelupdates/connect",
         json={"clientId": "c", "clientSecret": "s", "redirectUri": "u"},
     )
-    assert resp.status_code == 400  # no implementation registered
+    assert resp.status_code == 400  # no implementation registered (NovelUpdates has no public API)

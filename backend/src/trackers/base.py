@@ -21,11 +21,20 @@ class TokenPair:
 class Tracker(Protocol):
     id: str
     external_id_key: str
+    uses_pkce: bool  # MAL requires PKCE; the service generates a verifier when true
 
-    def authorize_url(self, *, client_id: str, redirect_uri: str, state: str) -> str: ...
+    def authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
+    ) -> str: ...
 
     def exchange_code(
-        self, *, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        *,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
     ) -> TokenPair: ...
 
     def account_name(self, access_token: str) -> str | None: ...

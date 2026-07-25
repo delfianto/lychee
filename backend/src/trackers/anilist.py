@@ -37,11 +37,14 @@ _SAVE_ENTRY = (
 class AniListTracker:
     id = "anilist"
     external_id_key = "al"  # Series.external_ids["al"] is the AniList media id
+    uses_pkce = False
 
     def __init__(self, client: httpx.Client | None = None) -> None:
-        self._client = client or httpx.Client(timeout=30.0, headers={"User-Agent": "lychee/0.0.1"})
+        self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "lychee/0.0.1"})
 
-    def authorize_url(self, *, client_id: str, redirect_uri: str, state: str) -> str:
+    def authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
+    ) -> str:
         query = urlencode(
             {
                 "client_id": client_id,
@@ -53,7 +56,13 @@ class AniListTracker:
         return f"{AUTHORIZE_URL}?{query}"
 
     def exchange_code(
-        self, *, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        *,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
     ) -> TokenPair:
         response = self._client.post(
             TOKEN_URL,
