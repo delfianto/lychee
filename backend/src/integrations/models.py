@@ -63,3 +63,16 @@ class SyncState(Base, TimestampMixin):
     auto_every_minutes: Mapped[int] = mapped_column(Integer, default=360, nullable=False)  # 6h
     syncing: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     new_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class ImportConfig(Base, TimestampMixin):
+    """Singleton row (id ``default``) backing Settings → Local import."""
+
+    __tablename__ = "import_config"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default="default")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # AVIF quality (1–100) for transcoded import pages.
+    quality: Mapped[int] = mapped_column(Integer, default=75, nullable=False)
+    # Token-template pattern to derive metadata from filenames (empty → built-in parser).
+    filename_pattern: Mapped[str] = mapped_column(String(512), default="", nullable=False)

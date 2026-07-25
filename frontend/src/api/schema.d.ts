@@ -692,6 +692,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/import/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Import Config */
+        get: operations["get_import_config_api_import_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Import Config */
+        patch: operations["update_import_config_api_import_config_patch"];
+        trace?: never;
+    };
     "/api/about": {
         parameters: {
             query?: never;
@@ -1131,6 +1149,24 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ImportConfigOut */
+        ImportConfigOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Quality */
+            quality: number;
+            /** Filenamepattern */
+            filenamePattern: string;
+        };
+        /** ImportConfigUpdate */
+        ImportConfigUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Quality */
+            quality?: number | null;
+            /** Filenamepattern */
+            filenamePattern?: string | null;
         };
         /** LibraryCreate */
         LibraryCreate: {
@@ -2773,6 +2809,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+        };
+    };
+    get_import_config_api_import_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportConfigOut"];
+                };
+            };
+        };
+    };
+    update_import_config_api_import_config_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // Settings shell: the section rail + the active tab. Each tab's concerns live in
 // its own panel under views/settings/ (each owns its state, loads, and SSE wiring).
-import { Download, Info, SlidersHorizontal, Tag } from "lucide-vue-next";
+import { Download, FolderInput, Info, SlidersHorizontal, Tag } from "lucide-vue-next";
 import { type Component, ref } from "vue";
 
 import AboutPanel from "./settings/AboutPanel.vue";
 import AppearancePanel from "./settings/AppearancePanel.vue";
 import ContentPanel from "./settings/ContentPanel.vue";
 import DownloadsPanel from "./settings/DownloadsPanel.vue";
+import ImportPanel from "./settings/ImportPanel.vue";
 import LibrariesPanel from "./settings/LibrariesPanel.vue";
 import ProviderPanel from "./settings/ProviderPanel.vue";
 import TrackersPanel from "./settings/TrackersPanel.vue";
@@ -16,6 +17,7 @@ const sections: { key: string; label: string; icon: Component }[] = [
   { key: "general", label: "General", icon: SlidersHorizontal },
   { key: "content", label: "Content", icon: Tag },
   { key: "downloads", label: "Downloads", icon: Download },
+  { key: "import", label: "Local import", icon: FolderInput },
   { key: "about", label: "About", icon: Info },
 ];
 const active = ref("general");
@@ -55,6 +57,7 @@ const active = ref("general");
 
           <ContentPanel v-else-if="active === 'content'" key="content" />
           <DownloadsPanel v-else-if="active === 'downloads'" key="downloads" />
+          <ImportPanel v-else-if="active === 'import'" key="import" />
           <AboutPanel v-else-if="active === 'about'" key="about" />
         </Transition>
       </div>

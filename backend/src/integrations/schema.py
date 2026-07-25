@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import Field
+
 from src.core.schema import CamelModel, UtcDatetime
 
 
@@ -86,3 +88,15 @@ class AboutOut(CamelModel):
     database: str
     started: UtcDatetime
     uptime_seconds: int
+
+
+class ImportConfigOut(CamelModel):
+    enabled: bool
+    quality: int
+    filename_pattern: str
+
+
+class ImportConfigUpdate(CamelModel):
+    enabled: bool | None = None
+    quality: int | None = Field(default=None, ge=1, le=100)
+    filename_pattern: str | None = None
