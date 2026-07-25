@@ -57,10 +57,10 @@ def disconnect_provider(db: DbSession, provider_id: str) -> ProviderOut:
     return mangadex_account.disconnect(db, provider_id)
 
 
-@router.post("/providers/{provider_id}/import", status_code=status.HTTP_202_ACCEPTED)
-def import_follows(db: DbSession, provider_id: str) -> TaskOut:
-    """Import the connected account's follows + reading status in the background."""
-    return mangadex_account.import_follows(db, provider_id)
+@router.post("/providers/{provider_id}/sync", status_code=status.HTTP_202_ACCEPTED)
+def sync_account(db: DbSession, provider_id: str) -> TaskOut:
+    """Sync the connected account (follows + reading status + custom lists) in the background."""
+    return mangadex_account.sync_account(db, provider_id)
 
 
 @router.get("/trackers")

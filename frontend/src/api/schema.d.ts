@@ -557,7 +557,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/providers/{provider_id}/import": {
+    "/api/providers/{provider_id}/sync": {
         parameters: {
             query?: never;
             header?: never;
@@ -567,10 +567,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Import Follows
-         * @description Import the connected account's follows + reading status in the background.
+         * Sync Account
+         * @description Sync the connected account (follows + reading status + custom lists) in the background.
          */
-        post: operations["import_follows_api_providers__provider_id__import_post"];
+        post: operations["sync_account_api_providers__provider_id__sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2653,7 +2653,7 @@ export interface operations {
             };
         };
     };
-    import_follows_api_providers__provider_id__import_post: {
+    sync_account_api_providers__provider_id__sync_post: {
         parameters: {
             query?: never;
             header?: never;

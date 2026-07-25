@@ -70,6 +70,15 @@ class SeriesMetadata:
     external_ids: dict[str, str] = field(default_factory=dict)  # site -> id: al, mal, mu, …
 
 
+@dataclass(frozen=True)
+class CustomList:
+    """A provider custom list (e.g. a MangaDex MDList) + its member manga ids."""
+
+    provider_list_id: str
+    name: str
+    manga_ids: list[str] = field(default_factory=list)
+
+
 class MetadataProvider(Protocol):
     """Search + metadata + new-chapter discovery (implemented by MangaDexProvider)."""
 
