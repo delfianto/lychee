@@ -10,7 +10,7 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F). **113
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **129
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
@@ -101,10 +101,10 @@
 - [~] **Images:** Pillow 12 (native AVIF) ✅ · pyvips ❌ (Pillow-only) · python-magic ❌.
 - [ ] **Archives/formats:** only stdlib `zipfile` (CBZ/ZIP) + image dirs. rarfile/py7zr/pymupdf/ebooklib ❌.
 - [~] **Ingest utils:** `hashlib` sha1 sample (not xxhash) · regex natural-sort (not natsort).
-- [ ] **Tasks:** APScheduler / ProcessPoolExecutor ❌ (synchronous).
-- [~] **Providers/trackers:** `httpx` ✅ (main dep) · tenacity ❌ (no retry/backoff).
+- [~] **Tasks:** background `ThreadPoolExecutor` queue ✅ (`src/tasks/queue.py`); APScheduler (auto-sync) + ProcessPoolExecutor (encode) ❌.
+- [x] **Providers/trackers:** `httpx` ✅ · `cryptography` ✅ (Fernet token encryption) · custom 429/5xx retry + rate-limit buckets (no tenacity).
 - [~] **Search:** SQLite `LIKE` (FTS5 ❌).
-- [x] Present: fastapi, uvicorn, sqlalchemy 2, alembic, pydantic 2 + settings, structlog, nanoid, httpx, pillow.
+- [x] Present: fastapi, uvicorn, sqlalchemy 2, alembic, pydantic 2 + settings, structlog, nanoid, httpx, pillow, cryptography.
 
 ## B2. Domain model → first migration
 - [x] Entities: Library, Series, Book, Chapter, Tag + series_tag, SeriesCredit, TitleVariant,
@@ -136,19 +136,22 @@
       ProcessPoolExecutor queue is a later scaling concern.)
 
 ## B5. Providers + downloader
-- [~] MangaDex provider: chapter listing + page download ✅; **metadata match/import + field mapping +
-      cover fetch ❌**.
+- [x] MangaDex provider: chapter listing + page download ✅; metadata fetch + search + auto/manual match
+      + field mapping (`catalog.metadata`) + covers ✅ (M1/M2). Covers hotlinked (local cache pending).
 - [x] Chapter downloader → AVIF + DownloadTask rows ✅; runs on the background queue with per-page SSE
       progress (`download.progress`). Rows commit as each chapter downloads, so the Downloads table
       climbs mid-chapter (FE reloads on throttled progress events). ⚠ pause/resume not implemented.
-- [ ] **Sync** — `/api/sync` is a stub (stamps timestamp); no real new-chapter check.
+- [x] **Sync** ✅ — `/api/sync` diffs each matched series' feed vs local chapters → `Series.available_chapters`
+      + a global count (M5). Auto-scheduler deferred.
 
 ## B6. Search
 - [~] `GET /api/search` works via `LIKE` over titles; **FTS5 trigram over title/alt-titles/authors ❌**.
 
 ## B7. Reading progress + trackers
 - [x] Progress writes (`PUT /api/chapters/{id}/progress`) → unread / lastRead / continue-reading.
-- [ ] Outbound tracker sync + OAuth — **connect/disconnect are stubs**; nothing pushes read status.
+- [x] Outbound tracker sync + OAuth ✅ — AniList / MyAnimeList (OAuth2 ± PKCE) + MangaUpdates (login)
+      connect + push read status on chapter completion (`src/trackers/`, gated by `sync_on_read`;
+      NovelUpdates unsupported).
 
 ---
 
@@ -158,7 +161,7 @@
 - [x] `GET /api/series` (all filters, 5 sorts, cursor).
 - [x] `GET /api/series/{id}`.
 - [x] `PATCH /api/series/{id}` `{favorite?, libraryStatus?, rating?}` — favorite/shelf/user-rating persist.
-- [ ] `POST /api/series/{id}/refresh` — not built (needs provider match).
+- [x] `POST /api/series/{id}/refresh` ✅ (M1) + `GET .../match-candidates`, `POST .../match`, `DELETE .../match` (M2).
 - [x] `GET /api/series/{id}/chapters` → VolumeGroup[].
 - [x] `GET /api/series/{id}/related`.
 - [x] `GET /api/series/{id}/art` (returns `{images: []}` placeholder — no art store yet).
@@ -184,10 +187,10 @@
 ### Settings
 - [x] **Libraries** GET/POST/PATCH/DELETE + `/summary` + scan/scan-all.
 - [x] **Taxonomy** GET(paged)/POST/PATCH/DELETE (system rows protected; uses counts).
-- [x] **Providers** GET/PATCH.
-- [~] **Trackers** GET/PATCH/connect/disconnect ✅ — **connect is a stub (no real OAuth)**.
+- [x] **Providers** GET/PATCH + connect/disconnect/import (MangaDex OAuth account + follows import).
+- [x] **Trackers** GET/PATCH + connect(→authorize URL)/callback/login/disconnect ✅ — real OAuth2 ± PKCE + credentials login.
 - [~] **Downloads** GET/POST/DELETE/clear-completed/retry ✅ — **pause/resume endpoints ❌**.
-- [~] **Sync** GET/POST ✅ — **stub (no real check)**.
+- [x] **Sync** GET/POST ✅ — real new-chapter check on the queue (M5).
 - [x] **About** GET.
 - [x] Appearance/Reader/Theme/Density/Language client-side (localStorage).
 
@@ -208,7 +211,7 @@
 
 # PART E — Backlog / later
 - [ ] Auth & multi-user (ADR 12).
-- [~] Tests: backend 85 pytest ✅; **FE component tests ❌**.
+- [~] Tests: backend 129 pytest ✅; **FE component tests ❌**.
 - [ ] Docker packaging.
 - [—] OPDS / device-sync (explicitly out per ADR 15).
 - [ ] JPEG page fallback endpoint (only if a non-webapp client appears).
@@ -225,18 +228,17 @@
 4. [x] **Read-only API slice + client + FE swap of every read view.**
 5. [x] **B4 ingest** — parser + scan + library API; scans run on the background queue (`202`, SSE
        progress). (RAR/PDF/EPUB, content-sniff, FTS deferred.)
-6. [~] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
-       ✅; downloads run on the background queue with SSE progress. **Full MangaDex metadata / match /
-       auth / sync planned in PART F below.** (pause/resume deferred.)
+6. [x] **B5 providers + downloader** — download→AVIF pipeline + Downloads API + MangaDex page provider
+       ✅; downloads run on the background queue with SSE progress. Full MangaDex metadata / match /
+       auth / sync done (PART F M0–M5). (pause/resume + local cover cache remain.)
 7. [~] **B7 + settings** — progress writes, series PATCH (favorite/shelf/rating), providers/trackers/
-       sync/about/taxonomy/collections APIs, SSE + task tracker + **background queue + FE SSE
-       consumption**, FE Lists + Settings swapped.
-       **Remaining: MangaDex full integration (PART F), tracker (AniList/MU/MAL) OAuth, FTS5, extra
-       containers.**
+       sync/about/taxonomy/collections APIs, SSE + task tracker + background queue + FE SSE consumption,
+       MangaDex integration (PART F) + tracker OAuth/push (`src/trackers/`), FE Lists + Settings
+       swapped. **Remaining: FTS5, extra containers, sync scheduler, download pause/resume.**
 
 ---
 
-# PART F — MangaDex API (full integration)
+# PART F — MangaDex API (full integration) — ✅ done (M0–M5; auto-sync scheduler deferred)
 
 Use the MangaDex API for **metadata fetch + matching**, **chapter download** (already partial), and
 **sync** (new-chapter checks + account import). Grounded in the official docs:
@@ -301,7 +303,7 @@ override.
       (per-page success/failure report; never fails a download).
 - [x] Provider abstraction extended: `MetadataProvider` protocol + `MangaMatch` / `SeriesMetadata`
       DTOs in `downloads/provider.py` (the contract M1/M2/M5 implement).
-- [ ] `data_saver` (quality) option → **moved to M3** (only meaningful once `fetch_pages` consumes it).
+- [x] `data_saver` (quality) option — done in M3.
 
 **M1 — Metadata fetch + mapping** — ✅ done
 - [x] `MangaDexProvider.get_metadata(id)`: `GET /manga/{id}?includes[]=cover_art,author,artist` +
