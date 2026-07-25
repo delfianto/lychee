@@ -128,11 +128,11 @@ def start_import(db: DbSession, storage: StorageRootDep, data: ImportRequest) ->
 async def upload_import(
     db: DbSession,
     storage: StorageRootDep,
-    file: UploadFile,
+    files: list[UploadFile],
     kind: Annotated[str, Form()] = "manga",
 ) -> TaskOut:
-    """Import an uploaded container file in the background (transcode → AVIF)."""
-    return await local_import_svc.start_upload_import(db, file, kind, storage)
+    """Import uploaded container files in the background (transcode → AVIF, stored CBZ)."""
+    return await local_import_svc.start_upload_import(db, files, kind, storage)
 
 
 @router.get("/about")

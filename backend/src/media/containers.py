@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import zipfile
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
@@ -135,3 +136,34 @@ def open_container(path: Path, content_kind: str) -> BookContainer:
     if content_kind in _ZIP_KINDS:
         return ZipContainer(path)
     raise BadRequestError(f"unsupported container kind: {content_kind!r}")
+
+
+def write_cbz(
+    dest: Path,
+    pages: Iterable[bytes],
+    *,
+    on_page: Callable[[int], None] | None = None,
+) -> tuple[int, int]:
+    """Pack ``pages`` into a CBZ at ``dest`` as ``001.avif``, ``002.avif``, … using
+    ``ZIP_STORED`` — the pages are already compressed (AVIF), so DEFLATE would only
+    burn CPU for ~no size gain. Writes to a temp file then atomically renames, so a
+    crash never leaves a half-written archive. ``on_page`` fires after each page (for
+    progress). Returns ``(page_count, total_bytes)``.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    count = 0
+    size = 0
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as archive:
+            for data in pages:
+                count += 1
+                archive.writestr(f"{count:03d}.avif", data)
+                size += len(data)
+                if on_page is not None:
+                    on_page(count)
+        tmp.replace(dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return count, size
