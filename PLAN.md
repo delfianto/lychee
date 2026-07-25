@@ -55,7 +55,8 @@
          LIKE fallback for <3-char queries (B6). ✅ done.
    - [ ] On-demand resize/transcode + disk render cache + page-list LRU (B3 caches).
 4. **Fidelity / correctness:**
-   - [~] Error shape is FastAPI `{"detail"}`, not the planned `{error:{code,message}}`.
+   - [x] Error shape: every error response is `{"error":{"code","message"}}` — domain (`LycheeError.code`),
+         Pydantic validation (422), and framework HTTP errors (unknown route / method) all normalized. ✅
    - [ ] Move-restore loses progress (chapters dropped on soft-delete; ADR 07 `tryRestore` migration
          not implemented). `partial_hash` is sha1-of-sample, not xxh3.
    - [~] Taxonomy seed is hand-curated MangaDex-aligned, not fetched from `/manga/tag`.

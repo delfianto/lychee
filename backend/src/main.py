@@ -5,8 +5,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.bootstrap import bootstrap
 from src.catalog.router import router as catalog_router
@@ -66,10 +68,52 @@ app.add_middleware(
 )
 
 
+# Every error response has the shape ``{"error": {"code": <slug>, "message": <text>}}``.
+_HTTP_ERROR_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "conflict",
+    422: "validation_error",
+    429: "rate_limited",
+}
+
+
+def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code, content={"error": {"code": code, "message": message}}
+    )
+
+
 @app.exception_handler(LycheeError)
 async def _domain_exception_handler(_request: Request, exc: LycheeError) -> JSONResponse:
     """Translate domain exceptions to their HTTP status (services stay HTTP-agnostic)."""
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+    return _error_response(exc.status_code, exc.code, exc.message)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Pydantic request-validation failures → the standard error shape."""
+    errors = exc.errors()
+    message = "invalid request"
+    if errors:
+        loc = ".".join(str(part) for part in errors[0].get("loc", ()) if part != "body")
+        detail = errors[0].get("msg", "invalid value")
+        message = f"{loc}: {detail}" if loc else detail
+    return _error_response(422, "validation_error", message)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(
+    _request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """Framework HTTP errors (unknown route, wrong method, …) → the standard error shape."""
+    code = _HTTP_ERROR_CODES.get(exc.status_code, "error")
+    return _error_response(exc.status_code, code, str(exc.detail))
 
 
 app.include_router(health_router)
