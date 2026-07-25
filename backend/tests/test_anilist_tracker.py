@@ -1,4 +1,7 @@
-"""AniList tracker: authorize URL + code exchange + viewer lookup (mock transport)."""
+"""AniList tracker: authorize URL + code exchange + viewer lookup + push (mock transport)."""
+
+import json
+from typing import Any
 
 import httpx
 from src.trackers.anilist import AUTHORIZE_URL, AniListTracker
@@ -27,3 +30,16 @@ def test_exchange_code_and_account_name() -> None:
     )
     assert pair == TokenPair("tok", "r")
     assert tracker.account_name("tok") == "AniUser"
+
+
+def test_push_maps_status_and_sends_variables() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"data": {"SaveMediaListEntry": {"id": 1}}})
+
+    tracker = AniListTracker(client=httpx.Client(transport=httpx.MockTransport(handler)))
+    tracker.push(access_token="tok", media_id="42", status="completed", progress=7)
+
+    assert captured["body"]["variables"] == {"mediaId": 42, "status": "COMPLETED", "progress": 7}

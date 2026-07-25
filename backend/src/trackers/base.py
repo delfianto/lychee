@@ -30,6 +30,10 @@ class Tracker(Protocol):
 
     def account_name(self, access_token: str) -> str | None: ...
 
+    def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
+        """Push read progress. ``status`` is a lychee library_status; the impl maps it."""
+        ...
+
 
 _REGISTRY: dict[str, Tracker] = {}
 
