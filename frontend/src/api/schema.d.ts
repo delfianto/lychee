@@ -519,6 +519,63 @@ export interface paths {
         patch: operations["update_provider_api_providers__provider_id__patch"];
         trace?: never;
     };
+    "/api/providers/{provider_id}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Provider
+         * @description Connect a MangaDex account (OAuth2 personal client); stores secrets encrypted.
+         */
+        post: operations["connect_provider_api_providers__provider_id__connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/{provider_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disconnect Provider */
+        post: operations["disconnect_provider_api_providers__provider_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/{provider_id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Follows
+         * @description Import the connected account's follows + reading status in the background.
+         */
+        post: operations["import_follows_api_providers__provider_id__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trackers": {
         parameters: {
             query?: never;
@@ -1101,6 +1158,20 @@ export interface components {
             /** Completed */
             completed?: boolean | null;
         };
+        /**
+         * ProviderConnect
+         * @description MangaDex personal-client credentials (used once to obtain tokens; not stored).
+         */
+        ProviderConnect: {
+            /** Clientid */
+            clientId: string;
+            /** Clientsecret */
+            clientSecret: string;
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
         /** ProviderOut */
         ProviderOut: {
             /** Id */
@@ -1117,6 +1188,13 @@ export interface components {
             fetchCovers: boolean;
             /** Datasaver */
             dataSaver: boolean;
+            /**
+             * Connected
+             * @default false
+             */
+            connected: boolean;
+            /** Accountname */
+            accountName?: string | null;
         };
         /** ProviderUpdate */
         ProviderUpdate: {
@@ -2227,6 +2305,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_provider_api_providers__provider_id__connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderConnect"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_provider_api_providers__provider_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_follows_api_providers__provider_id__import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
                 };
             };
             /** @description Validation Error */

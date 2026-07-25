@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.persistence.base_model import Base, TimestampMixin
@@ -27,6 +27,11 @@ class Provider(Base, TimestampMixin):
     fetch_covers: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Download the lighter "data-saver" (JPEG) pages instead of original quality.
     data_saver: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # OAuth2 account (PART F/M4): client secret + refresh token are stored encrypted.
+    account_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    client_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Tracker(Base, TimestampMixin):

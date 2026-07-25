@@ -59,6 +59,41 @@ def _relationship_attr(relationships: list[dict[str, Any]], kind: str, attr: str
     return None
 
 
+def _parse_manga(data: dict[str, Any], language: str, *, rating: float | None = None) -> SeriesMetadata:
+    """Normalise a MangaDex manga object (with cover_art/author/artist expanded)."""
+    manga_id = data["id"]
+    attributes: dict[str, Any] = data.get("attributes", {})
+    relationships: list[dict[str, Any]] = data.get("relationships", [])
+    alt_titles = [
+        (lang, value) for entry in attributes.get("altTitles", []) for lang, value in entry.items()
+    ]
+    tags = [
+        (_localized(tag["attributes"].get("name"), language) or "", tag["attributes"].get("group", "genre"))
+        for tag in attributes.get("tags", [])
+        if tag.get("attributes")
+    ]
+    cover_file = _relationship_attr(relationships, "cover_art", "fileName")
+    links: dict[str, str] = attributes.get("links") or {}
+    return SeriesMetadata(
+        provider_series_id=manga_id,
+        title=_localized(attributes.get("title"), language) or manga_id,
+        alt_titles=alt_titles,
+        description=_localized(attributes.get("description"), language),
+        status=attributes.get("status"),
+        year=attributes.get("year"),
+        content_rating=attributes.get("contentRating"),
+        demographic=attributes.get("publicationDemographic"),
+        original_language=attributes.get("originalLanguage"),
+        tags=[(name, group) for name, group in tags if name],
+        authors=_relationship_names(relationships, "author"),
+        artists=_relationship_names(relationships, "artist"),
+        cover_url=f"{_COVERS_BASE}/{manga_id}/{cover_file}.512.jpg" if cover_file else None,
+        total_chapters=_as_int(attributes.get("lastChapter")),
+        community_rating=rating,
+        external_ids={site: value for site, value in links.items() if site in _TRACKER_LINKS},
+    )
+
+
 class MangaDexProvider:
     id = "mangadex"
 
@@ -136,45 +171,30 @@ class MangaDexProvider:
         return matches
 
     def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
-        response = self._api.get(
+        data = self._api.get(
             f"/manga/{provider_series_id}",
             params={"includes[]": ["cover_art", "author", "artist"]},
-        )
-        data = response.json()["data"]
-        attributes: dict[str, Any] = data.get("attributes", {})
-        relationships: list[dict[str, Any]] = data.get("relationships", [])
+        ).json()["data"]
+        return _parse_manga(data, language, rating=self._rating(provider_series_id))
 
-        alt_titles = [
-            (lang, value)
-            for entry in attributes.get("altTitles", [])
-            for lang, value in entry.items()
-        ]
-        tags = [
-            (_localized(tag["attributes"].get("name"), language) or "", tag["attributes"].get("group", "genre"))
-            for tag in attributes.get("tags", [])
-            if tag.get("attributes")
-        ]
-        cover_file = _relationship_attr(relationships, "cover_art", "fileName")
-        links: dict[str, str] = attributes.get("links") or {}
+    def list_follows(self, *, language: str = "en") -> list[SeriesMetadata]:
+        """The authed user's followed manga as normalised metadata (needs a Bearer token)."""
+        results: list[SeriesMetadata] = []
+        offset = 0
+        while True:
+            body = self._api.get(
+                "/user/follows/manga",
+                params={"includes[]": ["cover_art", "author", "artist"], "limit": 100, "offset": offset},
+            ).json()
+            results.extend(_parse_manga(data, language) for data in body.get("data", []))
+            offset += 100
+            if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
+                break
+        return results
 
-        return SeriesMetadata(
-            provider_series_id=provider_series_id,
-            title=_localized(attributes.get("title"), language) or provider_series_id,
-            alt_titles=alt_titles,
-            description=_localized(attributes.get("description"), language),
-            status=attributes.get("status"),
-            year=attributes.get("year"),
-            content_rating=attributes.get("contentRating"),
-            demographic=attributes.get("publicationDemographic"),
-            original_language=attributes.get("originalLanguage"),
-            tags=[(name, group) for name, group in tags if name],
-            authors=_relationship_names(relationships, "author"),
-            artists=_relationship_names(relationships, "artist"),
-            cover_url=f"{_COVERS_BASE}/{provider_series_id}/{cover_file}.512.jpg" if cover_file else None,
-            total_chapters=_as_int(attributes.get("lastChapter")),
-            community_rating=self._rating(provider_series_id),
-            external_ids={site: value for site, value in links.items() if site in _TRACKER_LINKS},
-        )
+    def reading_status(self) -> dict[str, str]:
+        """Map of manga id → reading status for the authed user."""
+        return self._api.get("/manga/status").json().get("statuses", {}) or {}
 
     def _rating(self, provider_series_id: str) -> float | None:
         """Community rating via /statistics — best-effort (never blocks metadata)."""

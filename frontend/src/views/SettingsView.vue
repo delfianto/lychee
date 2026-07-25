@@ -252,6 +252,10 @@ async function addLibrary(): Promise<void> {
 const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true, dataSaver: false });
 const providerLanguages = ["en", "ja", "ko", "zh"];
 let providerLoaded = false;
+// MangaDex account (OAuth) state + the one-time connect form.
+const account = reactive({ connected: false, name: "" });
+const connectForm = reactive({ clientId: "", clientSecret: "", username: "", password: "" });
+const connecting = ref(false);
 async function loadProvider(): Promise<void> {
   const { data } = await api.GET("/api/providers");
   const md = (data ?? []).find((p) => p.id === "mangadex") ?? (data ?? [])[0];
@@ -262,7 +266,33 @@ async function loadProvider(): Promise<void> {
     provider.autoMatch = md.autoMatch;
     provider.fetchCovers = md.fetchCovers;
     provider.dataSaver = md.dataSaver;
+    account.connected = md.connected;
+    account.name = md.accountName ?? "";
   }
+}
+async function connectAccount(): Promise<void> {
+  connecting.value = true;
+  const { error } = await api.POST("/api/providers/{provider_id}/connect", {
+    params: { path: { provider_id: provider.id } },
+    body: { ...connectForm },
+  });
+  connecting.value = false;
+  if (error) {
+    toast("Connect failed — check credentials & LYCHEE_SECRET_KEY", "error");
+    return;
+  }
+  Object.assign(connectForm, { clientId: "", clientSecret: "", username: "", password: "" });
+  await loadProvider();
+  toast("MangaDex account connected");
+}
+async function disconnectAccount(): Promise<void> {
+  await api.POST("/api/providers/{provider_id}/disconnect", { params: { path: { provider_id: provider.id } } });
+  await loadProvider();
+  toast("Disconnected", "info");
+}
+async function importFollows(): Promise<void> {
+  await api.POST("/api/providers/{provider_id}/import", { params: { path: { provider_id: provider.id } } });
+  toast("Importing your MangaDex follows…");
 }
 watch(
   () => ({ ...provider }),
@@ -526,6 +556,41 @@ onMounted(async () => {
                     </div>
                     <input v-model="provider.dataSaver" type="checkbox" class="toggle toggle-primary toggle-sm" />
                   </label>
+
+                  <!-- MangaDex account (OAuth) -->
+                  <div class="divider my-1 text-xs text-base-content/40">Account</div>
+                  <div v-if="account.connected" class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2 text-sm">
+                      <Check class="size-4 text-success" />
+                      Connected as <span class="font-medium">{{ account.name || "MangaDex user" }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                      <button class="btn btn-primary btn-sm gap-1" @click="importFollows">
+                        <Download class="size-4" />Import follows
+                      </button>
+                      <button class="btn btn-ghost btn-sm" @click="disconnectAccount">Disconnect</button>
+                    </div>
+                  </div>
+                  <div v-else class="flex flex-col gap-2">
+                    <p class="text-xs text-base-content/50">
+                      Connect a MangaDex
+                      <a href="https://mangadex.org/settings" target="_blank" class="link" rel="noopener">personal API client</a>
+                      to import your follows &amp; reading status. Secrets are encrypted at rest.
+                    </p>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                      <input v-model="connectForm.clientId" class="input input-bordered input-sm" placeholder="Client ID" />
+                      <input v-model="connectForm.clientSecret" type="password" class="input input-bordered input-sm" placeholder="Client secret" />
+                      <input v-model="connectForm.username" class="input input-bordered input-sm" placeholder="Username" />
+                      <input v-model="connectForm.password" type="password" class="input input-bordered input-sm" placeholder="Password" />
+                    </div>
+                    <button
+                      class="btn btn-primary btn-sm self-start gap-1"
+                      :disabled="connecting || !connectForm.clientId || !connectForm.password"
+                      @click="connectAccount"
+                    >
+                      <Link2 class="size-4" />{{ connecting ? "Connecting…" : "Connect" }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>

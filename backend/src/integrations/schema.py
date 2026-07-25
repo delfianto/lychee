@@ -13,6 +13,8 @@ class ProviderOut(CamelModel):
     auto_match: bool
     fetch_covers: bool
     data_saver: bool
+    connected: bool = False
+    account_name: str | None = None
 
 
 class ProviderUpdate(CamelModel):
@@ -21,6 +23,15 @@ class ProviderUpdate(CamelModel):
     auto_match: bool | None = None
     fetch_covers: bool | None = None
     data_saver: bool | None = None
+
+
+class ProviderConnect(CamelModel):
+    """MangaDex personal-client credentials (used once to obtain tokens; not stored)."""
+
+    client_id: str
+    client_secret: str
+    username: str
+    password: str
 
 
 class TrackerOut(CamelModel):
