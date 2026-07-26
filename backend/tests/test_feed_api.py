@@ -79,7 +79,9 @@ def test_search(client: TestClient, db_session: Session) -> None:
     make_series(db_session, title="Frieren")
     db_session.commit()
 
-    assert [s["title"] for s in client.get("/api/search", params={"q": "ber"}).json()] == ["Berserk"]
+    assert [s["title"] for s in client.get("/api/search", params={"q": "ber"}).json()] == [
+        "Berserk"
+    ]
     assert client.get("/api/search", params={"q": ""}).json() == []
 
 

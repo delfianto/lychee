@@ -36,7 +36,12 @@ def _grant(client: httpx.Client | None, data: dict[str, str]) -> TokenPair:
 
 
 def password_grant(
-    *, client_id: str, client_secret: str, username: str, password: str, client: httpx.Client | None = None
+    *,
+    client_id: str,
+    client_secret: str,
+    username: str,
+    password: str,
+    client: httpx.Client | None = None,
 ) -> TokenPair:
     return _grant(
         client,

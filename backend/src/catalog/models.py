@@ -80,9 +80,7 @@ class Series(BaseModel):
         String(16), default="safe", index=True, nullable=False
     )
     # shonen | shojo | seinen | josei | none (system Tag ids)
-    demographic: Mapped[str] = mapped_column(
-        String(16), default="none", index=True, nullable=False
-    )
+    demographic: Mapped[str] = mapped_column(String(16), default="none", index=True, nullable=False)
 
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     origin_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
@@ -99,6 +97,10 @@ class Series(BaseModel):
     total_chapters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Remote chapters not yet present locally, from the last sync.
     available_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # When the provider chapter index was last successfully refreshed (even if empty).
+    chapter_index_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Physical binding — relative to the library root; null for download-only.
     path_rel: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -129,13 +131,16 @@ class Series(BaseModel):
     title_variants: Mapped[list[TitleVariant]] = relationship(
         back_populates="series", cascade="all, delete-orphan"
     )
-    books: Mapped[list[Book]] = relationship(
-        back_populates="series", cascade="all, delete-orphan"
-    )
+    books: Mapped[list[Book]] = relationship(back_populates="series", cascade="all, delete-orphan")
     chapters: Mapped[list[Chapter]] = relationship(
         back_populates="series",
         cascade="all, delete-orphan",
         order_by="Chapter.number_sort",
+    )
+    provider_chapters: Mapped[list[ProviderChapter]] = relationship(
+        back_populates="series",
+        cascade="all, delete-orphan",
+        order_by="ProviderChapter.number_sort",
     )
     tags: Mapped[list[Tag]] = relationship(secondary="series_tag")
 
@@ -232,3 +237,38 @@ class Chapter(BaseModel):
 
     series: Mapped[Series] = relationship(back_populates="chapters")
     book: Mapped[Book] = relationship(back_populates="chapters")
+
+
+class ProviderChapter(BaseModel):
+    """Cached remote chapter index entry (e.g. MangaDex feed), without pages on disk.
+
+    Local ``Chapter`` rows (with a Book) remain the source of truth for readable content.
+    This table lets a matched series show available chapters before anything is downloaded,
+    with download status joined at read time from ``Chapter`` / ``DownloadTask``.
+    """
+
+    __tablename__ = "provider_chapter"
+    __table_args__ = (
+        UniqueConstraint(
+            "series_id",
+            "provider",
+            "provider_chapter_id",
+            name="uq_provider_chapter_identity",
+        ),
+    )
+
+    series_id: Mapped[str] = mapped_column(
+        ForeignKey("series.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_chapter_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    number_sort: Mapped[float | None] = mapped_column(Float, index=True, nullable=True)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    language: Mapped[str] = mapped_column(String(16), default="en", nullable=False)
+    group_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    series: Mapped[Series] = relationship(back_populates="provider_chapters")

@@ -48,7 +48,9 @@ def _uses_maps(session: Session) -> tuple[dict[str, int], dict[str, int], dict[s
     return tag_uses, ratings, demographics
 
 
-def _uses(tag: Tag, tag_uses: dict[str, int], ratings: dict[str, int], demos: dict[str, int]) -> int:
+def _uses(
+    tag: Tag, tag_uses: dict[str, int], ratings: dict[str, int], demos: dict[str, int]
+) -> int:
     if tag.group == "content_rating":
         return ratings.get(tag.id, 0)
     if tag.group == "demographic":
@@ -56,7 +58,9 @@ def _uses(tag: Tag, tag_uses: dict[str, int], ratings: dict[str, int], demos: di
     return tag_uses.get(tag.id, 0)
 
 
-def _to_item(tag: Tag, maps: tuple[dict[str, int], dict[str, int], dict[str, int]]) -> TaxonomyItemOut:
+def _to_item(
+    tag: Tag, maps: tuple[dict[str, int], dict[str, int], dict[str, int]]
+) -> TaxonomyItemOut:
     return TaxonomyItemOut(
         id=tag.id,
         name=tag.name,
@@ -78,9 +82,7 @@ def list_taxonomy(
     if q:
         stmt = stmt.where(Tag.name.ilike(f"%{q}%"))
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    tags = session.scalars(
-        stmt.order_by(Tag.name).offset(page * page_size).limit(page_size)
-    ).all()
+    tags = session.scalars(stmt.order_by(Tag.name).offset(page * page_size).limit(page_size)).all()
     maps = _uses_maps(session)
     return OffsetPage[TaxonomyItemOut](
         items=[_to_item(tag, maps) for tag in tags], total=total, page=page, page_size=page_size

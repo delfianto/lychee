@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // Settings → Downloads: the download queue + the MangaDex sync card. Owns its own
 // SSE wiring — the table reloads on throttled download.* events and on sync.done.
-import { Globe, Pause, Play, RefreshCw, X } from "lucide-vue-next";
+import { Globe, Pause, Play, RefreshCw, Square, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import { api } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
 import type { components } from "../../api/schema";
+import ConfirmDialog from "../../components/ConfirmDialog.vue";
+import CoverImage from "../../components/CoverImage.vue";
 import { toast } from "../../lib/toast";
 
 interface DlRow {
@@ -16,6 +18,8 @@ interface DlRow {
   chapter: string;
   status: string;
   progress: number;
+  phase: string | null;
+  detail: string | null;
   size: string;
 }
 const dl = ref<DlRow[]>([]);
@@ -35,6 +39,12 @@ const dlBadge: Record<string, string> = {
   failed: "badge-error",
 };
 const hasDone = computed(() => dl.value.some((d) => d.status === "done"));
+const hasQueued = computed(() => dl.value.some((d) => d.status === "queued"));
+const hasPaused = computed(() => dl.value.some((d) => d.status === "paused"));
+const hasActive = computed(() =>
+  dl.value.some((d) => d.status === "queued" || d.status === "downloading" || d.status === "paused"),
+);
+
 function formatBytes(n: number | null | undefined): string {
   if (!n) return "—";
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
@@ -46,8 +56,19 @@ function mapRows(rows: components["schemas"]["DownloadTaskOut"][] | undefined): 
     chapter: d.chapter,
     status: d.status,
     progress: d.progress,
+    phase: d.phase ?? null,
+    detail: d.detail ?? null,
     size: formatBytes(d.sizeBytes),
   }));
+}
+
+/** Label for the in-flight progress badge: Fetching / Encoding with optional page count. */
+function progressLabel(d: DlRow): string {
+  if (d.status !== "downloading") return dlLabel[d.status] ?? d.status;
+  const phase =
+    d.phase === "encoding" ? "Encoding" : d.phase === "fetching" ? "Fetching" : "Downloading";
+  const pages = d.detail ? ` · ${d.detail}` : "";
+  return `${phase}${pages} · ${d.progress}%`;
 }
 async function loadDownloads(): Promise<void> {
   const { data } = await api.GET("/api/downloads");
@@ -85,6 +106,44 @@ async function clearDone(): Promise<void> {
   await loadDownloads();
 }
 
+const cancelAllOpen = ref(false);
+
+async function runBulkAction(action: "pause-all" | "cancel-all" | "resume-all"): Promise<void> {
+  const { data, error, response } = await api.POST("/api/downloads", {
+    body: { action },
+  });
+  if (error) {
+    toast("Couldn't update downloads", "error");
+    return;
+  }
+  // Bulk actions return the refreshed list (200); create returns 202 TaskOut.
+  if (response.status === 200 && Array.isArray(data)) {
+    dl.value = mapRows(data as components["schemas"]["DownloadTaskOut"][]);
+  } else {
+    await loadDownloads();
+  }
+  const msg =
+    action === "pause-all"
+      ? "Queued downloads paused"
+      : action === "cancel-all"
+        ? "Downloads cancelled"
+        : "Paused downloads resumed";
+  toast(msg);
+}
+
+function bulkAction(action: "pause-all" | "cancel-all" | "resume-all"): void {
+  if (action === "cancel-all") {
+    cancelAllOpen.value = true;
+    return;
+  }
+  void runBulkAction(action);
+}
+
+function confirmCancelAll(): void {
+  cancelAllOpen.value = false;
+  void runBulkAction("cancel-all");
+}
+
 const disposeDone = onTaskDone((task) => {
   if (task.kind === "download") {
     void loadDownloads();
@@ -97,8 +156,12 @@ const disposeDone = onTaskDone((task) => {
 // While a download runs, refresh the table on progress events (throttled) so rows
 // climb mid-chapter rather than appearing only when the whole job finishes.
 let dlReloadTimer: ReturnType<typeof setTimeout> | null = null;
-const disposeProgress = onTaskEvent((event) => {
+const disposeProgress = onTaskEvent((event, task) => {
   if (!event.startsWith("download.") || dlReloadTimer !== null) return;
+  // Surface phase text (Fetching… / Encoding…) from the live task detail if present.
+  if (task.detail && task.status === "running") {
+    // soft hint: next loadDownloads will get DB progress %
+  }
   dlReloadTimer = setTimeout(() => {
     dlReloadTimer = null;
     void loadDownloads();
@@ -144,9 +207,35 @@ onMounted(() => {
     </section>
 
     <section class="flex flex-col gap-3">
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Downloads</h3>
-        <button class="btn btn-ghost btn-sm" :disabled="!hasDone" @click="clearDone">Clear completed</button>
+        <div class="flex flex-wrap items-center gap-1">
+          <button
+            class="btn btn-ghost btn-sm gap-1"
+            :disabled="!hasQueued"
+            title="Pause all queued chapters"
+            @click="bulkAction('pause-all')"
+          >
+            <Pause class="size-4" />Pause all
+          </button>
+          <button
+            class="btn btn-ghost btn-sm gap-1"
+            :disabled="!hasPaused"
+            title="Resume all paused chapters"
+            @click="bulkAction('resume-all')"
+          >
+            <Play class="size-4" />Resume all
+          </button>
+          <button
+            class="btn btn-ghost btn-sm gap-1 text-error"
+            :disabled="!hasActive"
+            title="Cancel all downloads"
+            @click="bulkAction('cancel-all')"
+          >
+            <Square class="size-4" />Cancel all
+          </button>
+          <button class="btn btn-ghost btn-sm" :disabled="!hasDone" @click="clearDone">Clear completed</button>
+        </div>
       </div>
       <div class="flex flex-col gap-1.5">
         <div
@@ -154,7 +243,7 @@ onMounted(() => {
           :key="d.id"
           class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2.5"
         >
-          <img :src="d.series.coverUrl" :alt="d.series.title" class="cover h-12 shrink-0 rounded object-cover" />
+          <CoverImage :src="d.series.coverUrl" :alt="d.series.title" class="cover h-12 w-8 shrink-0 rounded" />
           <div class="min-w-0 grow">
             <div class="flex items-center gap-2">
               <span class="truncate text-sm font-medium">{{ d.series.title }}</span>
@@ -162,16 +251,17 @@ onMounted(() => {
             </div>
             <div class="mt-1 flex items-center gap-2 text-xs">
               <span class="badge badge-sm" :class="dlBadge[d.status]">
-                {{ d.status === "downloading" ? `Downloading ${d.progress}%` : dlLabel[d.status] }}
+                {{ progressLabel(d) }}
               </span>
               <span class="text-base-content/50">{{ d.size }}</span>
             </div>
-            <progress
-              v-if="d.status === 'downloading'"
-              class="progress progress-primary mt-1.5 h-1"
-              :value="d.progress"
-              max="100"
-            ></progress>
+            <div v-if="d.status === 'downloading'" class="mt-1.5 flex flex-col gap-0.5">
+              <div class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/50">
+                <span :class="d.phase === 'fetching' ? 'text-primary font-semibold' : ''">Fetch</span>
+                <span :class="d.phase === 'encoding' ? 'text-primary font-semibold' : ''">Encode</span>
+              </div>
+              <progress class="progress progress-primary h-1.5 w-full" :value="d.progress" max="100" />
+            </div>
           </div>
           <div class="flex shrink-0 items-center gap-1">
             <button
@@ -206,5 +296,15 @@ onMounted(() => {
         <p v-if="!dl.length" class="py-8 text-center text-sm text-base-content/50">No downloads.</p>
       </div>
     </section>
+
+    <ConfirmDialog
+      :open="cancelAllOpen"
+      title="Cancel all downloads?"
+      message="Cancel every active download and clear the queue? In-flight chapters will stop after the current work unit; this cannot be undone."
+      confirm-label="Cancel all"
+      danger
+      @confirm="confirmCancelAll"
+      @cancel="cancelAllOpen = false"
+    />
   </div>
 </template>

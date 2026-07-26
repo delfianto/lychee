@@ -30,15 +30,60 @@ function toUpdate(u: ApiUpdate): RecentUpdate {
 
 function toChapter(c: ApiChapter): Chapter {
   return {
-    id: c.id,
+    id: c.id ?? null,
     volume: c.volume,
     number: c.number,
     title: c.title ?? undefined,
     group: c.group ?? undefined,
     language: c.language,
     uploadedAt: c.uploadedAt ? relativeTime(c.uploadedAt) : "",
-    read: c.read,
-    comments: c.comments,
+    read: c.read ?? false,
+    comments: c.comments ?? 0,
+    status: (c.status as Chapter["status"]) ?? "downloaded",
+    providerChapterId: c.providerChapterId ?? null,
+  };
+}
+
+/** Queue one series (or selected remote chapters) for download. */
+export async function queueDownload(
+  seriesId: string,
+  providerChapterIds?: string[],
+): Promise<void> {
+  const { error, response } = await api.POST("/api/downloads", {
+    body: {
+      seriesId,
+      ...(providerChapterIds?.length ? { providerChapterIds } : {}),
+    },
+  });
+  if (error) {
+    const body = error as { error?: { message?: string }; detail?: string };
+    const msg =
+      body?.error?.message ??
+      (typeof body?.detail === "string" ? body.detail : null) ??
+      `Download failed (${response.status})`;
+    throw new Error(msg);
+  }
+}
+
+export interface DeleteChapterResult {
+  mode: "provider" | "local" | string;
+  redownloadable: boolean;
+  seriesId: string;
+}
+
+/** Remove local chapter files (provider-aware: MD keeps series / re-downloadable). */
+export async function deleteChapterLocal(chapterId: string): Promise<DeleteChapterResult> {
+  const { data, error, response } = await api.DELETE("/api/chapters/{chapter_id}", {
+    params: { path: { chapter_id: chapterId } },
+  });
+  if (error || !data) {
+    const body = error as { error?: { message?: string } } | undefined;
+    throw new Error(body?.error?.message ?? `Delete failed (${response.status})`);
+  }
+  return {
+    mode: data.mode,
+    redownloadable: data.redownloadable,
+    seriesId: data.seriesId,
   };
 }
 
@@ -126,7 +171,8 @@ export type SeriesQuery = NonNullable<paths["/api/series"]["get"]["parameters"][
 /** Cursor-paginated series list: accumulate pages, fetch more on demand. */
 export function useSeriesList() {
   const items = ref<Series[]>([]);
-  const loading = ref(false);
+  // Start true so the first paint shows a loader, not a false "empty" message.
+  const loading = ref(true);
   const failed = ref(false);
   const done = ref(false);
   const cursor = ref<string | null>(null);
@@ -134,7 +180,7 @@ export function useSeriesList() {
   let started = false; // no paging until the first reload sets a real query
 
   async function fetchPage(reset: boolean): Promise<void> {
-    if (loading.value) return;
+    if (loading.value && started && !reset) return;
     loading.value = true;
     const query: SeriesQuery = { ...params, limit: 24 };
     if (!reset && cursor.value) query.cursor = cursor.value;
@@ -147,6 +193,7 @@ export function useSeriesList() {
       failed.value = false;
     } else if (reset) {
       failed.value = true; // distinguish a load failure from a genuinely empty grid
+      items.value = [];
     }
     loading.value = false;
   }
@@ -157,7 +204,9 @@ export function useSeriesList() {
     cursor.value = null;
     done.value = false;
     failed.value = false;
-    items.value = [];
+    // Stale-while-revalidate: keep previous items visible until the new page lands
+    // so tab/filter changes don't flash an empty grid.
+    loading.value = true;
     await fetchPage(true);
   }
 

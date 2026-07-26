@@ -14,10 +14,14 @@ class _MatchingProvider:
 
     id = "mangadex"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return []
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         return []
 
     def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:

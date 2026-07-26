@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import type { Series } from "../types";
+import CoverImage from "./CoverImage.vue";
 
 defineProps<{ series: Series[] }>();
 
@@ -63,10 +64,10 @@ onBeforeUnmount(() => ro?.disconnect());
         :to="`/series/${s.id}`"
         class="group w-36 shrink-0 sm:w-44"
       >
-        <img
+        <CoverImage
           :src="s.coverUrl"
           :alt="s.title"
-          class="cover w-full rounded-box object-cover transition group-hover:opacity-90"
+          class="cover w-full rounded-box transition group-hover:opacity-90"
         />
         <p class="mt-1.5 line-clamp-2 text-sm font-medium leading-tight">{{ s.title }}</p>
       </RouterLink>

@@ -10,7 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog import repository as repo
-from src.catalog.models import Series, SeriesCredit
+from src.catalog.models import ProviderChapter, Series, SeriesCredit
+from src.catalog.remote_chapters import (
+    download_status_map,
+    ensure_chapter_index,
+    local_by_number_lang,
+    local_by_provider_id,
+)
 from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
 from src.catalog.schema import (
     ChapterDetailOut,
@@ -27,6 +33,7 @@ from src.catalog.schema import (
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+from src.progress.models import ReadingProgress
 from src.taxonomy.models import Tag
 from src.trackers.sync import enqueue_push
 
@@ -194,8 +201,17 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
             raise BadRequestError(f"invalid library status: {status!r}")
         shelf_changed = series.library_status != status
         series.library_status = status
+    rating_changed = False
     if "rating" in fields:
-        series.user_rating = fields["rating"]  # may be None to clear
+        raw = fields["rating"]
+        if raw is None:
+            series.user_rating = None
+        else:
+            score = float(raw)
+            if not 1.0 <= score <= 10.0:
+                raise BadRequestError("rating must be between 1 and 10 (or null)")
+            series.user_rating = score
+        rating_changed = True
 
     # --- manual metadata (locks each edited field against provider refresh) ---
     locked = set(series.locked_fields_json or [])
@@ -257,7 +273,8 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
     series.locked_fields_json = sorted(locked) or None
 
     session.commit()
-    if shelf_changed:  # push the new shelf to connected sinks (trackers + MangaDex), best-effort
+    # Shelf or personal rating → push to connected sinks (trackers + MangaDex), best-effort.
+    if shelf_changed or rating_changed:
         enqueue_push(session, series_id)
     row = repo.get_series(session, series_id)
     assert row is not None  # just updated
@@ -276,30 +293,132 @@ def to_chapter_out(row: ChapterRow) -> ChapterOut:
         uploaded_at=c.source_uploaded_at or c.created_at,
         read=row.read,
         comments=c.comment_count,
+        status="downloaded",
+        provider_chapter_id=c.provider_chapter_id,
     )
 
 
 def list_chapters(
     session: Session, series_id: str, *, language: str | None, order: str
 ) -> list[VolumeGroupOut]:
-    """Chapters grouped by volume, preserving the requested chapter order. The "No Volume"
-    group (loose chapters) sorts first; numbered volumes follow the chapter order direction."""
-    if session.get(Series, series_id) is None:
+    """Chapters grouped by volume, preserving the requested chapter order.
+
+    For series matched to a provider, merges the cached remote feed (``ProviderChapter``)
+    with local chapters and live download-queue status so undownloaded chapters appear
+    as ``available`` / ``queued`` / etc. The "No Volume" group sorts first; numbered
+    volumes follow the chapter order direction.
+    """
+    series = session.get(Series, series_id)
+    if series is None:
         raise NotFoundError(f"series {series_id!r} not found")
+
+    # Best-effort: pull MangaDex feed when cache is empty/stale so first open works.
+    ensure_chapter_index(session, series_id)
+
     ascending = order == "asc"
     rows = repo.list_chapters(session, series_id, language=language, descending=not ascending)
+    local_pid = local_by_provider_id(session, series_id)
+    local_num = local_by_number_lang(session, series_id)
+    dl_status = download_status_map(session, series_id)
+    read_ids = set(
+        session.scalars(
+            select(ReadingProgress.chapter_id).where(
+                ReadingProgress.series_id == series_id,
+                ReadingProgress.completed.is_(True),
+            )
+        )
+    )
+
+    # Start from remote index when present; otherwise local-only (scanned series).
+    remote_rows = list(
+        session.scalars(
+            select(ProviderChapter)
+            .where(ProviderChapter.series_id == series_id)
+            .order_by(
+                ProviderChapter.number_sort.asc()
+                if ascending
+                else ProviderChapter.number_sort.desc(),
+                ProviderChapter.id.asc() if ascending else ProviderChapter.id.desc(),
+            )
+        )
+    )
+    if language:
+        remote_rows = [r for r in remote_rows if r.language == language]
+
+    chapters_out: list[ChapterOut] = []
+    if remote_rows:
+        covered_local_ids: set[str] = set()
+        for remote in remote_rows:
+            local = local_pid.get(remote.provider_chapter_id)
+            if local is None and remote.number is not None:
+                local = local_num.get((remote.number, remote.language))
+            if local is not None:
+                covered_local_ids.add(local.id)
+                status = "downloaded"
+                chapters_out.append(
+                    ChapterOut(
+                        id=local.id,
+                        volume=local.volume if local.volume is not None else remote.volume,
+                        number=local.number or remote.number or "",
+                        title=local.title or remote.title,
+                        group=local.group_name or remote.group_name,
+                        language=local.language,
+                        uploaded_at=local.source_uploaded_at
+                        or remote.published_at
+                        or local.created_at,
+                        read=local.id in read_ids,
+                        comments=local.comment_count,
+                        status=status,
+                        provider_chapter_id=remote.provider_chapter_id,
+                    )
+                )
+            else:
+                status = dl_status.get(remote.provider_chapter_id, "available")
+                chapters_out.append(
+                    ChapterOut(
+                        id=None,
+                        volume=remote.volume,
+                        number=remote.number or "",
+                        title=remote.title,
+                        group=remote.group_name,
+                        language=remote.language,
+                        uploaded_at=remote.published_at,
+                        read=False,
+                        comments=0,
+                        status=status,
+                        provider_chapter_id=remote.provider_chapter_id,
+                    )
+                )
+        # Local chapters not represented in the remote index (e.g. scan-only extras).
+        for row in rows:
+            if row.chapter.id not in covered_local_ids:
+                chapters_out.append(to_chapter_out(row))
+    else:
+        chapters_out = [to_chapter_out(row) for row in rows]
+
+    # Sort merged list by number_sort when we mixed remote + local extras.
+    def _sort_key(c: ChapterOut) -> tuple[float, str]:
+        try:
+            n = float(c.number) if c.number else 0.0
+        except ValueError:
+            n = 0.0
+        return (n, c.provider_chapter_id or c.id or "")
+
+    chapters_out.sort(key=_sort_key, reverse=not ascending)
+
     groups: list[VolumeGroupOut] = []
     by_volume: dict[int | None, VolumeGroupOut] = {}
-    for row in rows:
-        volume = row.chapter.volume
+    for chapter in chapters_out:
+        volume = chapter.volume
         group = by_volume.get(volume)
         if group is None:
             group = VolumeGroupOut(volume=volume, chapters=[])
             by_volume[volume] = group
             groups.append(group)
-        group.chapters.append(to_chapter_out(row))
-    # No Volume (null) first, then numbered volumes ascending or descending to match chapters.
-    groups.sort(key=lambda g: (g.volume is not None, (g.volume or 0) if ascending else -(g.volume or 0)))
+        group.chapters.append(chapter)
+    groups.sort(
+        key=lambda g: (g.volume is not None, (g.volume or 0) if ascending else -(g.volume or 0))
+    )
     return groups
 
 

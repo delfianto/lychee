@@ -111,7 +111,9 @@ def test_pattern_language_token_lowercased() -> None:
 
 
 def test_pattern_tags_token_is_comma_separated_and_trimmed() -> None:
-    r = parse_pattern("Vinland Saga [ action ,  dark fantasy , seinen ] c001", "{series} [{tags}] c{chapter}")
+    r = parse_pattern(
+        "Vinland Saga [ action ,  dark fantasy , seinen ] c001", "{series} [{tags}] c{chapter}"
+    )
     assert r is not None
     assert r.series == "Vinland Saga"
     assert r.tags == ("action", "dark fantasy", "seinen")  # comma-separated, each trimmed

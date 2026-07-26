@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Series, SeriesCredit, TitleVariant
@@ -56,6 +56,10 @@ def apply_metadata(
     if unlocked("cover") and fetch_covers and meta.cover_url:
         series.cover_source = meta.cover_url
     if unlocked("credits"):
+        # Explicit delete-then-insert avoids SQLAlchemy INSERT-before-DELETE order
+        # tripping UNIQUE(series_id, name, role) when re-applying the same credits.
+        _ = session.execute(delete(SeriesCredit).where(SeriesCredit.series_id == series.id))
+        session.flush()
         series.credits = _build_credits(series.id, meta)
     if unlocked("tags"):
         series.tags = reconcile_tags(session, meta.tags)
@@ -80,14 +84,23 @@ def _build_variants(series_id: str, meta: SeriesMetadata) -> list[TitleVariant]:
 
 
 def _build_credits(series_id: str, meta: SeriesMetadata) -> list[SeriesCredit]:
-    credits = [
-        SeriesCredit(series_id=series_id, name=name, role="author", position=position)
-        for position, name in enumerate(meta.authors)
-    ]
-    credits += [
-        SeriesCredit(series_id=series_id, name=name, role="artist", position=position)
-        for position, name in enumerate(meta.artists)
-    ]
+    """Build credits, de-duplicating identical (name, role) pairs from the provider."""
+    credits: list[SeriesCredit] = []
+    seen: set[tuple[str, str]] = set()
+    for role, names in (("author", meta.authors), ("artist", meta.artists)):
+        for name in names:
+            key = (name, role)
+            if key in seen:
+                continue
+            seen.add(key)
+            credits.append(
+                SeriesCredit(
+                    series_id=series_id,
+                    name=name,
+                    role=role,
+                    position=len([c for c in credits if c.role == role]),
+                )
+            )
     return credits
 
 

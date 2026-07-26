@@ -6,6 +6,8 @@ import { RouterLink } from "vue-router";
 import { toast } from "../lib/toast";
 import { useCollections } from "../stores/collections";
 
+defineOptions({ name: "ListsView" });
+
 const collections = useCollections();
 const creating = ref(false);
 const newName = ref("");

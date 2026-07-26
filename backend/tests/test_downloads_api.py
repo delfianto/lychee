@@ -7,11 +7,12 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy.orm import Session
+from src.downloads.downloader import chapter_path_rel
 from src.downloads.provider import RemoteChapter, register_provider
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
 from src.tasks.queue import queue
 
-from tests.support import make_series
+from tests.support import ensure_manga_library, make_series
 
 
 def _png() -> bytes:
@@ -23,20 +24,37 @@ def _png() -> bytes:
 class _FakeProvider:
     id = "fake"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return [
-            RemoteChapter("fc1", "1", 1, "First", "en", group_name="Scan Team", published_at="2020-05-05T00:00:00+00:00"),
+            RemoteChapter(
+                "fc1",
+                "1",
+                1,
+                "First",
+                "en",
+                group_name="Scan Team",
+                published_at="2020-05-05T00:00:00+00:00",
+            ),
             RemoteChapter("fc2", "2", 1, None, "en", group_name="Scan Team"),
         ]
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
-        return [_png(), _png()]
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
+        pages = [_png(), _png()]
+        if on_page is not None:
+            for i, _ in enumerate(pages, start=1):
+                on_page(i, len(pages))
+        return pages
 
 
 register_provider(_FakeProvider())
 
 
-def _linked_series(db_session: Session):
+def _linked_series(db_session: Session, manga_root: Path):
+    ensure_manga_library(db_session, manga_root)
     series = make_series(db_session, title="Downloaded", kind="manga")
     series.provider = "fake"
     series.provider_series_id = "remote-1"
@@ -44,10 +62,21 @@ def _linked_series(db_session: Session):
     return series
 
 
+def test_download_requires_manga_library(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="NoLib", kind="manga")
+    series.provider = "fake"
+    series.provider_series_id = "remote-x"
+    db_session.commit()
+    resp = client.post("/api/downloads", json={"seriesId": series.id})
+    assert resp.status_code == 400
+    assert "manga library" in resp.json()["error"]["message"].lower()
+
+
 def test_download_creates_chapters_and_avif_pages(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
-    series = _linked_series(db_session)
+    manga_root = tmp_path / "manga"
+    series = _linked_series(db_session, manga_root)
 
     resp = client.post("/api/downloads", json={"seriesId": series.id})
     assert resp.status_code == 202
@@ -63,8 +92,15 @@ def test_download_creates_chapters_and_avif_pages(
     groups = [c["group"] for group in chapters for c in group["chapters"]]
     assert "Scan Team" in groups  # scanlation group carried through from the feed
 
+    # Human-readable layout under the manga library (not storage/downloads)
+    assert (manga_root / "Downloaded" / "Vol.01" / "Ch.1 - First.cbz").is_file()
+    assert (manga_root / "Downloaded" / "Vol.01" / "Ch.2.cbz").is_file()
+    assert not (tmp_path / "storage" / "downloads").exists() or not any(
+        (tmp_path / "storage" / "downloads").rglob("*.cbz")
+    )
+
     # a downloaded page is served as AVIF
-    chapter_id = chapters[0]["chapters"][0]["id"]
+    chapter_id = next(c["id"] for group in chapters for c in group["chapters"] if c["id"])
     page = client.get(f"/api/chapters/{chapter_id}/pages/1")
     assert page.status_code == 200
     assert page.headers["content-type"] == "image/avif"
@@ -73,19 +109,20 @@ def test_download_creates_chapters_and_avif_pages(
 def test_download_warms_series_cover(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
-    series = _linked_series(db_session)
+    manga_root = tmp_path / "manga"
+    series = _linked_series(db_session, manga_root)
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
     queue.wait_idle()
 
-    # The cover is warmed by the download worker (no /cover request made here).
     store = ThumbnailStore(tmp_path / "storage" / "thumbnails")
-    assert store.exists(series.id, ThumbVariant.COVER)  # derived 320px grid thumbnail
-    # a portable Cover.avif is written beside the downloaded chapters (managed library)
-    assert (tmp_path / "storage" / "downloads" / series.id / "Cover.avif").is_file()
+    assert store.exists(series.id, ThumbVariant.COVER)
+    assert (manga_root / "Downloaded" / "Cover.avif").is_file()
 
 
-def test_download_is_idempotent_and_listed(client: TestClient, db_session: Session) -> None:
-    series = _linked_series(db_session)
+def test_download_is_idempotent_and_listed(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series = _linked_series(db_session, tmp_path / "manga")
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
     queue.wait_idle()
 
@@ -100,7 +137,10 @@ def test_download_is_idempotent_and_listed(client: TestClient, db_session: Sessi
     assert listed[0]["series"]["title"] == "Downloaded"
 
 
-def test_download_requires_provider(client: TestClient, db_session: Session) -> None:
+def test_download_requires_provider(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    ensure_manga_library(db_session, tmp_path / "manga")
     series = make_series(db_session, title="Unlinked")
     db_session.commit()
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 400
@@ -115,18 +155,29 @@ class _BlockingProvider:
         self.started = threading.Event()
         self.gate = threading.Event()
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return [RemoteChapter("bc1", "1", 1, None, "en")]
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         self.started.set()
         _ = self.gate.wait(timeout=5)
-        return [_png(), _png()]
+        pages = [_png(), _png()]
+        if on_page is not None:
+            for i, _ in enumerate(pages, start=1):
+                on_page(i, len(pages))
+        return pages
 
 
-def test_download_row_visible_while_running(client: TestClient, db_session: Session) -> None:
+def test_download_row_visible_while_running(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
     provider = _BlockingProvider()
     register_provider(provider)
+    ensure_manga_library(db_session, tmp_path / "manga")
     series = make_series(db_session, title="Blocking", kind="manga")
     series.provider = "blocking"
     series.provider_series_id = "remote-b"
@@ -135,15 +186,17 @@ def test_download_row_visible_while_running(client: TestClient, db_session: Sess
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
     assert provider.started.wait(2)  # worker began the (blocked) chapter fetch
     try:
-        # the row is committed as "downloading" before the chapter finishes
         rows = client.get("/api/downloads").json()
         assert len(rows) == 1
         assert rows[0]["status"] == "downloading"
+        assert rows[0]["phase"] == "fetching"
     finally:
         provider.gate.set()  # release the worker regardless of the assertions
 
     queue.wait_idle()
-    assert client.get("/api/downloads").json()[0]["status"] == "done"
+    done = client.get("/api/downloads").json()[0]
+    assert done["status"] == "done"
+    assert done.get("phase") in (None, "")
 
 
 class _GatedMultiProvider:
@@ -155,28 +208,37 @@ class _GatedMultiProvider:
         self.started = threading.Event()
         self.gate = threading.Event()
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return [RemoteChapter("gc1", "1", 1, None, "en"), RemoteChapter("gc2", "2", 1, None, "en")]
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         if chapter.provider_chapter_id == "gc1":
             self.started.set()
             _ = self.gate.wait(timeout=5)
-        return [_png(), _png()]
+        pages = [_png(), _png()]
+        if on_page is not None:
+            for i, _ in enumerate(pages, start=1):
+                on_page(i, len(pages))
+        return pages
 
 
 def test_pause_holds_queued_chapter_then_resume_downloads_it(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
     provider = _GatedMultiProvider()
     register_provider(provider)
+    ensure_manga_library(db_session, tmp_path / "manga")
     series = make_series(db_session, title="Gated", kind="manga")
     series.provider = "gated"
     series.provider_series_id = "remote-g"
     db_session.commit()
 
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
-    assert provider.started.wait(2)  # Ch.1 fetch began (blocked); Ch.2 sits queued behind it
+    assert provider.started.wait(2)
     try:
         rows = {r["chapter"]: r for r in client.get("/api/downloads").json()}
         assert rows["Ch. 1"]["status"] == "downloading"
@@ -186,10 +248,9 @@ def test_pause_holds_queued_chapter_then_resume_downloads_it(
         assert paused.status_code == 200
         assert {r["chapter"]: r["status"] for r in paused.json()}["Ch. 2"] == "paused"
     finally:
-        provider.gate.set()  # release Ch.1 regardless of the assertions
+        provider.gate.set()
     queue.wait_idle()
 
-    # Ch.1 finished; the runner skipped the paused Ch.2 rather than downloading it
     held = {r["chapter"]: r["status"] for r in client.get("/api/downloads").json()}
     assert held == {"Ch. 1": "done", "Ch. 2": "paused"}
 
@@ -201,17 +262,21 @@ def test_pause_holds_queued_chapter_then_resume_downloads_it(
     assert done == {"Ch. 1": "done", "Ch. 2": "done"}
 
 
-def test_pause_rejects_non_queued_download(client: TestClient, db_session: Session) -> None:
-    series = _linked_series(db_session)
+def test_pause_rejects_non_queued_download(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series = _linked_series(db_session, tmp_path / "manga")
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
     queue.wait_idle()
-    done_id = client.get("/api/downloads").json()[0]["id"]  # a completed row
+    done_id = client.get("/api/downloads").json()[0]["id"]
     assert client.post(f"/api/downloads/{done_id}/pause").status_code == 400
-    assert client.post(f"/api/downloads/{done_id}/resume").status_code == 400  # not paused
+    assert client.post(f"/api/downloads/{done_id}/resume").status_code == 400
 
 
-def test_delete_and_clear_completed(client: TestClient, db_session: Session) -> None:
-    series = _linked_series(db_session)
+def test_delete_and_clear_completed(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series = _linked_series(db_session, tmp_path / "manga")
     assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
     queue.wait_idle()
     tasks = client.get("/api/downloads").json()
@@ -222,3 +287,94 @@ def test_delete_and_clear_completed(client: TestClient, db_session: Session) -> 
 
     assert client.post("/api/downloads/clear-completed").status_code == 204
     assert client.get("/api/downloads").json() == []
+
+
+def test_bulk_pause_all_and_resume_all(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    provider = _GatedMultiProvider()
+    register_provider(provider)
+    ensure_manga_library(db_session, tmp_path / "manga")
+    series = make_series(db_session, title="BulkPause", kind="manga")
+    series.provider = "gated"
+    series.provider_series_id = "remote-bp"
+    db_session.commit()
+
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    assert provider.started.wait(2)
+    try:
+        paused = client.post("/api/downloads", json={"action": "pause-all"})
+        assert paused.status_code == 200
+        by_ch = {r["chapter"]: r["status"] for r in paused.json()}
+        assert by_ch["Ch. 1"] == "downloading"
+        assert by_ch["Ch. 2"] == "paused"
+    finally:
+        provider.gate.set()
+    queue.wait_idle()
+
+    held = {r["chapter"]: r["status"] for r in client.get("/api/downloads").json()}
+    assert held["Ch. 1"] == "done"
+    assert held["Ch. 2"] == "paused"
+
+    resumed = client.post("/api/downloads", json={"action": "resume-all"})
+    assert resumed.status_code == 200
+    queue.wait_idle()
+    done = {r["chapter"]: r["status"] for r in client.get("/api/downloads").json()}
+    assert done == {"Ch. 1": "done", "Ch. 2": "done"}
+
+
+def test_bulk_cancel_all_clears_queued(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    provider = _GatedMultiProvider()
+    register_provider(provider)
+    ensure_manga_library(db_session, tmp_path / "manga")
+    series = make_series(db_session, title="BulkCancel", kind="manga")
+    series.provider = "gated"
+    series.provider_series_id = "remote-bc"
+    db_session.commit()
+
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    assert provider.started.wait(2)
+    try:
+        cancelled = client.post("/api/downloads", json={"action": "cancel-all"})
+        assert cancelled.status_code == 200
+        statuses = {r["status"] for r in cancelled.json()}
+        assert "queued" not in statuses
+        assert "paused" not in statuses
+    finally:
+        provider.gate.set()
+    queue.wait_idle()
+    remaining = client.get("/api/downloads").json()
+    assert all(r["status"] != "queued" for r in remaining)
+
+
+def test_reclaim_orphaned_downloading(db_session: Session, tmp_path: Path) -> None:
+    from src.downloads.downloader import reclaim_orphaned_downloads
+    from src.downloads.models import DownloadTask
+
+    series = _linked_series(db_session, tmp_path / "manga")
+    row = DownloadTask(
+        series_id=series.id,
+        chapter_label="Ch. 1",
+        status="downloading",
+        progress=40,
+        phase="encoding",
+        detail="3/10",
+        provider="fake",
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    assert reclaim_orphaned_downloads(db_session) == 1
+    db_session.refresh(row)
+    assert row.status == "queued"
+    assert row.progress == 0
+    assert row.phase is None
+
+
+def test_chapter_path_rel_human_readable(db_session: Session) -> None:
+    series = make_series(db_session, title="My: Cool/Manga?", kind="manga")
+    remote = RemoteChapter("x", "10.5", 2, "Finale", "en")
+    rel = chapter_path_rel(series, remote)
+    assert rel == "My CoolManga/Vol.02/Ch.10.5 - Finale.cbz"

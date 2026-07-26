@@ -19,10 +19,12 @@ def update_progress(
     if chapter is None:
         raise NotFoundError(f"chapter {chapter_id!r} not found")
 
-    done = completed if completed is not None else (chapter.page_count > 0 and page >= chapter.page_count)
-    row = session.scalar(
-        select(ReadingProgress).where(ReadingProgress.chapter_id == chapter_id)
+    done = (
+        completed
+        if completed is not None
+        else (chapter.page_count > 0 and page >= chapter.page_count)
     )
+    row = session.scalar(select(ReadingProgress).where(ReadingProgress.chapter_id == chapter_id))
     if row is None:
         row = ReadingProgress(chapter_id=chapter_id, series_id=chapter.series_id)
         session.add(row)

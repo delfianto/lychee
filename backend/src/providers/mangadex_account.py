@@ -12,14 +12,17 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from src.catalog.media import materialize_series_cover
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Chapter, Library, Series
 from src.collections.models import Collection, CollectionSeries
+from src.core.config import settings
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
@@ -27,6 +30,7 @@ from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
+from src.media.thumbnails import ThumbnailStore
 from src.progress.models import ReadingProgress
 from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import password_grant, refresh_grant
@@ -142,6 +146,11 @@ def _upsert_series(
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
     if status in _READING_STATUSES:
         series.library_status = status  # MangaDex wins on pull
+    if fetch_covers and series.cover_source:
+        # Eagerly materialize so library grids don't blank while first cover request
+        # hits the CDN + AVIF encode on the request path.
+        store = ThumbnailStore(Path(settings.storage_path) / "thumbnails")
+        _ = materialize_series_cover(session, store, series.id)
     return series
 
 
@@ -149,7 +158,7 @@ def _safe_metadata(provider: MangaDexProvider, md_id: str, language: str) -> Ser
     """Fetch one manga's metadata; None on any provider error (skip, don't fail the sync)."""
     try:
         return provider.get_metadata(md_id, language=language)
-    except (httpx.HTTPError, KeyError, TypeError, ValueError):
+    except httpx.HTTPError, KeyError, TypeError, ValueError:
         return None
 
 
@@ -191,6 +200,28 @@ def _sync_lists(session: Session, lists: list[CustomList], series_by_id: dict[st
         ordered = [series_by_id[mid].id for mid in custom.manga_ids if mid in series_by_id]
         _reconcile_membership(session, collection, ordered)
     return len(lists)
+
+
+def _sync_ratings(
+    session: Session, provider: MangaDexProvider, series_by_id: dict[str, Series]
+) -> int:
+    """Pull personal ratings onto local series. MangaDex wins when a score is present;
+    missing keys leave the local ``user_rating`` untouched (don't wipe lychee-only rates)."""
+    if not series_by_id:
+        return 0
+    try:
+        ratings = provider.list_ratings(list(series_by_id))
+    except Exception as exc:  # noqa: BLE001 - ratings are best-effort
+        logger.warning("mangadex_ratings_pull_failed", error=str(exc))
+        return 0
+    applied = 0
+    for md_id, score in ratings.items():
+        series = series_by_id.get(md_id)
+        if series is None:
+            continue
+        series.user_rating = float(score)
+        applied += 1
+    return applied
 
 
 def _sync_read_markers(
@@ -250,7 +281,9 @@ def _sync_work() -> Work:
 
         # The synced set = follows ∪ manga with a reading status ∪ custom-list members.
         meta_by_id: dict[str, SeriesMetadata] = {m.provider_series_id: m for m in follows}
-        union_ids = set(meta_by_id) | set(statuses) | {mid for lst in lists for mid in lst.manga_ids}
+        union_ids = (
+            set(meta_by_id) | set(statuses) | {mid for lst in lists for mid in lst.manga_ids}
+        )
 
         series_by_id: dict[str, Series] = {}
         total = len(union_ids) or 1
@@ -266,10 +299,17 @@ def _sync_work() -> Work:
 
         on_progress(95, "Syncing lists")
         synced_lists = _sync_lists(session, lists, series_by_id)
+        on_progress(96, "Syncing ratings")
+        rated = _sync_ratings(session, provider, series_by_id)
         on_progress(98, "Syncing read markers")
         marked = _sync_read_markers(session, provider, series_by_id)
         session.commit()
-        return {"synced": len(series_by_id), "lists": synced_lists, "readMarked": marked}
+        return {
+            "synced": len(series_by_id),
+            "lists": synced_lists,
+            "ratings": rated,
+            "readMarked": marked,
+        }
 
     return work
 
@@ -316,6 +356,11 @@ def push_series(session: Session, series_id: str) -> bool:
             if cid
         ]
         provider.push_read(series.provider_series_id, read_ids)
+        # Personal score: int 1–10, or None to clear on MangaDex.
+        personal = int(round(series.user_rating)) if series.user_rating is not None else None
+        if personal is not None:
+            personal = max(1, min(10, personal))
+        provider.push_rating(series.provider_series_id, personal)
     except Exception as exc:  # noqa: BLE001 - best-effort; a push failure can't fail a read/edit
         logger.warning("mangadex_push_failed", series=series.title, error=str(exc))
         return False

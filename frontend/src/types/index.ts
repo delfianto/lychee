@@ -68,8 +68,18 @@ export interface RecentUpdate {
   updatedAt: string; // relative label, e.g. "2h ago"
 }
 
+/** Local readable chapter, or a remote-only row still waiting to download. */
+export type ChapterStatus =
+  | "downloaded"
+  | "available"
+  | "queued"
+  | "downloading"
+  | "paused"
+  | "failed";
+
 export interface Chapter {
-  id: string;
+  /** Local chapter id when downloaded; null for remote-only rows. */
+  id: string | null;
   volume: number | null;
   number: string; // display value, e.g. "45" or "45.5"
   title?: string;
@@ -78,6 +88,8 @@ export interface Chapter {
   uploadedAt: string; // relative label
   read: boolean;
   comments: number;
+  status: ChapterStatus;
+  providerChapterId?: string | null;
 }
 
 export interface VolumeGroup {

@@ -78,6 +78,16 @@ class MangaDexClient:
 
         return self._with_retries(send)
 
+    def delete(self, path: str) -> httpx.Response:
+        """DELETE an api.mangadex.org path (rate limited + retried). Used for authed
+        clears (e.g. personal rating)."""
+
+        def send() -> httpx.Response:
+            self._global.acquire()
+            return self._client.delete(path)
+
+        return self._with_retries(send)
+
     def get_bytes(self, url: str) -> httpx.Response:
         """GET an absolute at-home node URL (image); not rate-limited here."""
         return self._with_retries(lambda: self._client.get(url))

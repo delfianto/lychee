@@ -15,8 +15,11 @@ const viewOptions: { value: FeedView; icon: Component; label: string }[] = [
 ];
 
 const entries = ref<RecentUpdate[]>([]);
+const loading = ref(true);
 onMounted(async () => {
+  loading.value = true;
   entries.value = await fetchUpdates(true);
+  loading.value = false;
 });
 </script>
 
@@ -25,11 +28,20 @@ onMounted(async () => {
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">Unread chapters</h1>
-        <p class="text-sm text-base-content/60">{{ entries.length }} unread chapters</p>
+        <p class="text-sm text-base-content/60">
+          <template v-if="loading">Loading…</template>
+          <template v-else>{{ entries.length }} unread chapters</template>
+        </p>
       </div>
       <SegmentedToggle v-model="view" :options="viewOptions" aria-label="View" />
     </div>
+    <div v-if="loading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary" />
+    </div>
+    <div v-else-if="!entries.length" class="py-16 text-center text-sm text-base-content/60">
+      You're all caught up — no unread chapters.
+    </div>
     <!-- Every row is unread here, so the per-row "new" badge would be noise. -->
-    <ChapterFeed :entries="entries" :view="view" :new-badge="false" />
+    <ChapterFeed v-else :entries="entries" :view="view" :new-badge="false" />
   </div>
 </template>

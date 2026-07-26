@@ -27,7 +27,9 @@ def test_matches_substring_case_insensitively(client: TestClient, db_session: Se
 
 def test_matches_alternative_titles(client: TestClient, db_session: Session) -> None:
     series = make_series(db_session, title="Attack on Titan", authors=("Hajime Isayama",))
-    db_session.add(TitleVariant(series_id=series.id, title="Shingeki no Kyojin", variant_type="romanized"))
+    db_session.add(
+        TitleVariant(series_id=series.id, title="Shingeki no Kyojin", variant_type="romanized")
+    )
     db_session.commit()
 
     assert _titles(client, "Shingeki") == ["Attack on Titan"]  # found via alt title

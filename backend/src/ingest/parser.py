@@ -36,7 +36,7 @@ class ParsedName:
     """Result of parsing a book's on-disk name."""
 
     number: str | None  # display label, e.g. "10.5", "1-4", "Omake"
-    number_sort: float | None # ordering key; None → assign during ordering
+    number_sort: float | None  # ordering key; None → assign during ordering
     volume: int | None
     year: int | None
     special: bool

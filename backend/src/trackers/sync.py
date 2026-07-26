@@ -80,7 +80,9 @@ def push_series_progress(session: Session, series_id: str) -> int:
             )
             pushed += 1
         except Exception as exc:  # noqa: BLE001 - best-effort; a tracker error can't fail a read
-            logger.warning("tracker_push_failed", tracker=tracker.id, series=series.title, error=str(exc))
+            logger.warning(
+                "tracker_push_failed", tracker=tracker.id, series=series.title, error=str(exc)
+            )
     return pushed
 
 

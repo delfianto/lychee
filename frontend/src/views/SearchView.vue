@@ -7,10 +7,13 @@ import { searchSeries } from "../api/queries";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import type { Series } from "../types";
 
+defineOptions({ name: "SearchView" });
+
 const route = useRoute();
 const router = useRouter();
 const q = ref(String(route.query.q ?? ""));
 const results = ref<Series[]>([]);
+const loading = ref(false);
 
 // Reflect deep-links / navbar submits into the local field.
 watch(
@@ -29,10 +32,13 @@ watch(
     const term = val.trim();
     if (!term) {
       results.value = [];
+      loading.value = false;
       return;
     }
+    loading.value = true;
     timer = setTimeout(async () => {
       results.value = await searchSeries(term);
+      loading.value = false;
     }, 250);
   },
   { immediate: true },
@@ -61,9 +67,17 @@ function submit(): void {
 
     <template v-if="q.trim()">
       <p class="text-sm text-base-content/60">
-        {{ results.length }} result{{ results.length === 1 ? "" : "s" }} for “{{ q.trim() }}”
+        <template v-if="loading">Searching…</template>
+        <template v-else>
+          {{ results.length }} result{{ results.length === 1 ? "" : "s" }} for “{{ q.trim() }}”
+        </template>
       </p>
-      <SeriesCollection :series="results" density="list" empty-text="No series match your search." />
+      <SeriesCollection
+        :series="results"
+        density="list"
+        :loading="loading"
+        empty-text="No series match your search."
+      />
     </template>
     <div v-else class="py-16 text-center text-base-content/50">Type to search your whole library.</div>
   </div>

@@ -12,13 +12,16 @@ from src.catalog import repository as catalog_repo
 from src.catalog.models import Series
 from src.catalog.service import to_series_out
 from src.core.exceptions import BadRequestError, NotFoundError
-from src.downloads.downloader import plan_downloads, run_download_queue
+from src.downloads.cancel import request_cancel, request_cancel_many
+from src.downloads.downloader import plan_downloads, resolve_manga_library, run_download_queue
 from src.downloads.models import DownloadTask
 from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadTaskOut
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
+
+_BULK_ACTIONS = frozenset({"pause-all", "cancel-all", "resume-all"})
 
 
 def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskOut]:
@@ -35,6 +38,8 @@ def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskO
                 chapter=row.chapter_label,
                 status=row.status,
                 progress=row.progress,
+                phase=row.phase,
+                detail=row.detail,
                 size_bytes=row.size_bytes,
             )
         )
@@ -63,7 +68,12 @@ def _drain_queue(
     )
 
 
-def _download_work(series_id: str, storage_root: Path) -> Work:
+def _download_work(
+    series_id: str,
+    storage_root: Path,
+    *,
+    provider_chapter_ids: list[str] | None = None,
+) -> Work:
     """Task that plans a series' pending chapters into the queue, then drains it."""
 
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
@@ -73,7 +83,15 @@ def _download_work(series_id: str, storage_root: Path) -> Work:
         provider = get_provider(series.provider)
         if provider is None:
             raise BadRequestError(f"provider {series.provider!r} is not available")
-        _ = plan_downloads(session, series, provider)
+        config = session.get(ProviderConfig, series.provider)
+        language = config.language if config else "en"
+        _ = plan_downloads(
+            session,
+            series,
+            provider,
+            language=language,
+            provider_chapter_ids=provider_chapter_ids,
+        )
         return {"downloaded": _drain_queue(session, series_id, storage_root, on_progress)}
 
     return work
@@ -88,8 +106,14 @@ def _resume_work(series_id: str, storage_root: Path) -> Work:
     return work
 
 
-def create_downloads(session: Session, series_id: str, storage_root: Path) -> TaskOut:
-    """Validate the series + provider (here), then run the download on the task queue."""
+def create_downloads(
+    session: Session,
+    series_id: str,
+    storage_root: Path,
+    *,
+    provider_chapter_ids: list[str] | None = None,
+) -> TaskOut:
+    """Validate the series + provider + manga library, then run the download on the queue."""
     series = session.get(Series, series_id)
     if series is None:
         raise NotFoundError(f"series {series_id!r} not found")
@@ -98,7 +122,65 @@ def create_downloads(session: Session, series_id: str, storage_root: Path) -> Ta
     provider = get_provider(series.provider)
     if provider is None:
         raise BadRequestError(f"provider {series.provider!r} is not available")
-    return queue.submit_task("download", f"Downloading {series.title}", _download_work(series_id, storage_root))
+    # Fail fast before enqueueing — no manga library means nowhere human-readable to write.
+    _ = resolve_manga_library(session)
+    label = f"Downloading {series.title}"
+    if provider_chapter_ids and len(provider_chapter_ids) == 1:
+        label = f"Downloading chapter for {series.title}"
+    return queue.submit_task(
+        "download",
+        label,
+        _download_work(series_id, storage_root, provider_chapter_ids=provider_chapter_ids),
+    )
+
+
+def bulk_action(session: Session, action: str, storage_root: Path) -> list[DownloadTaskOut]:
+    """Apply a queue-wide action: pause-all | cancel-all | resume-all."""
+    if action not in _BULK_ACTIONS:
+        raise BadRequestError(f"unknown download action {action!r}")
+
+    if action == "pause-all":
+        for row in session.scalars(select(DownloadTask).where(DownloadTask.status == "queued")):
+            row.status = "paused"
+        session.commit()
+        return list_downloads(session)
+
+    if action == "cancel-all":
+        # Stop in-flight drains cooperatively; remove everything else from the queue.
+        active_series = list(
+            session.scalars(
+                select(DownloadTask.series_id)
+                .where(
+                    DownloadTask.status.in_(("queued", "downloading", "paused")),
+                    DownloadTask.series_id.is_not(None),
+                )
+                .distinct()
+            )
+        )
+        request_cancel_many([sid for sid in active_series if sid])
+        # Drop non-running rows immediately; downloading rows finish/fail via cancel flag.
+        _ = session.execute(
+            delete(DownloadTask).where(DownloadTask.status.in_(("queued", "paused", "failed")))
+        )
+        for row in session.scalars(
+            select(DownloadTask).where(DownloadTask.status == "downloading")
+        ):
+            row.error = "cancelled"
+        session.commit()
+        return list_downloads(session)
+
+    # resume-all
+    series_ids: set[str] = set()
+    for row in session.scalars(select(DownloadTask).where(DownloadTask.status == "paused")):
+        row.status = "queued"
+        if row.series_id:
+            series_ids.add(row.series_id)
+    session.commit()
+    for sid in series_ids:
+        series = session.get(Series, sid)
+        label = f"Resuming {series.title}" if series else f"Resuming {sid}"
+        _ = queue.submit("download", label, _resume_work(sid, storage_root))
+    return list_downloads(session)
 
 
 def pause_download(session: Session, task_id: str) -> list[DownloadTaskOut]:
@@ -127,7 +209,9 @@ def resume_download(session: Session, task_id: str, storage_root: Path) -> list[
         raise BadRequestError("download has no series to resume")
     task.status = "queued"
     session.commit()
-    _ = queue.submit("download", f"Resuming {task.chapter_label}", _resume_work(task.series_id, storage_root))
+    _ = queue.submit(
+        "download", f"Resuming {task.chapter_label}", _resume_work(task.series_id, storage_root)
+    )
     return list_downloads(session)
 
 
@@ -154,6 +238,9 @@ def delete_download(session: Session, task_id: str) -> None:
     task = session.get(DownloadTask, task_id)
     if task is None:
         raise NotFoundError(f"download {task_id!r} not found")
+    if task.status == "downloading" and task.series_id:
+        # Ask the runner to stop; drop the row so it disappears from the UI.
+        request_cancel(task.series_id)
     session.delete(task)
     session.commit()
 

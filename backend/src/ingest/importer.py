@@ -30,7 +30,10 @@ from src.media.thumbnails import ThumbnailStore
 logger = get_logger(__name__)
 
 IMPORTS_LIBRARY = "Imports"
-_ARCHIVE_EXTS = {".cbz": "cbz", ".zip": "zip"}  # container files import accepts (matches the reader)
+_ARCHIVE_EXTS = {
+    ".cbz": "cbz",
+    ".zip": "zip",
+}  # container files import accepts (matches the reader)
 _KINDS = {"manga", "comic", "gallery"}
 
 
@@ -241,7 +244,13 @@ def import_path(
             else:
                 chapters.append(
                     _import_chapter(
-                        session, series, book, candidate, display_title, series_kind, filename_pattern
+                        session,
+                        series,
+                        book,
+                        candidate,
+                        display_title,
+                        series_kind,
+                        filename_pattern,
                     )
                 )
         session.commit()
