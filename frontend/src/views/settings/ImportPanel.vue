@@ -3,11 +3,12 @@
 // transcoding their pages to AVIF — the enable toggle, page quality, and the
 // filename→metadata token pattern — plus the import action itself. Config persists
 // on change (watch → PATCH); imports run on the queue and report via SSE.
-import { Bookmark, FileText, FolderInput, Gauge, HardDriveDownload, Save, X } from "lucide-vue-next";
+import { Bookmark, FileText, FolderInput, Gauge, HardDriveDownload, Save, Upload, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
+import ServerPathField from "../../components/ServerPathField.vue";
 import { toast } from "../../lib/toast";
 
 const config = reactive({ enabled: false, quality: 75, filenamePattern: "" });
@@ -220,28 +221,43 @@ onMounted(async () => {
 
         <!-- Import action -->
         <div class="card bg-base-100">
-          <div class="card-body gap-3 p-4">
+          <div class="card-body gap-5 p-5">
             <div class="flex items-start gap-3">
               <HardDriveDownload class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
+              <div class="min-w-0">
                 <div class="text-sm font-medium">Import from a path</div>
-                <div class="text-xs text-base-content/50">A container file (.cbz/.zip) or a folder on the server</div>
+                <div class="text-xs text-base-content/50">
+                  A container file (.cbz/.zip) or a folder on the server — browse storage or type a path.
+                </div>
               </div>
             </div>
-            <div class="flex flex-col gap-2 sm:flex-row">
-              <input
+
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-base-content/60">Kind</label>
+                <select
+                  v-model="importForm.kind"
+                  class="select select-bordered select-sm w-full sm:w-40"
+                  :disabled="!config.enabled"
+                >
+                  <option value="manga">Manga</option>
+                  <option value="comic">Comic</option>
+                  <option value="gallery">Gallery</option>
+                </select>
+              </div>
+
+              <ServerPathField
                 v-model="importForm.path"
-                class="input input-bordered input-sm flex-1 font-mono"
-                placeholder="/data/incoming/Series   or   /data/file.cbz"
+                label="Path"
+                placeholder="/data/incoming/Series  or  /data/file.cbz"
+                browser-title="Choose import path"
+                allow-files
                 :disabled="!config.enabled"
               />
-              <select v-model="importForm.kind" class="select select-bordered select-sm sm:w-32" :disabled="!config.enabled">
-                <option value="manga">Manga</option>
-                <option value="comic">Comic</option>
-                <option value="gallery">Gallery</option>
-              </select>
+
               <button
-                class="btn btn-primary btn-sm gap-1"
+                type="button"
+                class="btn btn-primary btn-sm mt-1 self-start gap-1"
                 :disabled="!config.enabled || !importForm.path.trim() || importing"
                 @click="startImport"
               >
@@ -254,15 +270,26 @@ onMounted(async () => {
               or upload files
               <div class="h-px flex-1 bg-base-content/10"></div>
             </div>
-            <input
-              type="file"
-              accept=".cbz,.zip"
-              multiple
-              class="file-input file-input-bordered file-input-sm w-full"
-              :disabled="!config.enabled"
-              @change="uploadFiles"
-            />
-            <p class="text-xs text-base-content/40">Selecting several files imports them as one series.</p>
+
+            <div class="flex flex-col gap-2">
+              <div class="flex items-start gap-3">
+                <Upload class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">Upload from this device</div>
+                  <div class="text-xs text-base-content/50">
+                    CBZ/ZIP containers — several files import as one series
+                  </div>
+                </div>
+              </div>
+              <input
+                type="file"
+                accept=".cbz,.zip"
+                multiple
+                class="file-input file-input-bordered file-input-sm w-full"
+                :disabled="!config.enabled"
+                @change="uploadFiles"
+              />
+            </div>
 
             <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import to use this.</p>
           </div>

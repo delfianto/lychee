@@ -18,6 +18,7 @@ from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
 from src.downloads.provider import register_provider
 from src.downloads.router import router as downloads_router
+from src.fs.router import router as fs_router
 from src.health.router import router as health_router
 from src.integrations.router import router as integrations_router
 from src.library.router import router as library_router
@@ -123,6 +124,7 @@ app.include_router(taxonomy_router)
 app.include_router(collections_router)
 app.include_router(tasks_router)
 app.include_router(downloads_router)
+app.include_router(fs_router)
 
 
 @app.get("/")
