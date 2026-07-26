@@ -1,5 +1,5 @@
 // Reader preferences as a shared, persisted reactive singleton — used by both
-// the reader and the Settings → Reader tab so they stay in sync.
+// the manga reader and Settings → General (reader / video) so they stay in sync.
 
 import { reactive, watch } from "vue";
 
@@ -13,10 +13,21 @@ export interface ReaderSettings {
   direction: ReaderDirection;
   fit: ReaderFit;
   background: ReaderBackground;
+  /** Gallery lightbox: start playback when a video is opened. */
+  videoAutoPlay: boolean;
+  /** Gallery lightbox: advance to the next item when a video ends. */
+  videoAutoNext: boolean;
 }
 
 const KEY = "lychee.reader";
-const defaults: ReaderSettings = { mode: "single", direction: "ltr", fit: "height", background: "dark" };
+const defaults: ReaderSettings = {
+  mode: "single",
+  direction: "ltr",
+  fit: "height",
+  background: "dark",
+  videoAutoPlay: true,
+  videoAutoNext: true,
+};
 
 function load(): ReaderSettings {
   try {

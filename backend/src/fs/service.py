@@ -59,9 +59,7 @@ def list_directory(storage_root: Path, path: str | None = None) -> FsListing:
             is_dir = child.is_dir()
         except OSError:
             continue
-        entries.append(
-            FsEntry(name=child.name, path=str(child), kind="dir" if is_dir else "file")
-        )
+        entries.append(FsEntry(name=child.name, path=str(child), kind="dir" if is_dir else "file"))
 
     parent: str | None = None if target == root else str(target.parent)
     return FsListing(root=str(root), path=str(target), parent=parent, entries=entries)

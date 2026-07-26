@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,13 +21,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Book, Chapter, Library, Series
-from src.core.exceptions import LycheeError, NotFoundError
+from src.catalog.schema import GalleryMediaItem
+from src.core.exceptions import BadRequestError, LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
 from src.media.avif import ContentClass, encode, load_image
-from src.media.containers import is_cover_file, open_container
+from src.media.containers import ImageDirContainer, is_cover_file, media_kind, open_container
 from src.media.render_cache import RenderCache, render_width
 from src.media.thumbnails import ThumbnailStore, ThumbVariant
+from src.media.video import extract_poster_png
 
 logger = get_logger(__name__)
 
@@ -42,6 +45,10 @@ _MIME = {
     ".webp": "image/webp",
     ".gif": "image/gif",
     ".bmp": "image/bmp",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
 }
 
 
@@ -90,24 +97,53 @@ def _download_image(url: str) -> bytes | None:
     return None
 
 
+def _local_cover_page_bytes(session: Session, series_id: str) -> bytes | None:
+    """First readable still/GIF page of the series' first book (skips video pages)."""
+    book = _first_book(session, series_id)
+    if book is None:
+        return None
+    library = session.get(Library, book.library_id)
+    if library is None:
+        return None
+    root = Path(library.path) / book.path_rel
+    try:
+        with open_container(root, book.content_kind) as container:
+            for index in range(container.page_count()):
+                name = container.page_name(index)
+                if media_kind(name) == "video":
+                    continue  # don't feed MP4 bytes into Pillow
+                try:
+                    return container.read_page(index)
+                except LycheeError:
+                    continue
+    except LycheeError:
+        return None
+    return None
+
+
 def _raw_cover_source(session: Session, series_id: str) -> bytes | None:
-    """Raw bytes to *build* a cover from: the provider cover (downloaded once) if set,
-    else the series' first book's first page. None when neither is available/readable."""
+    """Raw bytes to *build* a cover from.
+
+    Order:
+    1. On-disk local page for **gallery** series (never prefer a remote manga cover).
+    2. Provider HTTP ``cover_source`` for manga/comic (downloaded once).
+    3. First local still page of the first book.
+
+    None when nothing is available/readable.
+    """
     series = session.get(Series, series_id)
     if series is None:
         return None
+
+    # Galleries are folder art — local media is the cover, not a MangaDex match.
+    if series.kind == "gallery":
+        return _local_cover_page_bytes(session, series_id)
+
     if series.cover_source and series.cover_source.startswith("http"):
         remote = _download_image(series.cover_source)
         if remote is not None:
             return remote
-    book = _first_book(session, series_id)
-    if book is None:
-        return None
-    try:
-        data, _ = _read_page(session, book, 0)
-    except LycheeError:
-        return None
-    return data
+    return _local_cover_page_bytes(session, series_id)
 
 
 # The canonical cover: a `Cover.avif` beside a series' books (written for managed
@@ -302,27 +338,188 @@ def get_page(
     return Served(data=data, media_type=_mime(name), etag=_etag(data))
 
 
-def get_gallery_image(session: Session, series_id: str, index: int) -> Served:
-    """Serve image ``index`` (0-based) of a gallery series."""
+@dataclass(slots=True)
+class GalleryFile:
+    """Resolved on-disk gallery media for streaming or byte serve."""
+
+    path: Path
+    name: str
+    kind: str  # image | gif | video
+    media_type: str
+
+
+def _gallery_book(session: Session, series_id: str) -> Book:
     book = _first_book(session, series_id)
     if book is None:
         raise NotFoundError("no images for series")
+    return book
+
+
+def resolve_gallery_file(session: Session, series_id: str, index: int) -> GalleryFile:
+    """Absolute path + kind for gallery item ``index`` (0-based).
+
+    Video streaming requires a real on-disk path (directory containers only).
+    """
+    book = _gallery_book(session, series_id)
     if not 0 <= index < book.page_count:
         raise NotFoundError(f"image {index} out of range (0–{book.page_count - 1})")
+    library = session.get(Library, book.library_id)
+    if library is None:
+        raise NotFoundError("library missing for book")
+    root = Path(library.path) / book.path_rel
+    with open_container(root, book.content_kind) as container:
+        name = container.page_name(index)
+        kind = media_kind(name)
+        if isinstance(container, ImageDirContainer):
+            path = container.page_path(index)
+        elif kind == "video":
+            raise BadRequestError("video in archives is not supported")
+        else:
+            path = root  # unused for stills (bytes come from read_page)
+    return GalleryFile(path=path, name=name, kind=kind, media_type=_mime(name))
+
+
+def get_gallery_image(session: Session, series_id: str, index: int) -> Served:
+    """Serve still/GIF bytes for gallery item ``index`` (not video — use FileResponse)."""
+    info = resolve_gallery_file(session, series_id, index)
+    if info.kind == "video":
+        raise BadRequestError("use the video stream path for MP4 items")
+    book = _gallery_book(session, series_id)
     data, name = _read_page(session, book, index)
     return Served(data=data, media_type=_mime(name), etag=_etag(data))
 
 
+def _gallery_item_thumb_id(series_id: str, index: int) -> str:
+    """Stable ThumbnailStore id for one gallery media item (grid preview)."""
+    return f"gi-{series_id}-{index}"
+
+
+def ensure_gallery_item_thumb(
+    session: Session, store: ThumbnailStore, series_id: str, index: int, *, overwrite: bool = False
+) -> bool:
+    """Generate the grid AVIF for one gallery item if missing. Returns whether it wrote."""
+    thumb_id = _gallery_item_thumb_id(series_id, index)
+    if not overwrite and store.exists(thumb_id, ThumbVariant.COVER):
+        return False
+    info = resolve_gallery_file(session, series_id, index)
+    try:
+        if info.kind == "video":
+            png = extract_poster_png(info.path)
+            if png is None:
+                return False
+            store.generate(
+                thumb_id,
+                png,
+                ThumbVariant.COVER,
+                content_class=ContentClass.PHOTO,
+                overwrite=overwrite,
+            )
+        else:
+            book = _gallery_book(session, series_id)
+            data, _ = _read_page(session, book, index)
+            store.generate(
+                thumb_id,
+                data,
+                ThumbVariant.COVER,
+                content_class=ContentClass.PHOTO,
+                overwrite=overwrite,
+            )
+    except Exception as exc:  # noqa: BLE001 - best-effort warm / on-demand
+        logger.warning("gallery_thumb_failed", series_id=series_id, index=index, error=str(exc))
+        return False
+    return True
+
+
+def get_gallery_thumb(
+    session: Session, store: ThumbnailStore, series_id: str, index: int
+) -> Served:
+    """Small grid preview (AVIF ~320px). Lazy-generates on miss so unscanned items shimmer once."""
+    thumb_id = _gallery_item_thumb_id(series_id, index)
+    cached = store.read(thumb_id, ThumbVariant.COVER)
+    if cached is None:
+        _ = ensure_gallery_item_thumb(session, store, series_id, index)
+        cached = store.read(thumb_id, ThumbVariant.COVER)
+        if cached is None:
+            raise NotFoundError("could not build gallery thumbnail")
+    return Served(data=cached, media_type="image/avif", etag=_etag(cached))
+
+
+def get_gallery_poster(
+    session: Session, store: ThumbnailStore, series_id: str, index: int
+) -> Served:
+    """Video poster — same store entry as the grid thumb (ffmpeg frame → AVIF)."""
+    info = resolve_gallery_file(session, series_id, index)
+    if info.kind != "video":
+        raise BadRequestError("poster is only available for video items")
+    return get_gallery_thumb(session, store, series_id, index)
+
+
+def warm_gallery_item_thumbs(
+    session: Session,
+    store: ThumbnailStore,
+    library_id: str,
+    *,
+    on_progress: Callable[[int, str], None] | None = None,
+) -> int:
+    """Pre-generate grid thumbs for every still/GIF/video in a gallery library.
+
+    Called after scan so the detail grid does not hit full-resolution originals.
+    Idempotent; skips ids that already exist.
+    """
+    series_ids = list(
+        session.scalars(
+            select(Series.id).where(Series.library_id == library_id, Series.kind == "gallery")
+        )
+    )
+    if not series_ids:
+        return 0
+    warmed = 0
+    total = len(series_ids)
+    for n, series_id in enumerate(series_ids, start=1):
+        book = _first_book(session, series_id)
+        if book is None or book.page_count <= 0:
+            if on_progress is not None:
+                on_progress(round(n / total * 100), f"Series {n}/{total}")
+            continue
+        for index in range(book.page_count):
+            if ensure_gallery_item_thumb(session, store, series_id, index):
+                warmed += 1
+        if on_progress is not None:
+            # Honest 0–100 across series so ActivityIndicator moves during encodes.
+            on_progress(round(n / total * 100), f"Thumbs {n}/{total} series · {warmed} new")
+    return warmed
+
+
 def gallery_images(
     session: Session, series_id: str, *, cursor: str | None, limit: int
-) -> Page[str]:
-    """A cursor-paginated list of gallery image URLs (offset-based cursor)."""
+) -> Page[GalleryMediaItem]:
+    """Cursor-paginated gallery media items (kind + urls for grid/lightbox)."""
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
     book = _first_book(session, series_id)
     total = book.page_count if book is not None else 0
     offset = int(decode_cursor(cursor)["o"]) if cursor is not None else 0
     end = min(offset + limit, total)
-    items = [f"/api/series/{series_id}/images/{i}" for i in range(offset, end)]
+
+    items: list[GalleryMediaItem] = []
+    if book is not None and offset < end:
+        library = session.get(Library, book.library_id)
+        if library is None:
+            raise NotFoundError("library missing for book")
+        root = Path(library.path) / book.path_rel
+        with open_container(root, book.content_kind) as container:
+            for i in range(offset, end):
+                name = container.page_name(i)
+                kind = media_kind(name)
+                url = f"/api/series/{series_id}/images/{i}"
+                # Grid always uses /thumb (lazy-generated AVIF). Video lightbox uses url stream.
+                thumb = f"{url}/thumb"
+                poster = f"{url}/poster" if kind == "video" else None
+                items.append(
+                    GalleryMediaItem(
+                        index=i, kind=kind, url=url, thumb_url=thumb, poster_url=poster
+                    )
+                )
+
     next_cursor = encode_cursor({"o": end}) if end < total else None
-    return Page[str](items=items, next_cursor=next_cursor)
+    return Page[GalleryMediaItem](items=items, next_cursor=next_cursor)

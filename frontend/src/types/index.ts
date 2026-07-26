@@ -48,7 +48,7 @@ export interface Series {
   userRating?: number;
   favorite?: boolean;
   kind?: "manga" | "comic" | "gallery";
-  /** Number of images, for gallery-kind items (which have images, not chapters). */
+  /** Number of media items, for gallery-kind series (stills / GIFs / MP4s). */
   imageCount?: number;
   /** Gallery-only metadata: the series the art depicts + depicted characters. */
   source?: string;
@@ -66,6 +66,19 @@ export interface RecentUpdate {
   volume: number | null; // null = no volume (e.g. webtoons)
   chapter: string; // display value, e.g. "127" or "45.5"
   updatedAt: string; // relative label, e.g. "2h ago"
+}
+
+/** One gallery folder item — still, GIF, or progressive MP4. */
+export type GalleryMediaKind = "image" | "gif" | "video";
+
+export interface GalleryMediaItem {
+  index: number;
+  kind: GalleryMediaKind;
+  /** Full-size still or progressive video stream (lightbox). */
+  url: string;
+  /** Small grid preview (~320px AVIF); lazy-built on first request if needed. */
+  thumbUrl: string;
+  posterUrl?: string | null;
 }
 
 /** Local readable chapter, or a remote-only row still waiting to download. */

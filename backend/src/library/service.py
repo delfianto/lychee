@@ -9,14 +9,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.catalog import matching as catalog_matching
-from src.catalog.media import warm_library_covers
+from src.catalog.media import warm_gallery_item_thumbs, warm_library_covers
 from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, NotFoundError
+from src.core.logging import get_logger
 from src.ingest.scanner import ScanSummary, scan_library
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
+
+logger = get_logger(__name__)
 
 _KINDS = {"manga", "comic", "gallery", "mixed"}
 
@@ -84,13 +87,65 @@ def _summary_dict(summary: ScanSummary) -> dict[str, int]:
     }
 
 
+def _thumbs_work(library_id: str, storage_root: Path) -> Work:
+    """Background task: warm per-item gallery thumbs with its own 0–100% progress."""
+
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+        library = _get(session, library_id)
+        store = ThumbnailStore(storage_root / "thumbnails")
+        on_progress(0, "Starting")
+        # Series covers first (fast), then item thumbs.
+        _ = warm_library_covers(session, store, library.id)
+        on_progress(5, "Series covers done")
+        n = warm_gallery_item_thumbs(session, store, library.id, on_progress=on_progress)
+        return {"thumbsGenerated": n}
+
+    return work
+
+
+def _finish_scan_phases(
+    session: Session,
+    library: Library,
+    storage_root: Path,
+    on_progress: Callable[[int, str], None] | None = None,
+) -> None:
+    """Post-index: commit early, optional manga auto-match, cover warm, gallery thumbs task.
+
+    Gallery item thumbs run as a **separate** ``thumbs`` task so the scan task can finish
+    (catalog usable + UI refresh) while encodes show their own progress bar.
+    """
+    session.commit()
+
+    if library.kind != "gallery":
+        if on_progress is not None:
+            on_progress(100, "Matching metadata")
+        catalog_matching.auto_match_library(session, library.id)
+        session.commit()
+
+        if on_progress is not None:
+            on_progress(100, "Warming covers")
+        try:
+            store = ThumbnailStore(storage_root / "thumbnails")
+            _ = warm_library_covers(session, store, library.id)
+            session.commit()
+        except Exception:  # noqa: BLE001
+            session.rollback()
+            logger.exception("cover_warm_failed", library_id=library.id)
+        return
+
+    # Gallery: covers + item thumbs on a dedicated task with real 0–100 progress.
+    _ = queue.submit(
+        "thumbs",
+        f"Thumbnails · {library.name}",
+        _thumbs_work(library.id, storage_root),
+    )
+
+
 def _scan_one_work(library_id: str, storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         library = _get(session, library_id)
         summary = scan_library(session, library, on_progress=on_progress)
-        # Auto-match new series to a provider + fetch metadata (no-op unless enabled).
-        catalog_matching.auto_match_library(session, library_id)
-        _ = warm_library_covers(session, ThumbnailStore(storage_root / "thumbnails"), library_id)
+        _finish_scan_phases(session, library, storage_root, on_progress)
         return _summary_dict(summary)
 
     return work
@@ -99,7 +154,6 @@ def _scan_one_work(library_id: str, storage_root: Path) -> Work:
 def _scan_all_work(storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         total = ScanSummary()
-        store = ThumbnailStore(storage_root / "thumbnails")
         libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
         for index, library in enumerate(libraries, start=1):
             summary = scan_library(session, library)
@@ -107,8 +161,7 @@ def _scan_all_work(storage_root: Path) -> Work:
             total.books_added += summary.books_added
             total.books_updated += summary.books_updated
             total.books_removed += summary.books_removed
-            catalog_matching.auto_match_library(session, library.id)
-            _ = warm_library_covers(session, store, library.id)
+            _finish_scan_phases(session, library, storage_root)
             on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
         return _summary_dict(total)
 

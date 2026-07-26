@@ -326,7 +326,7 @@ export interface paths {
         };
         /**
          * Gallery Images
-         * @description Cursor-paginated gallery image URLs (GalleryDetail grid + Lightbox).
+         * @description Cursor-paginated gallery media (stills, GIFs, progressive MP4).
          */
         get: operations["gallery_images_api_series__series_id__images_get"];
         put?: never;
@@ -357,6 +357,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{series_id}/images/{index}/thumb": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gallery Image Thumb
+         * @description Grid preview (~320px AVIF). Generated on first request if scan has not warmed it.
+         */
+        get: operations["gallery_image_thumb_api_series__series_id__images__index__thumb_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}/images/{index}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gallery Image Poster
+         * @description Poster frame for a gallery video (same store entry as /thumb).
+         */
+        get: operations["gallery_image_poster_api_series__series_id__images__index__poster_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{series_id}/images/{index}": {
         parameters: {
             query?: never;
@@ -366,7 +406,7 @@ export interface paths {
         };
         /**
          * Gallery Image
-         * @description A single gallery image (AVIF or original bytes).
+         * @description Full gallery still/GIF (bytes) or progressive MP4 (FileResponse + Range) — lightbox.
          */
         get: operations["gallery_image_api_series__series_id__images__index__get"];
         put?: never;
@@ -1350,6 +1390,22 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * GalleryMediaItem
+         * @description One still/GIF/video in a gallery folder (grid + lightbox).
+         */
+        GalleryMediaItem: {
+            /** Index */
+            index: number;
+            /** Kind */
+            kind: string;
+            /** Url */
+            url: string;
+            /** Thumburl */
+            thumbUrl: string;
+            /** Posterurl */
+            posterUrl?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1474,6 +1530,13 @@ export interface components {
             /** Pagesize */
             pageSize: number;
         };
+        /** Page[GalleryMediaItem] */
+        Page_GalleryMediaItem_: {
+            /** Items */
+            items: components["schemas"]["GalleryMediaItem"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
         /** Page[RecentUpdateOut] */
         Page_RecentUpdateOut_: {
             /** Items */
@@ -1485,13 +1548,6 @@ export interface components {
         Page_SeriesOut_: {
             /** Items */
             items: components["schemas"]["SeriesOut"][];
-            /** Nextcursor */
-            nextCursor?: string | null;
-        };
-        /** Page[str] */
-        Page_str_: {
-            /** Items */
-            items: string[];
             /** Nextcursor */
             nextCursor?: string | null;
         };
@@ -2409,7 +2465,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_str_"];
+                    "application/json": components["schemas"]["Page_GalleryMediaItem_"];
                 };
             };
             /** @description Validation Error */
@@ -2431,6 +2487,70 @@ export interface operations {
             header?: never;
             path: {
                 series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gallery_image_thumb_api_series__series_id__images__index__thumb_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gallery_image_poster_api_series__series_id__images__index__poster_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                index: number;
             };
             cookie?: never;
         };

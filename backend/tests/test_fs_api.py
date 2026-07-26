@@ -113,4 +113,6 @@ def test_mkdir_conflict_and_validation(client: TestClient, tmp_path: Path) -> No
         client.post("/api/fs/mkdir", json={"parent": str(storage), "name": ".hidden"}).status_code
         == 400
     )
-    assert client.post("/api/fs/mkdir", json={"parent": str(storage), "name": "  "}).status_code == 400
+    assert (
+        client.post("/api/fs/mkdir", json={"parent": str(storage), "name": "  "}).status_code == 400
+    )

@@ -23,4 +23,5 @@ export type Dashboard = Schemas["DashboardOut"];
 export type SeriesArt = Schemas["SeriesArtOut"];
 export type SeriesPage = Schemas["Page_SeriesOut_"];
 export type UpdatePage = Schemas["Page_RecentUpdateOut_"];
-export type ImagePage = Schemas["Page_str_"];
+export type GalleryMediaItem = Schemas["GalleryMediaItem"];
+export type ImagePage = Schemas["Page_GalleryMediaItem_"];

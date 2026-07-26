@@ -155,7 +155,12 @@ def _auto_match_one(
 
 
 def auto_match_library(session: Session, library_id: str) -> int:
-    """Best-guess match + enrich every unmatched series in a library (best-effort)."""
+    """Best-guess match + enrich every unmatched series in a library (best-effort).
+
+    Gallery series are skipped: MangaDex (and other manga providers) are not a
+    metadata source for cosplay/art folders, and auto-matching them produces
+    wrong titles/covers from unrelated manga with a colliding normalized title.
+    """
     config = session.get(ProviderConfig, _DEFAULT_PROVIDER)
     if config is None or not config.enabled or not config.auto_match:
         return 0
@@ -164,7 +169,11 @@ def auto_match_library(session: Session, library_id: str) -> int:
         return 0
     unmatched = list(
         session.scalars(
-            select(Series).where(Series.library_id == library_id, Series.provider.is_(None))
+            select(Series).where(
+                Series.library_id == library_id,
+                Series.provider.is_(None),
+                Series.kind != "gallery",
+            )
         )
     )
     matched = 0

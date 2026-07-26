@@ -361,19 +361,27 @@ export async function fetchGalleries(): Promise<Series[]> {
   return data.items.map(toSeries);
 }
 
-/** Every image URL of a gallery (follows the cursor to the end). */
-export async function fetchGalleryImages(id: string): Promise<string[]> {
-  const urls: string[] = [];
+/** Every media item of a gallery (follows the cursor to the end). */
+export async function fetchGalleryImages(id: string): Promise<import("../types").GalleryMediaItem[]> {
+  const items: import("../types").GalleryMediaItem[] = [];
   let cursor: string | undefined;
   do {
     const { data, error } = await api.GET("/api/series/{series_id}/images", {
       params: { path: { series_id: id }, query: { limit: 100, ...(cursor ? { cursor } : {}) } },
     });
     if (error || !data) break;
-    urls.push(...data.items);
+    for (const row of data.items) {
+      items.push({
+        index: row.index,
+        kind: row.kind as import("../types").GalleryMediaKind,
+        url: row.url,
+        thumbUrl: row.thumbUrl,
+        posterUrl: row.posterUrl ?? null,
+      });
+    }
     cursor = data.nextCursor ?? undefined;
   } while (cursor);
-  return urls;
+  return items;
 }
 
 const SORT_MAP: Record<string, string> = {

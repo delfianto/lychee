@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request, Response, status
+from fastapi.responses import FileResponse
 
 from src.catalog import matching, media, purge, service
 from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
@@ -11,6 +12,7 @@ from src.catalog.schema import (
     ChapterDetailOut,
     DashboardOut,
     DeleteChapterOut,
+    GalleryMediaItem,
     LibrarySummaryOut,
     MangaMatchOut,
     MatchRequest,
@@ -191,8 +193,8 @@ def series_art(db: DbSession, series_id: str) -> SeriesArtOut:
 @router.get("/series/{series_id}/images")
 def gallery_images(
     db: DbSession, series_id: str, cursor: str | None = None, limit: int = 24
-) -> Page[str]:
-    """Cursor-paginated gallery image URLs (GalleryDetail grid + Lightbox)."""
+) -> Page[GalleryMediaItem]:
+    """Cursor-paginated gallery media (stills, GIFs, progressive MP4)."""
     return media.gallery_images(db, series_id, cursor=cursor, limit=limit)
 
 
@@ -204,9 +206,42 @@ def series_cover(
     return _image_response(request, media.get_cover(db, store, series_id, size))
 
 
+@router.get("/series/{series_id}/images/{index}/thumb")
+def gallery_image_thumb(
+    request: Request,
+    db: DbSession,
+    store: ThumbnailStoreDep,
+    series_id: str,
+    index: int,
+) -> Response:
+    """Grid preview (~320px AVIF). Generated on first request if scan has not warmed it."""
+    return _image_response(request, media.get_gallery_thumb(db, store, series_id, index))
+
+
+@router.get("/series/{series_id}/images/{index}/poster")
+def gallery_image_poster(
+    request: Request,
+    db: DbSession,
+    store: ThumbnailStoreDep,
+    series_id: str,
+    index: int,
+) -> Response:
+    """Poster frame for a gallery video (same store entry as /thumb)."""
+    return _image_response(request, media.get_gallery_poster(db, store, series_id, index))
+
+
 @router.get("/series/{series_id}/images/{index}")
 def gallery_image(request: Request, db: DbSession, series_id: str, index: int) -> Response:
-    """A single gallery image (AVIF or original bytes)."""
+    """Full gallery still/GIF (bytes) or progressive MP4 (FileResponse + Range) — lightbox."""
+    info = media.resolve_gallery_file(db, series_id, index)
+    if info.kind == "video":
+        # Starlette FileResponse supports HTTP Range (206) — required for <video> seek.
+        return FileResponse(
+            path=info.path,
+            media_type=info.media_type,
+            filename=info.name,
+            content_disposition_type="inline",
+        )
     return _image_response(request, media.get_gallery_image(db, series_id, index))
 
 
