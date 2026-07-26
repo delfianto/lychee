@@ -10,6 +10,7 @@ import {
   type Series as ApiSeries,
   api,
   type RecentUpdate as ApiUpdate,
+  type SeriesUpdate,
 } from "./client";
 import { relativeTime } from "./format";
 import type { paths } from "./schema";
@@ -175,10 +176,7 @@ export function useSeriesList() {
 
 // --- series detail -------------------------------------------------------------
 
-export async function patchSeries(
-  id: string,
-  body: { favorite?: boolean; libraryStatus?: string; rating?: number | null },
-): Promise<void> {
+export async function patchSeries(id: string, body: SeriesUpdate): Promise<void> {
   await api.PATCH("/api/series/{series_id}", { params: { path: { series_id: id } }, body });
 }
 

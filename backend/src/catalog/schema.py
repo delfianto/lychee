@@ -46,11 +46,29 @@ class SeriesOut(CamelModel):
 
 
 class SeriesUpdate(CamelModel):
-    """Detail action-row edits (all optional; absent fields are left unchanged)."""
+    """Series edits — action-row state and manual metadata. All fields optional;
+    absent fields are left unchanged. Editing a metadata field *locks* it, so a
+    later provider refresh won't overwrite the manual value (see catalog.metadata)."""
 
+    # Per-user action-row state.
     favorite: bool | None = None
     library_status: str | None = None
     rating: float | None = None  # the user's personal rating (→ Series.user_rating)
+
+    # Manual metadata edits (each locks the corresponding field vs provider refresh).
+    title: str | None = None
+    description: str | None = None
+    year: int | None = None
+    status: str | None = None
+    content_rating: str | None = None
+    demographic: str | None = None
+    origin_country: str | None = None  # ISO 3166-1 alpha-2 (lowercased), or null to clear
+    authors: list[str] | None = None
+    artists: list[str] | None = None
+    tag_ids: list[str] | None = None  # ids from the existing taxonomy
+    # Gallery-only extras (no provider populates these, so they aren't locked).
+    source: str | None = None  # the franchise the art depicts ("Series" row)
+    characters: list[str] | None = None
 
 
 class MangaMatchOut(CamelModel):

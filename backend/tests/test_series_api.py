@@ -166,6 +166,82 @@ def test_patch_series_invalid_status_and_missing(client: TestClient, db_session:
     assert client.patch("/api/series/nope", json={"favorite": True}).status_code == 404
 
 
+def test_patch_series_edits_metadata(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="old title", kind="manga", tag_ids=["action"])
+    db_session.commit()
+
+    resp = client.patch(
+        f"/api/series/{series.id}",
+        json={
+            "title": "Berserk",
+            "description": "A dark fantasy epic.",
+            "authors": ["Kentaro Miura"],
+            "artists": ["Kentaro Miura"],
+            "originCountry": "JP",
+            "year": 1989,
+            "status": "hiatus",
+            "contentRating": "mature",
+            "demographic": "seinen",
+            "tagIds": ["romance"],
+        },
+    )
+    assert resp.status_code == 200
+
+    got = client.get(f"/api/series/{series.id}").json()
+    assert got["title"] == "Berserk"
+    assert got["description"] == "A dark fantasy epic."
+    assert got["authors"] == ["Kentaro Miura"]
+    assert got["artists"] == ["Kentaro Miura"]
+    assert got["originCountry"] == "jp"  # normalized to lowercase alpha-2
+    assert got["year"] == 1989
+    assert got["status"] == "hiatus"
+    assert got["contentRating"] == "mature"
+    assert got["demographic"] == "seinen"
+    assert [t["id"] for t in got["tags"]] == ["romance"]
+
+
+def test_patch_edit_locks_field_against_refresh(client: TestClient, db_session: Session) -> None:
+    """A manually edited field is locked, so a later provider refresh leaves it alone
+    while still applying the fields the user didn't touch."""
+    series = make_series(db_session, title="local name", kind="manga")
+    series.provider = "fakemeta"
+    series.provider_series_id = "x1"
+    db_session.commit()
+
+    # Edit title + authors → locks "title" and "credits".
+    edit = client.patch(f"/api/series/{series.id}", json={"title": "My Title", "authors": ["My Author"]})
+    assert edit.status_code == 200
+
+    assert client.post(f"/api/series/{series.id}/refresh").status_code == 202
+    queue.wait_idle()
+
+    got = client.get(f"/api/series/{series.id}").json()
+    assert got["title"] == "My Title"  # locked — provider "Fetched Title" ignored
+    assert got["authors"] == ["My Author"]  # credits locked
+    assert got["year"] == 2001  # not locked — provider value applied
+    assert got["description"] == "Fetched description."  # not locked
+
+
+def test_patch_gallery_source_and_characters(client: TestClient, db_session: Session) -> None:
+    gallery = make_series(db_session, title="Art Set", kind="gallery", image_count=12)
+    db_session.commit()
+
+    resp = client.patch(
+        f"/api/series/{gallery.id}",
+        json={"source": "Genshin Impact", "characters": ["Raiden Shogun", "Yae Miko"]},
+    )
+    assert resp.status_code == 200
+    got = client.get(f"/api/series/{gallery.id}").json()
+    assert got["source"] == "Genshin Impact"
+    assert got["characters"] == ["Raiden Shogun", "Yae Miko"]
+
+
+def test_patch_unknown_tag_is_400(client: TestClient, db_session: Session) -> None:
+    series = make_series(db_session, title="Tagless")
+    db_session.commit()
+    assert client.patch(f"/api/series/{series.id}", json={"tagIds": ["does-not-exist"]}).status_code == 400
+
+
 def test_refresh_fetches_and_applies_metadata(client: TestClient, db_session: Session) -> None:
     series = make_series(db_session, title="original folder", kind="manga")
     series.provider = "fakemeta"

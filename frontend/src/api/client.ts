@@ -13,6 +13,7 @@ export const api = createClient<paths>();
 type Schemas = components["schemas"];
 
 export type Series = Schemas["SeriesOut"];
+export type SeriesUpdate = Schemas["SeriesUpdate"];
 export type Tag = Schemas["TagOut"];
 export type Chapter = Schemas["ChapterOut"];
 export type ChapterDetail = Schemas["ChapterDetailOut"];
