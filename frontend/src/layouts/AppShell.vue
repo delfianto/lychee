@@ -23,6 +23,8 @@ import { connectTaskStream } from "../api/events";
 import { randomSeriesId } from "../api/queries";
 import ActivityIndicator from "../components/ActivityIndicator.vue";
 import Toaster from "../components/Toaster.vue";
+// Side-effect only: applies the persisted font size before first paint (like theme below).
+import "../lib/fontSize";
 import { useTheme } from "../lib/theme";
 
 // Open the shared background-task stream once for the whole app.

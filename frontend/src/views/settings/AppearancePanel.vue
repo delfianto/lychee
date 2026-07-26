@@ -5,16 +5,24 @@ import {
   ArrowLeftRight,
   BookOpen,
   Languages,
+  Layers,
   LayoutGrid,
   Maximize2,
   Palette,
   Play,
   SkipForward,
   Sun,
+  Type,
 } from "lucide-vue-next";
-import { type Component, ref } from "vue";
+import { type Component, ref, watch } from "vue";
 
 import SegmentedToggle from "../../components/SegmentedToggle.vue";
+import {
+  DEFAULT_FONT_SIZE,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  useFontSize,
+} from "../../lib/fontSize";
 import { useReaderSettings } from "../../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../../lib/theme";
 
@@ -95,7 +103,55 @@ function setDensity(d: string): void {
   density.value = d;
   localStorage.setItem(DENSITY_KEY, d);
 }
+
+const LISTS_TAB_KEY = "lychee.listsDefaultTab";
+const listsTab = ref(localStorage.getItem(LISTS_TAB_KEY) ?? "manga");
+function setListsTab(k: string): void {
+  listsTab.value = k;
+  localStorage.setItem(LISTS_TAB_KEY, k);
+}
+
 const language = ref("English");
+
+// --- Font size -------------------------------------------------------------
+const { fontSize, setFontSize, resetFontSize } = useFontSize();
+const draftFontSize = ref(fontSize.value);
+watch(fontSize, (v) => {
+  draftFontSize.value = v;
+});
+
+// The whole UI is rem-based, so live-rescaling also rescales the slider's own
+// track — letting the browser map pointer→value off that reflowing track makes
+// the drag chase a moving target and stick (same issue TBM hit). Instead we
+// capture the track rect at drag start and map against that frozen geometry,
+// so the app rescales live under the cursor while the value stays stable.
+let dragRect: DOMRect | null = null;
+function fontSizeAtX(clientX: number): number {
+  if (!dragRect) return draftFontSize.value;
+  const frac = Math.min(1, Math.max(0, (clientX - dragRect.left) / dragRect.width));
+  return Math.round(MIN_FONT_SIZE + frac * (MAX_FONT_SIZE - MIN_FONT_SIZE));
+}
+function applyFontSize(px: number): void {
+  draftFontSize.value = px;
+  setFontSize(px);
+}
+function onFontSizeDown(e: PointerEvent): void {
+  const el = e.currentTarget as HTMLInputElement;
+  dragRect = el.getBoundingClientRect();
+  try {
+    el.setPointerCapture(e.pointerId);
+  } catch {
+    /* no active pointer (synthetic event) — capture is best-effort */
+  }
+  applyFontSize(fontSizeAtX(e.clientX));
+  e.preventDefault();
+}
+function onFontSizeMove(e: PointerEvent): void {
+  if (dragRect) applyFontSize(fontSizeAtX(e.clientX));
+}
+function onFontSizeUp(): void {
+  dragRect = null;
+}
 </script>
 
 <template>
@@ -136,6 +192,25 @@ const language = ref("English");
             </label>
             <label class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
+                <Layers class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Default lists tab</div>
+                  <div class="text-xs text-base-content/50">Which kind opens first on the Lists page</div>
+                </div>
+              </div>
+              <select
+                class="select select-bordered select-sm w-28"
+                :value="listsTab"
+                @change="setListsTab(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="all">All</option>
+                <option value="manga">Manga</option>
+                <option value="comic">Comics</option>
+                <option value="gallery">Gallery</option>
+              </select>
+            </label>
+            <label class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
                 <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <div class="text-sm font-medium">Language</div>
@@ -148,6 +223,49 @@ const language = ref("English");
                 <option>Español</option>
               </select>
             </label>
+
+            <div class="divider my-0"></div>
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <Type class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Font size</div>
+                  <div class="text-xs text-base-content/50">Scales text and spacing across the app</div>
+                </div>
+              </div>
+              <button
+                v-if="draftFontSize !== DEFAULT_FONT_SIZE"
+                class="btn btn-ghost btn-xs"
+                @click="resetFontSize"
+              >
+                Reset
+              </button>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-base-content/50">A</span>
+              <input
+                type="range"
+                :min="MIN_FONT_SIZE"
+                :max="MAX_FONT_SIZE"
+                step="1"
+                :value="draftFontSize"
+                class="range range-primary range-sm flex-1 touch-none"
+                aria-label="Font size"
+                @pointerdown="onFontSizeDown"
+                @pointermove="onFontSizeMove"
+                @pointerup="onFontSizeUp"
+                @pointercancel="onFontSizeUp"
+                @input="applyFontSize(Number(($event.target as HTMLInputElement).value))"
+              />
+              <span class="text-base text-base-content/50">A</span>
+              <span class="w-10 shrink-0 text-right text-xs font-medium tabular-nums">{{ draftFontSize }}px</span>
+            </div>
+            <p
+              class="rounded-box surface-border bg-base-200/50 p-3 leading-relaxed text-base-content/80"
+              :style="{ fontSize: `${draftFontSize}px` }"
+            >
+              The quick brown fox jumps over the lazy dog.
+            </p>
           </div>
         </div>
       </section>
@@ -171,43 +289,39 @@ const language = ref("English");
                 @update:model-value="(v) => setReader(grp.key, v)"
               />
             </div>
+
+            <div class="divider my-0"></div>
+            <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">
+              Gallery playback
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <Play class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Auto play</div>
+                  <div class="text-xs text-base-content/50">
+                    Start videos when opened in the gallery lightbox
+                  </div>
+                </div>
+              </div>
+              <input v-model="reader.videoAutoPlay" type="checkbox" class="toggle toggle-primary toggle-sm" />
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <SkipForward class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Auto next</div>
+                  <div class="text-xs text-base-content/50">
+                    Advance to the next item when a video finishes
+                  </div>
+                </div>
+              </div>
+              <input v-model="reader.videoAutoNext" type="checkbox" class="toggle toggle-primary toggle-sm" />
+            </div>
           </div>
         </div>
       </section>
     </div>
-
-    <!-- Gallery / reader video -->
-    <section class="flex flex-col gap-3">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader video</h3>
-      <div class="card bg-base-100">
-        <div class="card-body gap-4 p-4">
-          <div class="flex items-center justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <Play class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Auto play</div>
-                <div class="text-xs text-base-content/50">
-                  Start videos when opened in the gallery lightbox
-                </div>
-              </div>
-            </div>
-            <input v-model="reader.videoAutoPlay" type="checkbox" class="toggle toggle-primary toggle-sm" />
-          </div>
-          <div class="flex items-center justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <SkipForward class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Auto next</div>
-                <div class="text-xs text-base-content/50">
-                  Advance to the next item when a video finishes
-                </div>
-              </div>
-            </div>
-            <input v-model="reader.videoAutoNext" type="checkbox" class="toggle toggle-primary toggle-sm" />
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- Theme — full community themes. The Dark/Light toggle above flips
          between your last light and dark pick. -->

@@ -1273,6 +1273,8 @@ export interface components {
             description?: string | null;
             /** Seriesids */
             seriesIds: string[];
+            /** Kind */
+            kind?: string | null;
         };
         /** CollectionSeriesAdd */
         CollectionSeriesAdd: {
