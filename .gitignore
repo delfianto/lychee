@@ -9,6 +9,10 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Direnv (machine specific)
+.envrc
+.direnv
+
 # SuperDesign local scratch (design drafts live in the cloud, not the repo)
 .superdesign/
 
