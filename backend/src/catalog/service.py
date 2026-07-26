@@ -6,10 +6,11 @@ Provider matching + metadata refresh live in ``catalog.matching``.
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog import repository as repo
-from src.catalog.models import Series
+from src.catalog.models import Series, SeriesCredit
 from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
 from src.catalog.schema import (
     ChapterDetailOut,
@@ -26,6 +27,7 @@ from src.catalog.schema import (
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+from src.taxonomy.models import Tag
 from src.trackers.sync import enqueue_push
 
 _LIBRARY_STATUSES = {
@@ -37,6 +39,11 @@ _LIBRARY_STATUSES = {
     "completed",
     "re_reading",
 }
+
+# Allowed values for the enum-like metadata fields (mirrors the model comments).
+_PUB_STATUSES = {"ongoing", "completed", "hiatus", "cancelled"}
+_CONTENT_RATINGS = {"safe", "suggestive", "erotica", "mature"}
+_DEMOGRAPHICS = {"shonen", "shojo", "seinen", "josei", "none"}
 
 _MAX_LIMIT = 100
 
@@ -142,12 +149,42 @@ def get_series(session: Session, series_id: str) -> SeriesOut:
     return to_series_out(row)
 
 
+def _credit_rows(series_id: str, role: str, names: list[str]) -> list[SeriesCredit]:
+    """Fresh SeriesCredit rows for one role — trimmed, de-duplicated (the
+    uq_series_credit constraint), and positioned in the order given."""
+    out: list[SeriesCredit] = []
+    seen: set[str] = set()
+    for raw in names:
+        name = raw.strip()
+        key = name.lower()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        out.append(SeriesCredit(series_id=series_id, name=name, role=role, position=len(out)))
+    return out
+
+
+def _resolve_tags(session: Session, tag_ids: list[str]) -> list[Tag]:
+    """Load taxonomy Tags by id (manual edits pick from the existing vocabulary)."""
+    if not tag_ids:
+        return []
+    tags = list(session.scalars(select(Tag).where(Tag.id.in_(tag_ids))))
+    missing = [tid for tid in tag_ids if tid not in {t.id for t in tags}]
+    if missing:
+        raise BadRequestError(f"unknown tag ids: {missing}")
+    return tags
+
+
 def update_series(session: Session, series_id: str, data: SeriesUpdate) -> SeriesOut:
-    """Apply detail action-row edits (favorite / shelf status / personal rating)."""
+    """Apply series edits: per-user action-row state (favorite / shelf status / personal
+    rating) and manual metadata (title, credits, tags, …). Each edited metadata field is
+    added to ``locked_fields_json`` so a later provider refresh won't clobber it."""
     series = session.get(Series, series_id)
     if series is None:
         raise NotFoundError(f"series {series_id!r} not found")
     fields = data.model_dump(exclude_unset=True)
+
+    # --- per-user action-row state ---
     if "favorite" in fields:
         series.favorite = bool(fields["favorite"])
     shelf_changed = False
@@ -159,6 +196,66 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
         series.library_status = status
     if "rating" in fields:
         series.user_rating = fields["rating"]  # may be None to clear
+
+    # --- manual metadata (locks each edited field against provider refresh) ---
+    locked = set(series.locked_fields_json or [])
+    if "title" in fields:
+        title = (fields["title"] or "").strip()
+        if not title:
+            raise BadRequestError("title cannot be empty")
+        series.title = title
+        series.sort_title = title.lower()
+        locked.add("title")
+    if "description" in fields:
+        series.description = fields["description"] or None
+        locked.add("description")
+    if "year" in fields:
+        series.year = fields["year"]
+        locked.add("year")
+    if "status" in fields:
+        if fields["status"] not in _PUB_STATUSES:
+            raise BadRequestError(f"invalid status: {fields['status']!r}")
+        series.status = fields["status"]
+        locked.add("status")
+    if "content_rating" in fields:
+        if fields["content_rating"] not in _CONTENT_RATINGS:
+            raise BadRequestError(f"invalid content rating: {fields['content_rating']!r}")
+        series.content_rating = fields["content_rating"]
+        locked.add("content_rating")
+    if "demographic" in fields:
+        if fields["demographic"] not in _DEMOGRAPHICS:
+            raise BadRequestError(f"invalid demographic: {fields['demographic']!r}")
+        series.demographic = fields["demographic"]
+        locked.add("demographic")
+    if "origin_country" in fields:
+        cc = (fields["origin_country"] or "").strip().lower()
+        series.origin_country = cc[:2] or None
+        locked.add("origin_country")
+    if "authors" in fields or "artists" in fields:
+        # Rebuild only the edited role(s), leaving the other role's rows untouched.
+        edited: dict[str, list[str]] = {}
+        if "authors" in fields:
+            edited["author"] = fields["authors"] or []
+        if "artists" in fields:
+            edited["artist"] = fields["artists"] or []
+        # Drop the edited roles' current rows and flush the DELETEs before re-inserting,
+        # so a recreated name can't collide with an old row on uq_series_credit.
+        series.credits = [c for c in series.credits if c.role not in edited]
+        session.flush()
+        for role, names in edited.items():
+            series.credits.extend(_credit_rows(series.id, role, names))
+        locked.add("credits")
+    if "tag_ids" in fields:
+        series.tags = _resolve_tags(session, fields["tag_ids"] or [])
+        locked.add("tags")
+    # Gallery-only extras — no provider populates these, so they aren't locked.
+    if "source" in fields:
+        series.source = (fields["source"] or "").strip() or None
+    if "characters" in fields:
+        series.characters_json = [c.strip() for c in fields["characters"] if c.strip()] or None
+
+    series.locked_fields_json = sorted(locked) or None
+
     session.commit()
     if shelf_changed:  # push the new shelf to connected sinks (trackers + MangaDex), best-effort
         enqueue_push(session, series_id)

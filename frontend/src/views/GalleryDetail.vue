@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Heart, Images } from "lucide-vue-next";
+import { Heart, Images, Pencil } from "lucide-vue-next";
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { fetchGalleryImages, fetchSeries, patchSeries } from "../api/queries";
 import AddToListMenu from "../components/AddToListMenu.vue";
+import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
@@ -36,6 +37,12 @@ function toggleFavorite(): void {
   if (!gallery.value) return;
   favorite.value = !favorite.value;
   void patchSeries(gallery.value.id, { favorite: favorite.value });
+}
+
+const editOpen = ref(false);
+function onEdited(): void {
+  editOpen.value = false;
+  if (gallery.value) void load(gallery.value.id);
 }
 
 // Lightbox
@@ -111,6 +118,9 @@ function openAt(i: number): void {
             <Heart class="size-4" :class="{ 'fill-current': favorite }" />
           </button>
           <AddToListMenu :series-id="gallery.id" />
+          <button class="btn btn-sm gap-2" @click="editOpen = true">
+            <Pencil class="size-4" />Edit
+          </button>
         </div>
       </div>
     </section>
@@ -134,6 +144,7 @@ function openAt(i: number): void {
     </div>
 
     <Lightbox v-if="open" :images="images" :index="idx" @update:index="idx = $event" @close="open = false" />
+    <EditSeriesModal v-if="editOpen" :series="gallery" @close="editOpen = false" @saved="onEdited" />
     </template>
   </div>
 </template>

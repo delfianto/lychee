@@ -1507,7 +1507,9 @@ export interface components {
         };
         /**
          * SeriesUpdate
-         * @description Detail action-row edits (all optional; absent fields are left unchanged).
+         * @description Series edits — action-row state and manual metadata. All fields optional;
+         *     absent fields are left unchanged. Editing a metadata field *locks* it, so a
+         *     later provider refresh won't overwrite the manual value (see catalog.metadata).
          */
         SeriesUpdate: {
             /** Favorite */
@@ -1516,6 +1518,30 @@ export interface components {
             libraryStatus?: string | null;
             /** Rating */
             rating?: number | null;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Status */
+            status?: string | null;
+            /** Contentrating */
+            contentRating?: string | null;
+            /** Demographic */
+            demographic?: string | null;
+            /** Origincountry */
+            originCountry?: string | null;
+            /** Authors */
+            authors?: string[] | null;
+            /** Artists */
+            artists?: string[] | null;
+            /** Tagids */
+            tagIds?: string[] | null;
+            /** Source */
+            source?: string | null;
+            /** Characters */
+            characters?: string[] | null;
         };
         /** SyncOut */
         SyncOut: {

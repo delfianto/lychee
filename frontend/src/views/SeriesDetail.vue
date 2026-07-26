@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bookmark, BookOpen, Heart, Link2, RefreshCw, Star, X } from "lucide-vue-next";
+import { Bookmark, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "lucide-vue-next";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
@@ -19,6 +19,7 @@ import {
 import AddToListMenu from "../components/AddToListMenu.vue";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
+import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
@@ -83,6 +84,13 @@ function clearRating(): void {
   if (!series.value) return;
   userRating.value = null;
   void patchSeries(series.value.id, { rating: null });
+}
+
+// --- Edit metadata ---
+const editOpen = ref(false);
+function onEdited(): void {
+  editOpen.value = false;
+  if (series.value) void load(series.value.id);
 }
 
 // --- Metadata: match to MangaDex + refresh ---
@@ -274,6 +282,11 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
               <!-- Add to list -->
               <AddToListMenu :series-id="series.id" />
+
+              <!-- Edit metadata -->
+              <button class="btn btn-sm gap-2" @click="editOpen = true">
+                <Pencil class="size-4" />Edit
+              </button>
             </div>
 
             <span
@@ -359,6 +372,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
         </ul>
       </div>
     </div>
+
+    <!-- Edit metadata modal -->
+    <EditSeriesModal v-if="editOpen" :series="series" @close="editOpen = false" @saved="onEdited" />
     </template>
   </div>
 </template>
