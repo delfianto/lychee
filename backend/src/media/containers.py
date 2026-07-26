@@ -21,6 +21,10 @@ from typing import Self
 from src.core.exceptions import BadRequestError, NotFoundError
 
 IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif"})
+# Index + poster (ffmpeg). Progressive play in-browser is best for .mp4/.m4v/.webm;
+# .mov is still indexed so video-only sets are not dropped from the catalog.
+VIDEO_EXTS = frozenset({".mp4", ".m4v", ".mov", ".webm"})
+MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS
 
 _NUM = re.compile(r"(\d+)")
 
@@ -32,6 +36,21 @@ def natural_key(name: str) -> list[str | int]:
 
 def _is_image(name: str) -> bool:
     return Path(name).suffix.lower() in IMAGE_EXTS
+
+
+def is_media_file(name: str) -> bool:
+    """Still image, GIF, or video — anything a gallery folder page can be."""
+    return Path(name).suffix.lower() in MEDIA_EXTS
+
+
+def media_kind(name: str) -> str:
+    """``image`` | ``gif`` | ``video`` from filename extension."""
+    ext = Path(name).suffix.lower()
+    if ext in VIDEO_EXTS:
+        return "video"
+    if ext == ".gif":
+        return "gif"
+    return "image"
 
 
 _COVER_STEMS = frozenset({"cover", "folder"})
@@ -72,15 +91,18 @@ class BookContainer(ABC):
 
 @lru_cache(maxsize=512)
 def _dir_page_names(path_str: str, _mtime: float) -> tuple[str, ...]:
-    """Sorted image names in a directory, cached per (path, mtime) — so the repeated page
-    requests for one book skip re-scanning + re-sorting the directory each time."""
+    """Sorted media names in a directory, cached per (path, mtime) — so the repeated page
+    requests for one book skip re-scanning + re-sorting the directory each time.
+
+    Includes stills, GIFs, and progressive MP4s (gallery folders).
+    """
     directory = Path(path_str)
     return tuple(
         sorted(
             (
                 p.name
                 for p in directory.iterdir()
-                if p.is_file() and _is_image(p.name) and not is_cover_file(p.name)
+                if p.is_file() and is_media_file(p.name) and not is_cover_file(p.name)
             ),
             key=natural_key,
         )
@@ -88,7 +110,7 @@ def _dir_page_names(path_str: str, _mtime: float) -> tuple[str, ...]:
 
 
 class ImageDirContainer(BookContainer):
-    """A directory whose direct children are page images (also serves AVIF dirs)."""
+    """A directory whose direct children are page images / gallery media (also AVIF dirs)."""
 
     def __init__(self, path: Path) -> None:
         self._dir = path
@@ -100,6 +122,11 @@ class ImageDirContainer(BookContainer):
     def page_name(self, index: int) -> str:
         self._check(index)
         return self._names[index]
+
+    def page_path(self, index: int) -> Path:
+        """Absolute path for a page file (used to stream video without buffering)."""
+        self._check(index)
+        return self._dir / self._names[index]
 
     def read_page(self, index: int) -> bytes:
         self._check(index)

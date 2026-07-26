@@ -42,12 +42,14 @@ def _make_library(tmp_path: Path) -> Path:
 
 
 def _scan(client: TestClient, library_id: str) -> dict[str, int]:
-    """Trigger a background scan, wait for the worker, return the task's result summary."""
+    """Trigger a background scan, wait for the worker (and thumbs task), return scan result."""
     resp = client.post(f"/api/libraries/{library_id}/scan")
     assert resp.status_code == 202
-    queue.wait_idle()
+    queue.wait_idle(timeout=120.0)
     tasks = {t["id"]: t for t in client.get("/api/tasks").json()}
-    return tasks[resp.json()["id"]]["result"]
+    result = tasks[resp.json()["id"]]["result"]
+    assert result is not None
+    return result
 
 
 def _create_and_scan(client: TestClient, root: Path) -> tuple[str, dict[str, int]]:
@@ -179,18 +181,22 @@ def test_gallery_scan_groups_by_artist(client: TestClient, tmp_path: Path) -> No
     assert summary["seriesAdded"] == 3  # Set A, Set B, Loose Gallery — each its own gallery
 
     series = {s["title"]: s for s in client.get("/api/series").json()["items"]}
-    assert set(series) == {"Set A", "Set B", "Loose Gallery"}
+    # Under an artist: "Artist — Works"; root loose archive keeps its stem.
+    assert set(series) == {"Artist Name — Set A", "Artist Name — Set B", "Loose Gallery"}
     assert all(s["kind"] == "gallery" for s in series.values())
     # the two under "Artist Name" are credited to the artist; the loose one isn't
-    assert series["Set A"]["artists"] == ["Artist Name"]
-    assert series["Set B"]["artists"] == ["Artist Name"]
+    assert series["Artist Name — Set A"]["artists"] == ["Artist Name"]
+    assert series["Artist Name — Set B"]["artists"] == ["Artist Name"]
     assert series["Loose Gallery"]["artists"] == []
 
     # an auto Collection named after the artist holds exactly those two galleries
     collections = {c["name"]: c for c in client.get("/api/collections").json()}
     assert "Artist Name" in collections
     detail = client.get(f"/api/collections/{collections['Artist Name']['id']}").json()
-    assert {s["title"] for s in detail["series"]} == {"Set A", "Set B"}
+    assert {s["title"] for s in detail["series"]} == {
+        "Artist Name — Set A",
+        "Artist Name — Set B",
+    }
 
 
 def test_gallery_rescan_is_idempotent(client: TestClient, tmp_path: Path) -> None:
@@ -199,11 +205,23 @@ def test_gallery_rescan_is_idempotent(client: TestClient, tmp_path: Path) -> Non
     _scan(client, library_id)  # scan again — must not double credits/collections
 
     series = {s["title"]: s for s in client.get("/api/series").json()["items"]}
-    assert series["Set A"]["artists"] == ["Artist Name"]  # not doubled
+    assert series["Artist Name — Set A"]["artists"] == ["Artist Name"]  # not doubled
     named = [c for c in client.get("/api/collections").json() if c["name"] == "Artist Name"]
     assert len(named) == 1  # one collection, not one per scan
     detail = client.get(f"/api/collections/{named[0]['id']}").json()
     assert len(detail["series"]) == 2  # membership not duplicated
+
+
+def test_gallery_scan_indexes_mov_only_set(client: TestClient, tmp_path: Path) -> None:
+    """Video-only work folders (.mov) must still become series (not dropped)."""
+    root = tmp_path / "galleries"
+    set_dir = root / "Byoru" / "Dream Bride"
+    set_dir.mkdir(parents=True)
+    _ = (set_dir / "clip.mov").write_bytes(b"0" * 64)
+    _create_and_scan_gallery(client, root)
+
+    titles = {s["title"] for s in client.get("/api/series").json()["items"]}
+    assert "Byoru — Dream Bride" in titles
 
 
 def test_library_list_reports_series_count(client: TestClient, tmp_path: Path) -> None:

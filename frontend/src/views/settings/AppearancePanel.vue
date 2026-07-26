@@ -1,11 +1,21 @@
 <script setup lang="ts">
 // Settings → Appearance: light/dark mode, library density, language, reader
-// defaults, and the full community theme picker.
-import { ArrowLeftRight, BookOpen, Languages, LayoutGrid, Maximize2, Palette, Sun } from "lucide-vue-next";
+// defaults, gallery video options, and the full community theme picker.
+import {
+  ArrowLeftRight,
+  BookOpen,
+  Languages,
+  LayoutGrid,
+  Maximize2,
+  Palette,
+  Play,
+  SkipForward,
+  Sun,
+} from "lucide-vue-next";
 import { type Component, ref } from "vue";
 
 import SegmentedToggle from "../../components/SegmentedToggle.vue";
-import { type ReaderSettings, useReaderSettings } from "../../lib/readerSettings";
+import { useReaderSettings } from "../../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../../lib/theme";
 
 const { theme, mode, setTheme, setMode } = useTheme();
@@ -19,16 +29,63 @@ const themeGroups = [
 ];
 
 const reader = useReaderSettings();
-const readerGroups: { key: keyof ReaderSettings; label: string; desc: string; icon: Component; opts: { value: string; label: string }[] }[] = [
-  { key: "mode", label: "Reading mode", desc: "How pages are laid out", icon: BookOpen, opts: [{ value: "single", label: "Single" }, { value: "double", label: "Double" }, { value: "longstrip", label: "Long strip" }] },
-  { key: "direction", label: "Direction", desc: "Which way pages turn", icon: ArrowLeftRight, opts: [{ value: "ltr", label: "L → R" }, { value: "rtl", label: "R → L" }] },
-  { key: "fit", label: "Fit", desc: "How pages scale to fit", icon: Maximize2, opts: [{ value: "width", label: "Width" }, { value: "height", label: "Height" }, { value: "both", label: "Both" }, { value: "original", label: "Original" }] },
-  { key: "background", label: "Background", desc: "Reader page backdrop", icon: Palette, opts: [{ value: "dark", label: "Dark" }, { value: "black", label: "Black" }, { value: "sepia", label: "Sepia" }] },
+type ReaderChoiceKey = "mode" | "direction" | "fit" | "background";
+const readerGroups: {
+  key: ReaderChoiceKey;
+  label: string;
+  desc: string;
+  icon: Component;
+  opts: { value: string; label: string }[];
+}[] = [
+  {
+    key: "mode",
+    label: "Reading mode",
+    desc: "How pages are laid out",
+    icon: BookOpen,
+    opts: [
+      { value: "single", label: "Single" },
+      { value: "double", label: "Double" },
+      { value: "longstrip", label: "Long strip" },
+    ],
+  },
+  {
+    key: "direction",
+    label: "Direction",
+    desc: "Which way pages turn",
+    icon: ArrowLeftRight,
+    opts: [
+      { value: "ltr", label: "L → R" },
+      { value: "rtl", label: "R → L" },
+    ],
+  },
+  {
+    key: "fit",
+    label: "Fit",
+    desc: "How pages scale to fit",
+    icon: Maximize2,
+    opts: [
+      { value: "width", label: "Width" },
+      { value: "height", label: "Height" },
+      { value: "both", label: "Both" },
+      { value: "original", label: "Original" },
+    ],
+  },
+  {
+    key: "background",
+    label: "Background",
+    desc: "Reader page backdrop",
+    icon: Palette,
+    opts: [
+      { value: "dark", label: "Dark" },
+      { value: "black", label: "Black" },
+      { value: "sepia", label: "Sepia" },
+    ],
+  },
 ];
-function readerValue(k: keyof ReaderSettings): string {
+function readerValue(k: ReaderChoiceKey): string {
   return reader[k];
 }
-function setReader(k: keyof ReaderSettings, v: string): void {
+function setReader(k: ReaderChoiceKey, v: string): void {
   (reader as unknown as Record<string, string>)[k] = v;
 }
 
@@ -118,6 +175,39 @@ const language = ref("English");
         </div>
       </section>
     </div>
+
+    <!-- Gallery / reader video -->
+    <section class="flex flex-col gap-3">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader video</h3>
+      <div class="card bg-base-100">
+        <div class="card-body gap-4 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <Play class="mt-0.5 size-5 shrink-0 text-primary" />
+              <div>
+                <div class="text-sm font-medium">Auto play</div>
+                <div class="text-xs text-base-content/50">
+                  Start videos when opened in the gallery lightbox
+                </div>
+              </div>
+            </div>
+            <input v-model="reader.videoAutoPlay" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <SkipForward class="mt-0.5 size-5 shrink-0 text-primary" />
+              <div>
+                <div class="text-sm font-medium">Auto next</div>
+                <div class="text-xs text-base-content/50">
+                  Advance to the next item when a video finishes
+                </div>
+              </div>
+            </div>
+            <input v-model="reader.videoAutoNext" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Theme — full community themes. The Dark/Light toggle above flips
          between your last light and dark pick. -->

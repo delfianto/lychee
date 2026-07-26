@@ -31,7 +31,7 @@ from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.ingest.parser import parse
-from src.media.containers import IMAGE_EXTS, is_cover_file, open_container
+from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
 
 logger = get_logger(__name__)
@@ -58,30 +58,26 @@ class Candidate:
     segments: list[str]  # path parts below the series folder + name (for the parser)
 
 
-def _is_image(name: str) -> bool:
-    return Path(name).suffix.lower() in IMAGE_EXTS
-
-
 def _archive_kind(name: str) -> str | None:
     return _ARCHIVE_KINDS.get(Path(name).suffix.lower())
 
 
 def _signature(path: Path) -> tuple[int, float, str]:
-    """Return (size_bytes, mtime, partial_hash) for a file or an image directory."""
+    """Return (size_bytes, mtime, partial_hash) for a file or a media directory."""
     digest = xxhash.xxh3_128()  # fast, low-collision content fingerprint
     if path.is_dir():
-        images = sorted(
+        media_files = sorted(
             p
             for p in path.iterdir()
-            if p.is_file() and _is_image(p.name) and not is_cover_file(p.name)
+            if p.is_file() and is_media_file(p.name) and not is_cover_file(p.name)
         )
         size = 0
         mtime = path.stat().st_mtime
-        for image in images:
-            stat = image.stat()
+        for media in media_files:
+            stat = media.stat()
             size += stat.st_size
             mtime = max(mtime, stat.st_mtime)
-            digest.update(f"{image.name}:{stat.st_size};".encode())
+            digest.update(f"{media.name}:{stat.st_size};".encode())
         return size, mtime, digest.hexdigest()[:40]
 
     stat = path.stat()
@@ -106,9 +102,11 @@ def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
 
     def visit(directory: Path) -> None:
         entries = sorted(p for p in directory.iterdir() if not p.name.startswith("."))
-        if any(e.is_file() and _is_image(e.name) and not is_cover_file(e.name) for e in entries):
+        if any(
+            e.is_file() and is_media_file(e.name) and not is_cover_file(e.name) for e in entries
+        ):
             found.append(_candidate(directory, root, series_dir, "image_dir"))
-            return  # its images are the pages; don't recurse
+            return  # its media files are the pages; don't recurse
         for entry in entries:
             if entry.is_file() and (kind := _archive_kind(entry.name)):
                 found.append(_candidate(entry, root, series_dir, kind))
@@ -133,6 +131,13 @@ def _page_count(candidate: Candidate) -> int | None:
         return None
 
 
+def _gallery_display_title(works_name: str, artist: str | None) -> str:
+    """Default gallery series title: ``Artist — Works`` (em dash), or works-only."""
+    if artist:
+        return f"{artist} — {works_name}"
+    return works_name
+
+
 def scan_library(
     session: Session,
     library: Library,
@@ -141,8 +146,9 @@ def scan_library(
 ) -> ScanSummary:
     """Full scan of one library: reconcile its Series/Book/Chapter rows with disk.
 
-    ``on_progress(percent, label)`` is called after each top-level entry so callers
-    can surface live progress (SSE).
+    ``on_progress(percent, label)`` reports 0–100 for the *index* phase only
+    (callers map this into a wider multi-phase bar). Gallery progress is by set
+    folder; manga progress is by top-level entry.
     """
     root = Path(library.path)
     if not root.is_dir():
@@ -159,13 +165,15 @@ def scan_library(
 
     gallery = _series_kind(library) == "gallery"
     entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".")]
+    total_entries = max(len(entries), 1)
+
     for index, entry in enumerate(entries, start=1):
         if gallery and entry.is_dir():
             _ingest_artist(session, library, entry, root, existing, seen, summary)
         else:
             _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
         if on_progress is not None:
-            on_progress(round(index / len(entries) * 100), entry.name)
+            on_progress(round(index / total_entries * 100), entry.name)
 
     for path_rel, book in existing.items():
         if path_rel not in seen:
@@ -194,21 +202,42 @@ def _ingest_entry(
 ) -> None:
     """One series from a top-level (or per-artist) entry: a folder of books, or a loose
     archive. ``artist`` credits a gallery to its artist/model folder (+ Collection)."""
+    works_name: str
     if entry.is_dir():
         candidates = resolve_books(entry, root)
         if not candidates:
+            # Surface why a set folder was skipped (e.g. only .rar / empty).
+            try:
+                suffixes = sorted(
+                    {
+                        p.suffix.lower()
+                        for p in entry.iterdir()
+                        if p.is_file() and not p.name.startswith(".")
+                    }
+                )
+            except OSError:
+                suffixes = []
+            logger.info(
+                "scan_skip_empty_or_unknown",
+                path=str(entry.relative_to(root)),
+                suffixes=suffixes,
+            )
             return
-        path_rel, title = str(entry.relative_to(root)), entry.name
+        path_rel = str(entry.relative_to(root))
+        works_name = entry.name
     elif entry.is_file() and (kind := _archive_kind(entry.name)):
         candidates = [_candidate(entry, root, entry.parent, kind)]
-        path_rel, title = str(entry.relative_to(root).with_suffix("")), entry.stem
+        path_rel = str(entry.relative_to(root).with_suffix(""))
+        works_name = entry.stem
     else:
         return
+    title = _gallery_display_title(works_name, artist)
     _ingest_series(
         session,
         library,
         path_rel=path_rel,
         title=title,
+        works_name=works_name,
         candidates=candidates,
         existing=existing,
         seen=seen,
@@ -226,17 +255,18 @@ def _ingest_artist(
     seen: set[str],
     summary: ScanSummary,
 ) -> None:
-    """A gallery library's top folder is an artist/model: each child folder/archive is its
-    own gallery series. If the folder *directly* holds page images it's a single gallery
-    with no artist level (so flat gallery libraries keep working)."""
-    children = [p for p in sorted(artist_dir.iterdir()) if not p.name.startswith(".")]
-    if any(p.is_file() and _is_image(p.name) and not is_cover_file(p.name) for p in children):
-        _ingest_entry(session, library, artist_dir, root, existing, seen, summary, artist=None)
-        return
-    for child in children:
-        _ingest_entry(
-            session, library, child, root, existing, seen, summary, artist=artist_dir.name
-        )
+    """Gallery layout: ``<Artist>/<Works>/…media``.
+
+    Each child work folder (or archive) is one series titled ``Artist — Works``.
+    """
+    artist_name = artist_dir.name
+    for child in sorted(artist_dir.iterdir()):
+        if child.name.startswith("."):
+            continue
+        if child.is_dir() or (child.is_file() and _archive_kind(child.name)):
+            _ingest_entry(
+                session, library, child, root, existing, seen, summary, artist=artist_name
+            )
 
 
 def _ingest_series(
@@ -245,6 +275,7 @@ def _ingest_series(
     *,
     path_rel: str,
     title: str,
+    works_name: str,
     candidates: list[Candidate],
     existing: dict[str, Book],
     seen: set[str],
@@ -262,12 +293,24 @@ def _ingest_series(
             library_id=library.id,
             kind=kind,
             title=title,
-            sort_title=title.lower(),
+            sort_title=title.casefold(),
             path_rel=path_rel,
         )
         session.add(series)
         session.flush()
         summary.series_added += 1
+    elif kind == "gallery":
+        # Refresh path-derived default titles on rescan (works-only → Artist — Works).
+        locked = set(series.locked_fields_json or [])
+        old = series.title
+        if (
+            artist
+            and "title" not in locked
+            and old != title
+            and (old == works_name or old == path_rel.split("/")[-1] or " — " not in old)
+        ):
+            series.title = title
+            series.sort_title = title.casefold()
 
     chapters: list[Chapter] = []
     for candidate in candidates:

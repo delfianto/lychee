@@ -20,7 +20,9 @@ interface LibraryRow {
 const libraries = ref<LibraryRow[]>([]);
 const showAdd = ref(false);
 // A scan runs in the background; disable the triggers while one is in flight.
-const scanning = computed(() => activeTasks.value.some((t) => t.kind === "scan"));
+const scanning = computed(() =>
+  activeTasks.value.some((t) => t.kind === "scan" || t.kind === "thumbs"),
+);
 async function loadLibraries(): Promise<void> {
   const { data } = await api.GET("/api/libraries");
   libraries.value = (data ?? []).map((l) => ({
@@ -50,12 +52,23 @@ async function onLibraryAdded(): Promise<void> {
 }
 
 const disposeDone = onTaskDone((task) => {
-  if (task.kind !== "scan") return;
-  void loadLibraries();
-  toast(
-    task.status === "done" ? "Scan complete" : "Scan failed",
-    task.status === "done" ? "success" : "error",
-  );
+  if (task.kind === "scan") {
+    void loadLibraries();
+    toast(
+      task.status === "done" ? "Scan complete" : "Scan failed",
+      task.status === "done" ? "success" : "error",
+    );
+    return;
+  }
+  if (task.kind === "thumbs") {
+    void loadLibraries();
+    if (task.status === "done") {
+      const n = (task.result?.thumbsGenerated as number | undefined) ?? 0;
+      toast(n > 0 ? `Generated ${n} gallery thumbnail(s)` : "Gallery thumbnails up to date");
+    } else {
+      toast("Thumbnail generation failed", "error");
+    }
+  }
 });
 onUnmounted(disposeDone);
 onMounted(loadLibraries);

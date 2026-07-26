@@ -72,6 +72,22 @@ def test_auto_match_skips_when_no_exact_title(db_session: Session) -> None:
     assert series.provider is None  # left for manual matching
 
 
+def test_auto_match_skips_gallery_series(db_session: Session) -> None:
+    """Gallery cosplay/art folders must never be auto-matched to MangaDex."""
+    register_provider(_MatchingProvider())
+    library = ensure_library(db_session)
+    gallery = make_series(db_session, title="Berserk", kind="gallery")  # title collides on purpose
+    manga = make_series(db_session, title="Berserk", kind="manga")
+    db_session.commit()
+
+    matched = auto_match_library(db_session, library.id)
+    db_session.commit()
+
+    assert matched == 1
+    assert gallery.provider is None
+    assert manga.provider == "mangadex"
+
+
 def test_manual_match_then_unlink(client: TestClient, db_session: Session) -> None:
     register_provider(_MatchingProvider())  # override the offline provider for this test
     series = make_series(db_session, title="Frieren", kind="manga")

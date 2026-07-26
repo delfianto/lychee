@@ -109,7 +109,10 @@ def test_gallery_images_list_and_serve(
 
     first = client.get(f"/api/series/{series.id}/images", params={"limit": 2}).json()
     assert len(first["items"]) == 2
-    assert first["items"][0] == f"/api/series/{series.id}/images/0"
+    assert first["items"][0]["url"] == f"/api/series/{series.id}/images/0"
+    assert first["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb"
+    assert first["items"][0]["kind"] == "image"
+    assert first["items"][0]["posterUrl"] is None
     assert first["nextCursor"] is not None
 
     second = client.get(
@@ -121,6 +124,56 @@ def test_gallery_images_list_and_serve(
     img = client.get(f"/api/series/{series.id}/images/0")
     assert img.status_code == 200
     assert img.headers["content-type"] == "image/png"
+
+    # Lazy grid thumb: AVIF, not full PNG; second hit is cache.
+    thumb = client.get(f"/api/series/{series.id}/images/0/thumb")
+    assert thumb.status_code == 200
+    assert thumb.headers["content-type"] == "image/avif"
+    assert b"ftyp" in thumb.content[:32]
+    assert client.get(f"/api/series/{series.id}/images/0/thumb").status_code == 200
+
+
+def test_gallery_mp4_stream_and_range(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    """Progressive MP4 via FileResponse: full GET + Range 206."""
+    root = tmp_path / "lib"
+    library = ensure_library(db_session)
+    library.path = str(root)
+    series = Series(library_id=library.id, kind="gallery", title="Clips", sort_title="clips")
+    db_session.add(series)
+    db_session.flush()
+    folder = root / series.id
+    folder.mkdir(parents=True)
+    # Minimal-ish MP4 is hard; use a small fake payload — FileResponse streams bytes as-is.
+    # Browsers need real MP4; the server contract is media_type + Range, tested here.
+    payload = b"0" * 4096 + b"mp4-test-payload"
+    (folder / "clip.mp4").write_bytes(payload)
+    book = Book(
+        series_id=series.id,
+        library_id=library.id,
+        path_rel=series.id,
+        content_kind="image_dir",
+        page_count=1,
+    )
+    db_session.add(book)
+    db_session.commit()
+
+    listed = client.get(f"/api/series/{series.id}/images").json()
+    assert listed["items"][0]["kind"] == "video"
+    assert listed["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb"
+    assert listed["items"][0]["posterUrl"] == f"/api/series/{series.id}/images/0/poster"
+
+    full = client.get(f"/api/series/{series.id}/images/0")
+    assert full.status_code == 200
+    assert full.headers["content-type"].startswith("video/mp4")
+    assert full.content == payload
+    assert full.headers.get("accept-ranges", "").lower() == "bytes"
+
+    partial = client.get(f"/api/series/{series.id}/images/0", headers={"Range": "bytes=0-99"})
+    assert partial.status_code == 206
+    assert partial.content == payload[:100]
+    assert partial.headers["content-range"].startswith("bytes 0-99/")
 
 
 def test_related_and_art(client: TestClient, db_session: Session, tmp_path: Path) -> None:

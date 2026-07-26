@@ -141,6 +141,16 @@ class SeriesArtOut(CamelModel):
     images: list[str]
 
 
+class GalleryMediaItem(CamelModel):
+    """One still/GIF/video in a gallery folder (grid + lightbox)."""
+
+    index: int
+    kind: str  # image | gif | video
+    url: str  # full-size / stream (lightbox)
+    thumb_url: str  # small grid preview (on-demand or scan-warmed)
+    poster_url: str | None = None  # video only — alias of thumb for ffmpeg frame
+
+
 class LibrarySummaryOut(CamelModel):
     key: str
     title: str

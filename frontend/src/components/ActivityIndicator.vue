@@ -5,6 +5,14 @@
 import { Loader2 } from "lucide-vue-next";
 
 import { activeTasks } from "../api/events";
+
+function kindLabel(kind: string): string {
+  if (kind === "thumbs") return "Thumbs";
+  if (kind === "scan") return "Scan";
+  if (kind === "download") return "DL";
+  if (kind === "metadata") return "Meta";
+  return kind;
+}
 </script>
 
 <template>
@@ -28,7 +36,10 @@ import { activeTasks } from "../api/events";
       <ul class="space-y-3">
         <li v-for="task in activeTasks" :key="task.id">
           <div class="flex justify-between gap-2 text-sm">
-            <span class="truncate">{{ task.label }}</span>
+            <span class="min-w-0 truncate">
+              <span class="badge badge-ghost badge-xs mr-1 align-middle">{{ kindLabel(task.kind) }}</span>
+              {{ task.label }}
+            </span>
             <span class="shrink-0 tabular-nums opacity-60">{{ task.progress }}%</span>
           </div>
           <progress class="progress progress-primary mt-1 h-1.5 w-full" :value="task.progress" max="100" />
