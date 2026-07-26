@@ -24,7 +24,8 @@ def _png() -> bytes:
 
 
 class _FakeProvider:
-    id = "fake"
+    # Unique id — must not stomp test_downloads_api's "fake" (collection order).
+    id = "fake-purge"
 
     def list_chapters(
         self, provider_series_id: str, *, language: str = "en"
@@ -50,7 +51,7 @@ def test_delete_provider_chapter_keeps_series_and_allows_redownload(
     manga_root = tmp_path / "manga"
     ensure_manga_library(db_session, manga_root)
     series = make_series(db_session, title="PurgeMe", kind="manga")
-    series.provider = "fake"
+    series.provider = "fake-purge"
     series.provider_series_id = "remote-p"
     db_session.commit()
 
@@ -68,7 +69,7 @@ def test_delete_provider_chapter_keeps_series_and_allows_redownload(
 
     # Seed remote index so list can show available after purge
     remote = RemoteChapter("pc1", "1", 1, "One", "en")
-    upsert_provider_chapters(db_session, series, [remote], provider="fake")
+    upsert_provider_chapters(db_session, series, [remote], provider="fake-purge")
     db_session.commit()
 
     resp = client.delete(f"/api/chapters/{chapter_id}")
