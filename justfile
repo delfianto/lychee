@@ -136,14 +136,20 @@ install: be-install fe-install
 check: be-check fe-check
 
 # Show which dev services are currently running.
+# Only counts processes *listening* on the port — client connections (browsers,
+# stray ESTABLISHED sockets) used to false-positive as "RUNNING".
 [group('project')]
 status:
     #!/usr/bin/env bash
     set -uo pipefail
     echo "lychee — dev process status"
+    _listeners() {
+      # PIDs of processes in LISTEN state on TCP $1 (unique, space-separated).
+      lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+    }
     _row() {
-      local pids; pids=$(lsof -ti tcp:"$1" 2>/dev/null || true)
-      if [ -n "$pids" ]; then printf '  ● %-20s :%s  RUNNING (pid %s)\n' "$2" "$1" "$(echo $pids | tr "\n" " ")"
+      local pids; pids=$(_listeners "$1")
+      if [ -n "$pids" ]; then printf '  ● %-20s :%s  RUNNING (pid %s)\n' "$2" "$1" "$pids"
       else printf '  ○ %-20s :%s  stopped\n' "$2" "$1"; fi
     }
     _row {{ be_port }} backend
@@ -165,15 +171,16 @@ stop-all: be-stop fe-stop
 
 # ──────────────────────────────── helpers ───────────────────────────────
 
-# (internal) Kill whatever is listening on a TCP port.
+# (internal) Kill whatever is *listening* on a TCP port (not client connections).
 [private]
 kill-port port name:
     #!/usr/bin/env bash
     set -uo pipefail
-    pids=$(lsof -ti tcp:{{ port }} 2>/dev/null || true)
+    pids=$(lsof -nP -iTCP:{{ port }} -sTCP:LISTEN -t 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//')
     if [ -n "$pids" ]; then
-      echo "  ✓ stopping {{ name }} — port {{ port }} (pid $(echo $pids | tr "\n" " "))"
+      echo "  ✓ stopping {{ name }} — port {{ port }} (pid $pids)"
+      # shellcheck disable=SC2086
       kill $pids 2>/dev/null || true
     else
-      echo "  · {{ name }} — nothing on port {{ port }}"
+      echo "  · {{ name }} — nothing listening on port {{ port }}"
     fi
