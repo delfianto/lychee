@@ -30,8 +30,9 @@ be-reinstall: && be-install
     rm -rf {{ backend_dir }}/.venv
 
 # Run the backend in dev mode (uvicorn --reload, auto-migrates + seeds) on :8000.
+# Frees :8000 first so a stray backend can't silently block the bind.
 [group('backend')]
-be-dev:
+be-dev: (kill-port be_port "backend")
     cd {{ backend_dir }} && uv run uvicorn src.main:app --reload --reload-dir src --host 0.0.0.0 --port {{ be_port }}
 
 # Run the backend without reload (stable; use while editing tests/migrations) on :8000.
