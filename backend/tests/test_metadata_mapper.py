@@ -95,3 +95,17 @@ def test_apply_metadata_reuses_existing_tag(db_session: Session) -> None:
 
     assert existing.id in [t.id for t in series.tags]  # matched an existing taxonomy row
     assert db_session.scalar(select(func.count()).select_from(Tag)) == before  # no new tag
+
+
+def test_apply_metadata_credits_idempotent(db_session: Session) -> None:
+    """Re-applying the same credits must not trip UNIQUE(series_id, name, role)."""
+    series = make_series(db_session, title="Credits", kind="manga")
+    db_session.commit()
+    meta = _meta(authors=["A", "A"], artists=["A"])  # dupe author + same name as artist is ok
+    apply_metadata(db_session, series, meta, fetch_covers=False)
+    db_session.commit()
+    apply_metadata(db_session, series, meta, fetch_covers=False)  # second apply
+    db_session.commit()
+    roles = {(c.name, c.role) for c in series.credits}
+    assert ("A", "author") in roles
+    assert ("A", "artist") in roles

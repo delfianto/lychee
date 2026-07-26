@@ -4,6 +4,7 @@ import { RouterLink } from "vue-router";
 
 import type { Series } from "../types";
 import CountryFlag from "./CountryFlag.vue";
+import CoverImage from "./CoverImage.vue";
 
 defineProps<{ series: Series; removable?: boolean }>();
 const emit = defineEmits<{ remove: [] }>();
@@ -14,10 +15,10 @@ const emit = defineEmits<{ remove: [] }>();
     :to="series.kind === 'gallery' ? `/gallery/${series.id}` : `/series/${series.id}`"
     class="group relative block overflow-hidden rounded-box surface-border"
   >
-    <img
+    <CoverImage
       :src="series.coverUrl"
       :alt="series.title"
-      class="cover w-full object-cover transition duration-300 group-hover:scale-105"
+      class="cover w-full transition duration-300 group-hover:scale-105"
     />
     <button
       v-if="removable"

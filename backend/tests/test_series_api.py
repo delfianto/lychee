@@ -13,10 +13,14 @@ class _FakeMetaProvider:
 
     id = "fakemeta"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         raise NotImplementedError
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         raise NotImplementedError
 
     def get_metadata(self, provider_series_id: str, *, language: str = "en") -> SeriesMetadata:
@@ -102,7 +106,9 @@ def test_sort_by_title(client: TestClient, db_session: Session) -> None:
         make_series(db_session, title=title)
     db_session.commit()
 
-    titles = [s["title"] for s in client.get("/api/series", params={"sort": "title"}).json()["items"]]
+    titles = [
+        s["title"] for s in client.get("/api/series", params={"sort": "title"}).json()["items"]
+    ]
     assert titles == ["alpha", "Bravo", "Charlie"]
 
 
@@ -162,7 +168,9 @@ def test_patch_series_partial_and_clear_rating(client: TestClient, db_session: S
 def test_patch_series_invalid_status_and_missing(client: TestClient, db_session: Session) -> None:
     series = make_series(db_session, title="Saga")
     db_session.commit()
-    assert client.patch(f"/api/series/{series.id}", json={"libraryStatus": "bogus"}).status_code == 400
+    assert (
+        client.patch(f"/api/series/{series.id}", json={"libraryStatus": "bogus"}).status_code == 400
+    )
     assert client.patch("/api/series/nope", json={"favorite": True}).status_code == 404
 
 
@@ -209,7 +217,9 @@ def test_patch_edit_locks_field_against_refresh(client: TestClient, db_session: 
     db_session.commit()
 
     # Edit title + authors → locks "title" and "credits".
-    edit = client.patch(f"/api/series/{series.id}", json={"title": "My Title", "authors": ["My Author"]})
+    edit = client.patch(
+        f"/api/series/{series.id}", json={"title": "My Title", "authors": ["My Author"]}
+    )
     assert edit.status_code == 200
 
     assert client.post(f"/api/series/{series.id}/refresh").status_code == 202
@@ -239,7 +249,10 @@ def test_patch_gallery_source_and_characters(client: TestClient, db_session: Ses
 def test_patch_unknown_tag_is_400(client: TestClient, db_session: Session) -> None:
     series = make_series(db_session, title="Tagless")
     db_session.commit()
-    assert client.patch(f"/api/series/{series.id}", json={"tagIds": ["does-not-exist"]}).status_code == 400
+    assert (
+        client.patch(f"/api/series/{series.id}", json={"tagIds": ["does-not-exist"]}).status_code
+        == 400
+    )
 
 
 def test_refresh_fetches_and_applies_metadata(client: TestClient, db_session: Session) -> None:

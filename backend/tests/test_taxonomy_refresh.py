@@ -13,16 +13,22 @@ class _TagProvider:
 
     id = "mangadex"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return []
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         return []
 
     def list_tags(self, *, language: str = "en") -> list[tuple[str, str]]:
         return [("Action", "genre"), ("Cybernetic Ninjas", "theme")]
 
-    def get_metadata(self, *_args: object, **_kwargs: object) -> object:  # for get_metadata_provider
+    def get_metadata(
+        self, *_args: object, **_kwargs: object
+    ) -> object:  # for get_metadata_provider
         raise NotImplementedError
 
 

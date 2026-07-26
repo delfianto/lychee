@@ -9,6 +9,7 @@ download ``Provider`` and the ``MetadataProvider`` contract from downloads/provi
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -39,7 +40,7 @@ def _localized(mapping: dict[str, str] | None, language: str) -> str | None:
 def _as_int(value: str | None) -> int | None:
     try:
         return int(float(value)) if value else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -59,7 +60,9 @@ def _relationship_attr(relationships: list[dict[str, Any]], kind: str, attr: str
     return None
 
 
-def _parse_manga(data: dict[str, Any], language: str, *, rating: float | None = None) -> SeriesMetadata:
+def _parse_manga(
+    data: dict[str, Any], language: str, *, rating: float | None = None
+) -> SeriesMetadata:
     """Normalise a MangaDex manga object (with cover_art/author/artist expanded)."""
     manga_id = data["id"]
     attributes: dict[str, Any] = data.get("attributes", {})
@@ -68,7 +71,10 @@ def _parse_manga(data: dict[str, Any], language: str, *, rating: float | None = 
         (lang, value) for entry in attributes.get("altTitles", []) for lang, value in entry.items()
     ]
     tags = [
-        (_localized(tag["attributes"].get("name"), language) or "", tag["attributes"].get("group", "genre"))
+        (
+            _localized(tag["attributes"].get("name"), language) or "",
+            tag["attributes"].get("group", "genre"),
+        )
         for tag in attributes.get("tags", [])
         if tag.get("attributes")
     ]
@@ -103,7 +109,9 @@ class MangaDexProvider:
         # Accept a raw httpx.Client (tests inject a MockTransport) or a ready client.
         self._api = api or MangaDexClient(client=client)
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         seen: set[str] = set()
         chapters: list[RemoteChapter] = []
         offset = 0
@@ -165,7 +173,9 @@ class MangaDexProvider:
                     title=_localized(attributes.get("title"), "en") or data["id"],
                     year=attributes.get("year"),
                     status=attributes.get("status"),
-                    cover_url=f"{_COVERS_BASE}/{data['id']}/{cover_file}.256.jpg" if cover_file else None,
+                    cover_url=f"{_COVERS_BASE}/{data['id']}/{cover_file}.256.jpg"
+                    if cover_file
+                    else None,
                 )
             )
         return matches
@@ -194,7 +204,11 @@ class MangaDexProvider:
         while True:
             body = self._api.get(
                 "/user/follows/manga",
-                params={"includes[]": ["cover_art", "author", "artist"], "limit": 100, "offset": offset},
+                params={
+                    "includes[]": ["cover_art", "author", "artist"],
+                    "limit": 100,
+                    "offset": offset,
+                },
             ).json()
             results.extend(_parse_manga(data, language) for data in body.get("data", []))
             offset += 100
@@ -249,6 +263,43 @@ class MangaDexProvider:
                 f"/manga/{provider_series_id}/read", json={"chapterIdsRead": chapter_ids}
             )
 
+    def list_ratings(self, manga_ids: list[str]) -> dict[str, int]:
+        """The authed user's personal ratings (1–10) for the given manga ids.
+
+        ``GET /rating?manga[]=…`` — batched; empty/missing ids are omitted.
+        """
+        result: dict[str, int] = {}
+        for start in range(0, len(manga_ids), 100):
+            chunk = manga_ids[start : start + 100]
+            if not chunk:
+                continue
+            body = self._api.get("/rating", params={"manga[]": chunk}).json()
+            ratings = body.get("ratings") or {}
+            if isinstance(ratings, list):
+                # Empty batch sometimes returns [] instead of {}.
+                continue
+            if not isinstance(ratings, dict):
+                continue
+            for mid, payload in ratings.items():
+                raw = payload.get("rating") if isinstance(payload, dict) else payload
+                if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+                    continue
+                try:
+                    score = int(raw)
+                except TypeError, ValueError:
+                    continue
+                if 1 <= score <= 10:
+                    result[str(mid)] = score
+        return result
+
+    def push_rating(self, provider_series_id: str, rating: int | None) -> None:
+        """Set (1–10) or clear the authed user's personal rating for a manga."""
+        if rating is None:
+            _ = self._api.delete(f"/rating/{provider_series_id}")
+            return
+        score = max(1, min(10, int(rating)))
+        _ = self._api.post(f"/rating/{provider_series_id}", json={"rating": score})
+
     def _rating(self, provider_series_id: str) -> float | None:
         """Community rating via /statistics — best-effort (never blocks metadata)."""
         try:
@@ -256,24 +307,33 @@ class MangaDexProvider:
             stats = response.json().get("statistics", {}).get(provider_series_id, {})
             average = stats.get("rating", {}).get("average")
             return float(average) if average is not None else None
-        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+        except httpx.HTTPError, KeyError, TypeError, ValueError:
             return None
 
     def _at_home(self, chapter_id: str) -> dict[str, Any]:
         return self._api.get(f"/at-home/server/{chapter_id}", athome=True).json()
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self,
+        chapter: RemoteChapter,
+        *,
+        data_saver: bool = False,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[bytes]:
         server = self._at_home(chapter.provider_chapter_id)
         quality = "data-saver" if data_saver else "data"
         chapter_hash = server["chapter"]["hash"]
         files: list[str] = server["chapter"]["dataSaver" if data_saver else "data"]
         base = server["baseUrl"]  # mutated if a node expires (403) mid-chapter
+        total = len(files) or 1
         pages: list[bytes] = []
         for filename in files:
             content, base = self._fetch_page(
                 chapter.provider_chapter_id, base, quality, chapter_hash, filename
             )
             pages.append(content)
+            if on_page is not None:
+                on_page(len(pages), total)
         return pages
 
     def _fetch_page(
@@ -306,7 +366,9 @@ class MangaDexProvider:
         self._report(url, success=True, nbytes=len(content), started=started, cached=cached)
         return content, base_url
 
-    def _report(self, url: str, *, success: bool, nbytes: int, started: float, cached: bool) -> None:
+    def _report(
+        self, url: str, *, success: bool, nbytes: int, started: float, cached: bool
+    ) -> None:
         self._api.report(
             url,
             success=success,

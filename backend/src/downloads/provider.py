@@ -7,8 +7,12 @@ at startup, and tests register a fake one — no network in the pipeline itself.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol, cast
+
+# Called as on_page(done, total) while pages are fetched from the provider.
+PageProgress = Callable[[int, int], None]
 
 
 @dataclass(frozen=True)
@@ -25,11 +29,17 @@ class RemoteChapter:
 class Provider(Protocol):
     id: str
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
-        ...
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]: ...
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
-        ...
+    def fetch_pages(
+        self,
+        chapter: RemoteChapter,
+        *,
+        data_saver: bool = False,
+        on_page: PageProgress | None = None,
+    ) -> list[bytes]: ...
 
 
 # --- Metadata side of the abstraction ------------------------------------------

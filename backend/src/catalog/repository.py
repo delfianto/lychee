@@ -369,8 +369,7 @@ def dashboard_counts(session: Session) -> tuple[int, int, int]:
         or 0
     )
     reading = (
-        session.scalar(select(func.count(Series.id)).where(Series.library_status == "reading"))
-        or 0
+        session.scalar(select(func.count(Series.id)).where(Series.library_status == "reading")) or 0
     )
     return series_count, unread_chapters, reading
 

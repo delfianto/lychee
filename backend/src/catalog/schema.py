@@ -87,15 +87,19 @@ class MatchRequest(CamelModel):
 
 
 class ChapterOut(CamelModel):
-    id: str
+    # Null when the row is remote-only (not yet downloaded). Use provider_chapter_id as key.
+    id: str | None = None
     volume: int | None
     number: str
     title: str | None = None
     group: str | None = None
     language: str
     uploaded_at: UtcDatetime | None = None
-    read: bool
-    comments: int
+    read: bool = False
+    comments: int = 0
+    # downloaded | available | queued | downloading | paused | failed
+    status: str = "downloaded"
+    provider_chapter_id: str | None = None
 
 
 class ChapterDetailOut(CamelModel):
@@ -115,6 +119,15 @@ class ChapterDetailOut(CamelModel):
 class VolumeGroupOut(CamelModel):
     volume: int | None
     chapters: list[ChapterOut]
+
+
+class DeleteChapterOut(CamelModel):
+    """Result of removing local chapter content."""
+
+    # provider = file gone, soft book, can re-download; local = hard-deleted from DB
+    mode: str
+    redownloadable: bool
+    series_id: str
 
 
 class RecentUpdateOut(CamelModel):

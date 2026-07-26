@@ -64,10 +64,7 @@ def _etag(data: bytes) -> str:
 
 def _first_book(session: Session, series_id: str) -> Book | None:
     return session.scalar(
-        select(Book)
-        .where(Book.series_id == series_id)
-        .order_by(Book.created_at, Book.id)
-        .limit(1)
+        select(Book).where(Book.series_id == series_id).order_by(Book.created_at, Book.id).limit(1)
     )
 
 
@@ -200,9 +197,7 @@ def generate_series_cover(
     on-disk ``Cover.avif``/``cover.*``/``folder.*``, else the provider cover / first page).
 
     Idempotent + best-effort: skips when the thumbnail exists (unless ``overwrite``),
-    no-ops with no cover source, swallows failures. Returns whether it generated. The
-    hero (``?size=detail``) is served straight from the canonical cover, so it needs no
-    store variant.
+    no-ops with no cover source, swallows failures. Returns whether it generated.
     """
     if not overwrite and store.exists(series_id, ThumbVariant.COVER):
         return False
@@ -217,30 +212,59 @@ def generate_series_cover(
     return True
 
 
+def materialize_series_cover(
+    session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
+) -> bool:
+    """Download/resolve the cover source once and write both thumbnail variants (cover +
+    detail) into the store. Idempotent: no-ops when both variants exist unless
+    ``overwrite``. Best-effort — swallows failures so metadata/sync never aborts.
+    """
+    if (
+        not overwrite
+        and store.exists(series_id, ThumbVariant.COVER)
+        and store.exists(series_id, ThumbVariant.DETAIL)
+    ):
+        return False
+    # Prefer raw bytes so generate_all can size both variants from one decode,
+    # rather than re-encoding an already-downscaled AVIF for the grid size.
+    raw = _raw_cover_source(session, series_id)
+    if raw is None:
+        source = _canonical_cover_bytes(session, series_id)
+        if source is None:
+            return False
+        raw = source
+    try:
+        store.generate_all(series_id, raw, overwrite=overwrite)
+    except Exception as exc:  # noqa: BLE001 - cover warm must never break callers
+        logger.warning("cover_materialize_failed", series_id=series_id, error=str(exc))
+        return False
+    return True
+
+
 def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str) -> Served:
-    """Serve a series cover: ``detail`` → the canonical hero cover bytes; ``cover`` → the
-    cached 320px grid thumbnail (generated on a miss). Both AVIF, with a content ETag."""
+    """Serve a series cover from the thumbnail store (``cover`` ~320px, ``detail`` ~640px).
+
+    On a store miss, materializes both variants from the canonical/provider source so
+    subsequent requests (including detail for virtual MangaDex series with no series dir)
+    never re-hit the remote CDN.
+    """
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
-    if size == "detail":
-        data = _canonical_cover_bytes(session, series_id)
-        if data is None:
-            raise NotFoundError("no cover source for series")
-        return Served(data=data, media_type="image/avif", etag=_etag(data))
-    data = store.read(series_id, ThumbVariant.COVER)
+    variant = ThumbVariant.DETAIL if size == "detail" else ThumbVariant.COVER
+    data = store.read(series_id, variant)
     if data is None:
-        _ = generate_series_cover(session, store, series_id)
-        data = store.read(series_id, ThumbVariant.COVER)
+        _ = materialize_series_cover(session, store, series_id)
+        data = store.read(series_id, variant)
         if data is None:
             raise NotFoundError("no cover source for series")
     return Served(data=data, media_type="image/avif", etag=_etag(data))
 
 
 def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
-    """Warm covers for every series in a library (best-effort). Returns the count generated."""
+    """Warm cover + detail thumbnails for every series in a library (best-effort)."""
     warmed = 0
     for series_id in session.scalars(select(Series.id).where(Series.library_id == library_id)):
-        if generate_series_cover(session, store, series_id):
+        if materialize_series_cover(session, store, series_id):
             warmed += 1
     return warmed
 

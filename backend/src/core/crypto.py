@@ -39,4 +39,6 @@ def decrypt(token: str) -> str:
     try:
         return _cipher().decrypt(token.encode()).decode()
     except InvalidToken as exc:
-        raise BadRequestError("stored secret can't be decrypted (LYCHEE_SECRET_KEY changed?)") from exc
+        raise BadRequestError(
+            "stored secret can't be decrypted (LYCHEE_SECRET_KEY changed?)"
+        ) from exc

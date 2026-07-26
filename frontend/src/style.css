@@ -456,6 +456,31 @@
   aspect-ratio: 2 / 3;
 }
 
+/* Cover placeholder shimmer while /api/series/{id}/cover is still warming. */
+.cover-shimmer {
+  background: linear-gradient(
+    110deg,
+    color-mix(in oklab, var(--color-base-300) 100%, transparent) 25%,
+    color-mix(in oklab, var(--color-base-100) 70%, transparent) 50%,
+    color-mix(in oklab, var(--color-base-300) 100%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: cover-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes cover-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover-shimmer {
+    animation: none;
+  }
+}
+
 /* Hide the native scrollbar on horizontal carousels (they page via dots / wheel). */
 @utility no-scrollbar {
   scrollbar-width: none;

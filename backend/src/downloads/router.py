@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Response, status
+from fastapi.responses import JSONResponse
 
+from src.core.exceptions import BadRequestError
 from src.core.persistence.database import DbSession
 from src.downloads import service
 from src.downloads.deps import StorageRootDep
@@ -18,10 +20,30 @@ def list_downloads(db: DbSession) -> list[DownloadTaskOut]:
     return service.list_downloads(db)
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED)
-def create_downloads(db: DbSession, storage: StorageRootDep, data: DownloadCreate) -> TaskOut:
-    """Download a series' new chapters in the background; returns the task to follow via SSE."""
-    return service.create_downloads(db, data.series_id, storage)
+@router.post("", response_model=None)
+def post_downloads(
+    db: DbSession, storage: StorageRootDep, data: DownloadCreate
+) -> TaskOut | list[DownloadTaskOut] | JSONResponse:
+    """Start a series download, or apply a bulk queue action.
+
+    * ``{ seriesId }`` — plan + drain (202 + TaskOut).
+    * ``{ action: "pause-all" | "cancel-all" | "resume-all" }`` — mutates the queue
+      (200 + refreshed download list).
+    """
+    if data.action:
+        return service.bulk_action(db, data.action, storage)
+    if not data.series_id:
+        raise BadRequestError("seriesId is required unless action is set")
+    task = service.create_downloads(
+        db,
+        data.series_id,
+        storage,
+        provider_chapter_ids=data.provider_chapter_ids,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content=task.model_dump(by_alias=True, mode="json"),
+    )
 
 
 @router.post("/clear-completed", status_code=status.HTTP_204_NO_CONTENT)

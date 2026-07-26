@@ -55,7 +55,9 @@ def start_import(session: Session, data: ImportRequest, storage_root: Path) -> T
     if not (source.is_file() or source.is_dir()):
         raise BadRequestError(f"path not found: {data.path}")
     return queue.submit_task(
-        "localimport", f"Importing {source.name}", _import_work(str(source), data.kind, storage_root)
+        "localimport",
+        f"Importing {source.name}",
+        _import_work(str(source), data.kind, storage_root),
     )
 
 

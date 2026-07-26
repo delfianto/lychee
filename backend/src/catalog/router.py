@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request, Response, status
 
-from src.catalog import matching, media, service
+from src.catalog import matching, media, purge, service
 from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
 from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterDetailOut,
     DashboardOut,
+    DeleteChapterOut,
     LibrarySummaryOut,
     MangaMatchOut,
     MatchRequest,
@@ -97,7 +98,9 @@ def refresh_series(db: DbSession, series_id: str) -> TaskOut:
 
 
 @router.get("/series/{series_id}/match-candidates")
-def match_candidates(db: DbSession, series_id: str, q: str | None = Query(None)) -> list[MangaMatchOut]:
+def match_candidates(
+    db: DbSession, series_id: str, q: str | None = Query(None)
+) -> list[MangaMatchOut]:
     """Provider search hits for matching this series (defaults to its title)."""
     return matching.match_candidates(db, series_id, q=q)
 
@@ -128,6 +131,17 @@ def list_chapters(
 def get_chapter(db: DbSession, chapter_id: str) -> ChapterDetailOut:
     """Chapter detail for the reader."""
     return service.get_chapter(db, chapter_id)
+
+
+@router.delete("/chapters/{chapter_id}")
+def delete_chapter(db: DbSession, chapter_id: str) -> DeleteChapterOut:
+    """Remove local chapter files (provider-aware).
+
+    * **Provider-managed** (MangaDex download): delete the file, soft-delete the book,
+      drop local chapter rows — series + remote index stay so it can be re-downloaded.
+    * **Local / scanned**: hard-delete chapter + book from the DB and the filesystem.
+    """
+    return purge.delete_chapter_local(db, chapter_id)
 
 
 @router.get("/updates")

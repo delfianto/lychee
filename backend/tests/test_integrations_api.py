@@ -13,10 +13,14 @@ class _SyncProvider:
 
     id = "mangadex"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return [RemoteChapter(f"r{n}", str(n), 1, None, "en") for n in (1, 2, 3)]
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         return []
 
 
@@ -30,7 +34,10 @@ def test_providers_list_and_update(client: TestClient) -> None:
     assert updated.json()["language"] == "ja"
 
     # data_saver (download quality) round-trips
-    assert client.patch("/api/providers/mangadex", json={"dataSaver": True}).json()["dataSaver"] is True
+    assert (
+        client.patch("/api/providers/mangadex", json={"dataSaver": True}).json()["dataSaver"]
+        is True
+    )
 
 
 def test_trackers_list_toggle_and_disconnect(client: TestClient) -> None:

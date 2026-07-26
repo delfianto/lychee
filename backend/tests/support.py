@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,23 @@ def ensure_library(session: Session, *, kind: str = "mixed") -> Library:
     if library is None:
         library = Library(name="Test Library", path="/tmp/test", kind=kind)
         session.add(library)
+        session.flush()
+    return library
+
+
+def ensure_manga_library(session: Session, path: str | Path) -> Library:
+    """An enabled kind=manga library rooted at ``path`` (created on disk)."""
+    root = Path(path)
+    root.mkdir(parents=True, exist_ok=True)
+    library = session.scalar(select(Library).where(Library.name == "Manga Library"))
+    if library is None:
+        library = Library(name="Manga Library", path=str(root), kind="manga", enabled=True)
+        session.add(library)
+        session.flush()
+    else:
+        library.path = str(root)
+        library.kind = "manga"
+        library.enabled = True
         session.flush()
     return library
 

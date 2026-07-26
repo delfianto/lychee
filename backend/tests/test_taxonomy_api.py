@@ -21,7 +21,9 @@ def test_uses_count(client: TestClient, db_session: Session) -> None:
     make_series(db_session, title="B", tag_ids=["action"], content_rating="safe")
     db_session.commit()
 
-    by_id = {i["id"]: i for i in client.get("/api/taxonomy", params={"pageSize": 100}).json()["items"]}
+    by_id = {
+        i["id"]: i for i in client.get("/api/taxonomy", params={"pageSize": 100}).json()["items"]
+    }
     assert by_id["action"]["uses"] == 2
     assert by_id["mature"]["uses"] == 1
 

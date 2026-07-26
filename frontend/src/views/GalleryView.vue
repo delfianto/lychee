@@ -7,14 +7,19 @@ import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
 import type { Series } from "../types";
 
+defineOptions({ name: "GalleryView" });
+
 // Galleries are image sets, not chaptered reading — so this page is deliberately
 // different from the manga/comics library: always a large-image grid (no density
 // toggle), no shelf-status tabs or filter presets, and filtering by the things
 // that matter for artwork — artist/model and source series. Galleries are few, so
 // we fetch them once and filter/derive facets client-side.
 const all = ref<Series[]>([]);
+const loading = ref(true);
 onMounted(async () => {
+  loading.value = true;
   all.value = await fetchGalleries();
+  loading.value = false;
 });
 
 const query = ref("");
@@ -75,6 +80,11 @@ const filtered = computed(() => {
     </div>
 
     <!-- Always the large-image (gallery) density. -->
-    <SeriesCollection :series="filtered" density="gallery" empty-text="No galleries match." />
+    <SeriesCollection
+      :series="filtered"
+      density="gallery"
+      :loading="loading"
+      empty-text="No galleries match."
+    />
   </div>
 </template>

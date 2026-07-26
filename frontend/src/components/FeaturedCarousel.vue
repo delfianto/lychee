@@ -3,7 +3,9 @@ import { ChevronLeft, ChevronRight } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import { synopsisOnly } from "../lib/description";
 import type { Series } from "../types";
+import CoverImage from "./CoverImage.vue";
 
 const props = defineProps<{ items: Series[] }>();
 
@@ -25,10 +27,11 @@ function progress(s: Series | undefined): number {
   <section v-if="current" class="relative overflow-hidden rounded-box surface-border bg-base-100">
     <div class="flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
       <!-- Cover -->
-      <img
+      <CoverImage
         :src="current.coverUrl"
         :alt="current.title"
-        class="cover w-32 shrink-0 rounded-box object-cover sm:w-44"
+        priority
+        class="cover w-32 shrink-0 rounded-box sm:w-44"
       />
 
       <!-- Info -->
@@ -44,7 +47,7 @@ function progress(s: Series | undefined): number {
           </span>
         </div>
 
-        <p class="line-clamp-2 text-sm text-base-content/70">{{ current.description }}</p>
+        <p class="line-clamp-2 text-sm text-base-content/70">{{ synopsisOnly(current.description) }}</p>
 
         <div class="mt-auto flex flex-col gap-2">
           <div class="flex items-center gap-3">

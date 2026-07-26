@@ -149,7 +149,9 @@ def test_credentials_login_connects_and_encrypts_token(
     monkeypatch.setattr(settings, "secret_key", "test-key")
     register_tracker(_FakeMangaUpdates())
 
-    resp = client.post("/api/trackers/mangaupdates/login", json={"username": "me", "password": "pw"})
+    resp = client.post(
+        "/api/trackers/mangaupdates/login", json={"username": "me", "password": "pw"}
+    )
     assert resp.status_code == 200
     assert resp.json()["connected"] is True
     assert resp.json()["accountName"] == "me"

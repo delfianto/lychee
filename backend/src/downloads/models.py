@@ -29,6 +29,10 @@ class DownloadTask(BaseModel):
     # queued | downloading | paused | done | failed
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True, nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # 0–100
+    # fetching | encoding while status=downloading; null otherwise
+    phase: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # e.g. "12/40" pages within the current phase
+    detail: Mapped[str | None] = mapped_column(String(64), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # What to download, so a queued/paused row survives to be fetched later.

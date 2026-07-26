@@ -160,14 +160,19 @@ def test_provider_cover_is_downloaded_and_served_locally(
 
     # coverUrl is local, and the cover is now cached
     listed = client.get("/api/series").json()["items"]
-    assert next(s for s in listed if s["id"] == series.id)["coverUrl"] == f"/api/series/{series.id}/cover"
+    assert (
+        next(s for s in listed if s["id"] == series.id)["coverUrl"]
+        == f"/api/series/{series.id}/cover"
+    )
     assert ThumbnailStore(tmp_path / "storage" / "thumbnails").exists(series.id, ThumbVariant.COVER)
 
 
 def test_page_render_with_width_downscales_and_caches(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
-    series, chapter = _make_book_series(db_session, tmp_path, kind="manga", pages=1, with_chapter=True)
+    series, chapter = _make_book_series(
+        db_session, tmp_path, kind="manga", pages=1, with_chapter=True
+    )
     assert chapter is not None
     # replace page 1 with a wide image so a width cap actually downscales
     wide = io.BytesIO()
@@ -204,12 +209,25 @@ def test_chapters_group_no_volume_first_then_descending(
     series = Series(library_id=library.id, kind="manga", title="Vol Test", sort_title="vol test")
     db_session.add(series)
     db_session.flush()
-    book = Book(series_id=series.id, library_id=library.id, path_rel=series.id, content_kind="image_dir", page_count=1)
+    book = Book(
+        series_id=series.id,
+        library_id=library.id,
+        path_rel=series.id,
+        content_kind="image_dir",
+        page_count=1,
+    )
     db_session.add(book)
     db_session.flush()
     for volume, number, sort in [(None, "100", 100.0), (1, "1", 1.0), (2, "10", 10.0)]:
         db_session.add(
-            Chapter(series_id=series.id, book_id=book.id, volume=volume, number=number, number_sort=sort, page_count=1)
+            Chapter(
+                series_id=series.id,
+                book_id=book.id,
+                volume=volume,
+                number=number,
+                number_sort=sort,
+                page_count=1,
+            )
         )
     db_session.commit()
 

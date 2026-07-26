@@ -141,11 +141,13 @@ const nav: NavItem[] = [
       </header>
 
       <main class="grow overflow-x-clip">
-        <RouterView v-slot="{ Component }">
+        <RouterView v-slot="{ Component, route: r }">
           <Transition name="page" mode="out-in">
-            <!-- Key by path (not full path) so pages animate on navigation but
-                 not on query-only changes like ?view= / ?q=. -->
-            <component :is="Component" :key="route.path" />
+            <!-- KeepAlive on main library tabs so revisiting doesn't remount + refetch.
+                 Series detail / settings / list detail stay outside so they stay fresh. -->
+            <KeepAlive :include="['LibraryHome', 'LibraryView', 'GalleryView', 'ListsView', 'SearchView']">
+              <component :is="Component" :key="r.path" />
+            </KeepAlive>
           </Transition>
         </RouterView>
       </main>

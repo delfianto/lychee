@@ -28,10 +28,14 @@ class _OfflineProvider:
 
     id = "mangadex"
 
-    def list_chapters(self, provider_series_id: str, *, language: str = "en") -> list[RemoteChapter]:
+    def list_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> list[RemoteChapter]:
         return []
 
-    def fetch_pages(self, chapter: RemoteChapter, *, data_saver: bool = False) -> list[bytes]:
+    def fetch_pages(
+        self, chapter: RemoteChapter, *, data_saver: bool = False, on_page=None
+    ) -> list[bytes]:
         return []
 
     def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:
@@ -47,6 +51,7 @@ class _OfflineProvider:
         self, provider_series_id: str, *, known: set[str], language: str = "en"
     ) -> list[RemoteChapter]:
         return []
+
 
 # Tests manage their own schema per fixture; never migrate/seed the real database.
 settings.auto_bootstrap = False
@@ -107,7 +112,9 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
     app.dependency_overrides[get_thumbnail_store] = lambda: ThumbnailStore(
         tmp_path / "storage" / "thumbnails"
     )
-    app.dependency_overrides[get_render_cache] = lambda: RenderCache(tmp_path / "storage" / "renders")
+    app.dependency_overrides[get_render_cache] = lambda: RenderCache(
+        tmp_path / "storage" / "renders"
+    )
     queue.configure(test_session)  # background workers use this test's temp DB
     with TestClient(app) as test_client:
         register_provider(_OfflineProvider())  # startup registers the real one; neutralise it

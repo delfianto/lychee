@@ -50,7 +50,9 @@ class Tracker(Base, TimestampMixin):
     access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     pkce_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)  # transient (MAL)
-    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class SyncState(Base, TimestampMixin):

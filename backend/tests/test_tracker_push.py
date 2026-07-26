@@ -47,7 +47,12 @@ class _RecordingTracker:
 
     def push(self, *, access_token: str, media_id: str, status: str, progress: int) -> None:
         self.pushes.append(
-            {"access_token": access_token, "media_id": media_id, "status": status, "progress": progress}
+            {
+                "access_token": access_token,
+                "media_id": media_id,
+                "status": status,
+                "progress": progress,
+            }
         )
 
 

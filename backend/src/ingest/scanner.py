@@ -234,7 +234,9 @@ def _ingest_artist(
         _ingest_entry(session, library, artist_dir, root, existing, seen, summary, artist=None)
         return
     for child in children:
-        _ingest_entry(session, library, child, root, existing, seen, summary, artist=artist_dir.name)
+        _ingest_entry(
+            session, library, child, root, existing, seen, summary, artist=artist_dir.name
+        )
 
 
 def _ingest_series(

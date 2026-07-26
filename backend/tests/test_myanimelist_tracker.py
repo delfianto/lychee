@@ -25,7 +25,10 @@ def test_exchange_code_sends_verifier_and_reads_name() -> None:
 
     tracker = MyAnimeListTracker(client=httpx.Client(transport=httpx.MockTransport(handler)))
     pair = tracker.exchange_code(
-        code="c", client_id="cid", client_secret="sec", redirect_uri="http://cb",
+        code="c",
+        client_id="cid",
+        client_secret="sec",
+        redirect_uri="http://cb",
         code_verifier="the-verifier",
     )
     assert pair == TokenPair("acc", "ref")

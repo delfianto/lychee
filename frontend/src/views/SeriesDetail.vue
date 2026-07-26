@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bookmark, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "lucide-vue-next";
+import { BookMarked, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "lucide-vue-next";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
@@ -13,14 +13,18 @@ import {
   type MatchCandidate,
   matchSeries,
   patchSeries,
+  deleteChapterLocal,
+  queueDownload,
   refreshSeries,
   unlinkMatch,
 } from "../api/queries";
 import AddToListMenu from "../components/AddToListMenu.vue";
 import ChapterList from "../components/ChapterList.vue";
 import CountryFlag from "../components/CountryFlag.vue";
+import CoverImage from "../components/CoverImage.vue";
 import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
+import SeriesDescription from "../components/SeriesDescription.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
 import { toast } from "../lib/toast";
@@ -32,6 +36,7 @@ const series = ref<Series | null>(null);
 const volumes = ref<VolumeGroup[]>([]);
 const related = ref<Series[]>([]);
 const artCovers = ref<string[]>([]);
+const loading = ref(true);
 
 const expanded = ref(false);
 const favorite = ref(false);
@@ -41,8 +46,12 @@ const userRating = ref<number | null>(null);
 const hoverRating = ref(0);
 
 const failed = ref(false);
-async function load(id: string): Promise<void> {
-  series.value = null;
+async function load(id: string, opts: { soft?: boolean } = {}): Promise<void> {
+  // Soft reload keeps existing content visible (same series refresh / download done).
+  if (!opts.soft) {
+    series.value = null;
+    loading.value = true;
+  }
   failed.value = false;
   try {
     const [s, vols, rel, art] = await Promise.all([
@@ -60,10 +69,74 @@ async function load(id: string): Promise<void> {
     userRating.value = s.userRating ?? null;
   } catch {
     failed.value = true;
+  } finally {
+    loading.value = false;
   }
 }
 const reload = (): void => void load(String(route.params.id));
-watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
+watch(
+  () => route.params.id,
+  (id, prev) => void load(String(id), { soft: prev !== undefined && String(id) === String(prev) }),
+  { immediate: true },
+);
+
+async function downloadChapter(providerChapterId: string, done?: () => void): Promise<void> {
+  if (!series.value) {
+    done?.();
+    return;
+  }
+  try {
+    await queueDownload(series.value.id, [providerChapterId]);
+    toast("Chapter queued");
+    // Optimistic status so the row flips without waiting for SSE.
+    for (const g of volumes.value) {
+      for (const c of g.chapters) {
+        if (c.providerChapterId === providerChapterId && c.status === "available") {
+          c.status = "queued";
+        }
+      }
+    }
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't queue download", "error");
+  } finally {
+    done?.();
+  }
+}
+async function downloadAll(done?: () => void): Promise<void> {
+  if (!series.value) {
+    done?.();
+    return;
+  }
+  try {
+    await queueDownload(series.value.id);
+    toast("Downloading available chapters…");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't queue download", "error");
+  } finally {
+    done?.();
+  }
+}
+
+async function onDeleteChapter(chapterId: string, done?: () => void): Promise<void> {
+  if (!series.value) {
+    done?.();
+    return;
+  }
+  try {
+    const result = await deleteChapterLocal(chapterId);
+    toast(
+      result.redownloadable
+        ? "Download removed — chapter can be re-downloaded"
+        : "Chapter permanently deleted",
+      "info",
+    );
+    await load(series.value.id, { soft: true });
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't delete chapter", "error");
+  } finally {
+    done?.();
+  }
+}
 
 function toggleFavorite(): void {
   if (!series.value) return;
@@ -131,9 +204,12 @@ async function unlinkMeta(): Promise<void> {
   toast("Unlinked source", "info");
 }
 
-// Reload when the background metadata task finishes (match/refresh apply then).
+// Reload when metadata or download tasks finish.
 const disposeTask = onTaskDone((task) => {
-  if (task.kind === "metadata" && series.value) void load(series.value.id);
+  if (!series.value) return;
+  if (task.kind === "metadata" || task.kind === "download") {
+    void load(series.value.id, { soft: true });
+  }
 });
 onUnmounted(disposeTask);
 
@@ -149,16 +225,20 @@ const statuses: { value: LibraryStatus; label: string }[] = [
 const statusLabel = computed(
   () => statuses.find((s) => s.value === libraryStatus.value)?.label ?? "None",
 );
+/** Track button: show current shelf label, or "Track" when untracked. */
+const trackLabel = computed(() =>
+  libraryStatus.value === "none" ? "Track" : statusLabel.value,
+);
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 </script>
 
 <template>
   <div class="flex flex-col gap-6">
     <ErrorState v-if="failed" message="Couldn't load this series." @retry="reload" />
-    <div v-else-if="!series" class="flex justify-center py-20">
+    <div v-else-if="loading && !series" class="flex justify-center py-20">
       <span class="loading loading-spinner loading-lg text-primary" />
     </div>
-    <template v-else>
+    <template v-else-if="series">
     <!-- HERO -->
     <section class="relative">
       <!-- Blurred backdrop, clipped here so it can't bleed but the dropdowns above still overflow. -->
@@ -173,10 +253,11 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
       </div>
 
       <div class="relative flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
-        <img
+        <CoverImage
           :src="series.coverUrl"
           :alt="series.title"
-          class="cover w-36 shrink-0 rounded-box object-cover shadow-lg sm:w-48"
+          priority
+          class="cover w-36 shrink-0 rounded-box shadow-lg sm:w-48"
         />
         <div class="flex min-w-0 grow flex-col gap-3">
           <div class="flex flex-col gap-1">
@@ -205,41 +286,25 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             </div>
           </div>
 
-          <!-- Synopsis -->
-          <div>
-            <p class="text-sm text-base-content/80" :class="{ 'line-clamp-3': !expanded }">
-              {{ series.description }}
-            </p>
+          <!-- Synopsis (Markdown + structured Namespace/Tags table from MangaDex) -->
+          <div v-if="series.description">
+            <SeriesDescription
+              :text="series.description"
+              :clamp="!expanded"
+              :show-tag-table="expanded"
+            />
             <button class="btn btn-ghost btn-xs mt-1" @click="expanded = !expanded">
               {{ expanded ? "Show less" : "Show more" }}
             </button>
           </div>
 
-          <!-- Action row: pinned to the bottom of the hero so it sits consistently
-               regardless of synopsis length. -->
-          <div class="mt-auto flex flex-wrap items-center justify-between gap-2">
+          <!-- Action row: left tools · right: new-count + track + metadata -->
+          <div class="mt-auto flex flex-wrap items-center gap-2">
             <div class="flex flex-wrap items-center gap-2">
               <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
                 <BookOpen class="size-4" />
                 Start reading
               </RouterLink>
-
-              <!-- Library status -->
-              <div class="dropdown">
-                <div tabindex="0" role="button" class="btn btn-sm gap-2">
-                  <Bookmark class="size-4" />{{ statusLabel }}
-                </div>
-                <ul
-                  tabindex="0"
-                  class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
-                >
-                  <li v-for="s in statuses" :key="s.value">
-                    <a :class="{ 'menu-active': s.value === libraryStatus }" @click="setStatus(s.value)">
-                      {{ s.label }}
-                    </a>
-                  </li>
-                </ul>
-              </div>
 
               <!-- Your rating (1–10) -->
               <div class="dropdown">
@@ -289,34 +354,60 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
               </button>
             </div>
 
-            <span
-              v-if="(series.availableChapters ?? 0) > 0"
-              class="badge badge-warning gap-1"
-              :title="`${series.availableChapters} new chapters available upstream`"
-            >
-              {{ series.availableChapters }} new
-            </span>
-            <div class="join">
-              <button class="btn btn-sm join-item">Track</button>
-              <div class="dropdown dropdown-end">
-                <div
-                  tabindex="0"
-                  role="button"
-                  class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
-                  data-tip="Metadata source"
-                  aria-label="Metadata source"
-                >
-                  <RefreshCw class="size-4" />
+            <!-- Right cluster: new badge + Track (shelf) + metadata source -->
+            <div class="ml-auto flex flex-wrap items-center gap-2">
+              <span
+                v-if="(series.availableChapters ?? 0) > 0"
+                class="badge badge-warning gap-1"
+                :title="`${series.availableChapters} new chapters available upstream`"
+              >
+                {{ series.availableChapters }} new
+              </span>
+              <div class="join">
+                <!-- Track = shelf status -->
+                <div class="dropdown dropdown-end">
+                  <div
+                    tabindex="0"
+                    role="button"
+                    class="btn btn-sm join-item gap-1.5"
+                    :class="libraryStatus !== 'none' ? 'btn-primary' : ''"
+                  >
+                    <BookMarked class="size-4" />{{ trackLabel }}
+                  </div>
+                  <ul
+                    tabindex="0"
+                    class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
+                  >
+                    <li v-for="s in statuses" :key="s.value">
+                      <a
+                        :class="{ 'menu-active': s.value === libraryStatus }"
+                        @click="setStatus(s.value)"
+                      >
+                        {{ s.label === "None" ? "Not tracking" : s.label }}
+                      </a>
+                    </li>
+                  </ul>
                 </div>
-                <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
-                  <li><a @click="openMatch"><Link2 class="size-4" />Match on MangaDex…</a></li>
-                  <li :class="{ 'menu-disabled': !isMatched }">
-                    <a @click="isMatched && refreshMeta()"><RefreshCw class="size-4" />Refresh metadata</a>
-                  </li>
-                  <li v-if="isMatched">
-                    <a class="text-error" @click="unlinkMeta"><X class="size-4" />Unlink source</a>
-                  </li>
-                </ul>
+                <div class="dropdown dropdown-end">
+                  <div
+                    tabindex="0"
+                    role="button"
+                    class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
+                    data-tip="Metadata source"
+                    aria-label="Metadata source"
+                  >
+                    <RefreshCw class="size-4" />
+                  </div>
+                  <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
+                    <li><a @click="openMatch"><Link2 class="size-4" />Match on MangaDex…</a></li>
+                    <li :class="{ 'menu-disabled': !isMatched }">
+                      <a @click="isMatched && refreshMeta()"><RefreshCw class="size-4" />Refresh metadata</a>
+                    </li>
+                    <li v-if="isMatched">
+                      <a class="text-error" @click="unlinkMeta"><X class="size-4" />Unlink source</a>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -330,7 +421,16 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
         <SeriesInfoPanel :series="series" />
       </aside>
       <div class="min-w-0 grow">
-        <ChapterList :volumes="volumes" :related="related" :art-covers="artCovers" />
+        <ChapterList
+          :volumes="volumes"
+          :related="related"
+          :art-covers="artCovers"
+          :series-id="series.id"
+          :matched="isMatched"
+          @download="downloadChapter"
+          @download-all="downloadAll"
+          @delete-chapter="onDeleteChapter"
+        />
       </div>
     </div>
 

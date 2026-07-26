@@ -96,9 +96,12 @@ def test_import_is_idempotent(client: TestClient, tmp_path: Path) -> None:
 
 def test_import_applies_filename_pattern(client: TestClient, tmp_path: Path) -> None:
     _enable(client)
-    assert client.patch(
-        "/api/import/config", json={"filenamePattern": "{author} - {series} - c{chapter}"}
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/import/config", json={"filenamePattern": "{author} - {series} - c{chapter}"}
+        ).status_code
+        == 200
+    )
     root = tmp_path / "incoming" / "raw"  # folder name is ignored; the pattern names the series
     _cbz(root / "Kentaro Miura - Berserk - c001.cbz", 2)
     _cbz(root / "Kentaro Miura - Berserk - c002.cbz", 2)
@@ -119,10 +122,13 @@ def test_import_applies_filename_pattern(client: TestClient, tmp_path: Path) -> 
 
 def test_import_pattern_applies_language_and_tags(client: TestClient, tmp_path: Path) -> None:
     _enable(client)
-    assert client.patch(
-        "/api/import/config",
-        json={"filenamePattern": "{series} [{language}] {tags} - c{chapter}"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/import/config",
+            json={"filenamePattern": "{series} [{language}] {tags} - c{chapter}"},
+        ).status_code
+        == 200
+    )
     root = tmp_path / "incoming" / "raw"
     _cbz(root / "Vinland Saga [en] action, seinen - c001.cbz", 2)
 

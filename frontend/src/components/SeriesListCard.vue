@@ -3,16 +3,19 @@ import { Heart, Star } from "lucide-vue-next";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
+import { synopsisOnly } from "../lib/description";
 import { contentRatingClass, contentRatingLabel, statusColor, statusLabel } from "../lib/display";
 import type { Series } from "../types";
 import AddToListMenu from "./AddToListMenu.vue";
 import CountryFlag from "./CountryFlag.vue";
+import CoverImage from "./CoverImage.vue";
 
 const props = defineProps<{ series: Series; compact?: boolean }>();
 
 const maxTags = computed(() => (props.compact ? 3 : 6));
 const shownTags = computed(() => props.series.tags.slice(0, maxTags.value));
 const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.value));
+const blurb = computed(() => synopsisOnly(props.series.description));
 </script>
 
 <template>
@@ -21,10 +24,10 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
     class="group block"
   >
     <article class="flex gap-3 rounded-box surface-border bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4">
-      <img
+      <CoverImage
         :src="series.coverUrl"
         :alt="series.title"
-        class="cover shrink-0 rounded-box object-cover"
+        class="cover shrink-0 rounded-box"
         :class="compact ? 'w-28' : 'w-20 sm:w-24'"
       />
 
@@ -69,12 +72,13 @@ const moreTags = computed(() => Math.max(0, props.series.tags.length - maxTags.v
           <span v-if="moreTags > 0" class="badge badge-ghost badge-sm">+{{ moreTags }}</span>
         </div>
 
-        <!-- Synopsis -->
+        <!-- Synopsis (table junk stripped) -->
         <p
+          v-if="blurb"
           class="text-xs text-base-content/60"
           :class="compact ? 'line-clamp-2' : 'line-clamp-2 sm:line-clamp-3'"
         >
-          {{ series.description }}
+          {{ blurb }}
         </p>
 
         <!-- Meta footer -->

@@ -163,7 +163,15 @@ export interface paths {
         get: operations["get_chapter_api_chapters__chapter_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Chapter
+         * @description Remove local chapter files (provider-aware).
+         *
+         *     * **Provider-managed** (MangaDex download): delete the file, soft-delete the book,
+         *       drop local chapter rows — series + remote index stay so it can be re-downloaded.
+         *     * **Local / scanned**: hard-delete chapter + book from the DB and the filesystem.
+         */
+        delete: operations["delete_chapter_api_chapters__chapter_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -946,10 +954,14 @@ export interface paths {
         get: operations["list_downloads_api_downloads_get"];
         put?: never;
         /**
-         * Create Downloads
-         * @description Download a series' new chapters in the background; returns the task to follow via SSE.
+         * Post Downloads
+         * @description Start a series download, or apply a bulk queue action.
+         *
+         *     * ``{ seriesId }`` — plan + drain (202 + TaskOut).
+         *     * ``{ action: "pause-all" | "cancel-all" | "resume-all" }`` — mutates the queue
+         *       (200 + refreshed download list).
          */
-        post: operations["create_downloads_api_downloads_post"];
+        post: operations["post_downloads_api_downloads_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1119,7 +1131,7 @@ export interface components {
         /** ChapterOut */
         ChapterOut: {
             /** Id */
-            id: string;
+            id?: string | null;
             /** Volume */
             volume: number | null;
             /** Number */
@@ -1132,10 +1144,23 @@ export interface components {
             language: string;
             /** Uploadedat */
             uploadedAt?: string | null;
-            /** Read */
+            /**
+             * Read
+             * @default false
+             */
             read: boolean;
-            /** Comments */
+            /**
+             * Comments
+             * @default 0
+             */
             comments: number;
+            /**
+             * Status
+             * @default downloaded
+             */
+            status: string;
+            /** Providerchapterid */
+            providerChapterId?: string | null;
         };
         /** CollectionCreate */
         CollectionCreate: {
@@ -1197,10 +1222,33 @@ export interface components {
             /** Reading */
             reading: number;
         };
-        /** DownloadCreate */
-        DownloadCreate: {
+        /**
+         * DeleteChapterOut
+         * @description Result of removing local chapter content.
+         */
+        DeleteChapterOut: {
+            /** Mode */
+            mode: string;
+            /** Redownloadable */
+            redownloadable: boolean;
             /** Seriesid */
             seriesId: string;
+        };
+        /**
+         * DownloadCreate
+         * @description Start a series download, or run a bulk queue action.
+         *
+         *     * Queue work: set ``series_id`` (optional ``provider_chapter_ids``).
+         *     * Bulk: set ``action`` to ``pause-all`` | ``cancel-all`` | ``resume-all``
+         *       (``series_id`` ignored).
+         */
+        DownloadCreate: {
+            /** Seriesid */
+            seriesId?: string | null;
+            /** Providerchapterids */
+            providerChapterIds?: string[] | null;
+            /** Action */
+            action?: string | null;
         };
         /** DownloadTaskOut */
         DownloadTaskOut: {
@@ -1213,6 +1261,10 @@ export interface components {
             status: string;
             /** Progress */
             progress: number;
+            /** Phase */
+            phase?: string | null;
+            /** Detail */
+            detail?: string | null;
             /** Sizebytes */
             sizeBytes?: number | null;
         };
@@ -2013,6 +2065,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChapterDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_chapter_api_chapters__chapter_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteChapterOut"];
                 };
             };
             /** @description Validation Error */
@@ -3504,7 +3587,7 @@ export interface operations {
             };
         };
     };
-    create_downloads_api_downloads_post: {
+    post_downloads_api_downloads_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3518,12 +3601,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            202: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskOut"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

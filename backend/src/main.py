@@ -108,9 +108,7 @@ async def _validation_exception_handler(
 
 
 @app.exception_handler(StarletteHTTPException)
-async def _http_exception_handler(
-    _request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
+async def _http_exception_handler(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
     """Framework HTTP errors (unknown route, wrong method, …) → the standard error shape."""
     code = _HTTP_ERROR_CODES.get(exc.status_code, "error")
     return _error_response(exc.status_code, code, str(exc.detail))

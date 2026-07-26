@@ -42,7 +42,11 @@ async function load(id: string): Promise<void> {
   showEnd.value = false;
   const [s, vols] = await Promise.all([fetchSeries(detail.seriesId), fetchChapters(detail.seriesId)]);
   seriesTitle.value = s.title;
-  const ascending = vols.flatMap((v) => v.chapters).reverse(); // reading order
+  // Reader only navigates local (downloaded) chapters.
+  const ascending = vols
+    .flatMap((v) => v.chapters)
+    .filter((c): c is typeof c & { id: string } => !!c.id && c.status === "downloaded")
+    .reverse(); // reading order
   orderedIds.value = ascending.map((c) => c.id);
   chapterOptions.value = ascending.map((c) => ({ id: c.id, label: `Ch. ${c.number}` }));
 }

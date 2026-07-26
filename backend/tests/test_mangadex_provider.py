@@ -12,6 +12,15 @@ def _handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if path == "/report":  # mandatory MangaDex@Home report (best-effort)
         return httpx.Response(200)
+    if path == "/rating" and request.method == "GET":
+        return httpx.Response(
+            200,
+            json={"result": "ok", "ratings": {"m1": {"rating": 8}, "m2": {"rating": 10}}},
+        )
+    if path.startswith("/rating/") and request.method == "POST":
+        return httpx.Response(200, json={"result": "ok"})
+    if path.startswith("/rating/") and request.method == "DELETE":
+        return httpx.Response(200, json={"result": "ok"})
     if path.endswith("/feed"):
         return httpx.Response(
             200,
@@ -45,7 +54,11 @@ def _handler(request: httpx.Request) -> httpx.Response:
             200,
             json={
                 "baseUrl": "https://uploads.example",
-                "chapter": {"hash": "h", "data": ["p1.png", "p2.png"], "dataSaver": ["s1.jpg", "s2.jpg"]},
+                "chapter": {
+                    "hash": "h",
+                    "data": ["p1.png", "p2.png"],
+                    "dataSaver": ["s1.jpg", "s2.jpg"],
+                },
             },
         )
     if path.startswith("/data-saver/"):
@@ -58,6 +71,27 @@ def _handler(request: httpx.Request) -> httpx.Response:
 def _provider() -> MangaDexProvider:
     client = httpx.Client(base_url=API_BASE, transport=httpx.MockTransport(_handler))
     return MangaDexProvider(client=client)
+
+
+def test_list_ratings_parses_personal_scores() -> None:
+    scores = _provider().list_ratings(["m1", "m2", "m3"])
+    assert scores == {"m1": 8, "m2": 10}
+
+
+def test_push_rating_post_and_delete() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        return httpx.Response(200, json={"result": "ok"})
+
+    provider = MangaDexProvider(
+        client=httpx.Client(base_url=API_BASE, transport=httpx.MockTransport(handler))
+    )
+    provider.push_rating("manga-1", 7)
+    provider.push_rating("manga-1", None)
+    assert ("POST", "/rating/manga-1") in seen
+    assert ("DELETE", "/rating/manga-1") in seen
 
 
 def test_list_chapters_parses_dedupes_and_enriches() -> None:
@@ -90,7 +124,9 @@ def test_fetch_pages_reassigns_node_on_403() -> None:
         if "/at-home/server/" in path:
             state["athome"] += 1
             base = "https://dead.example" if state["athome"] == 1 else "https://live.example"
-            return httpx.Response(200, json={"baseUrl": base, "chapter": {"hash": "h", "data": ["p1.png"]}})
+            return httpx.Response(
+                200, json={"baseUrl": base, "chapter": {"hash": "h", "data": ["p1.png"]}}
+            )
         if request.url.host == "dead.example":
             return httpx.Response(403)  # node expired
         if request.url.host == "live.example":

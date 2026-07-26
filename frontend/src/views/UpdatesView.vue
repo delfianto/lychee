@@ -15,8 +15,11 @@ const viewOptions: { value: FeedView; icon: Component; label: string }[] = [
 ];
 
 const entries = ref<RecentUpdate[]>([]);
+const loading = ref(true);
 onMounted(async () => {
+  loading.value = true;
   entries.value = await fetchUpdates(false);
+  loading.value = false;
 });
 </script>
 
@@ -25,10 +28,19 @@ onMounted(async () => {
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">Recently updated</h1>
-        <p class="text-sm text-base-content/60">{{ entries.length }} chapter updates</p>
+        <p class="text-sm text-base-content/60">
+          <template v-if="loading">Loading…</template>
+          <template v-else>{{ entries.length }} chapter updates</template>
+        </p>
       </div>
       <SegmentedToggle v-model="view" :options="viewOptions" aria-label="Update view" />
     </div>
-    <ChapterFeed :entries="entries" :view="view" />
+    <div v-if="loading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary" />
+    </div>
+    <div v-else-if="!entries.length" class="py-16 text-center text-sm text-base-content/60">
+      No chapter updates yet.
+    </div>
+    <ChapterFeed v-else :entries="entries" :view="view" />
   </div>
 </template>

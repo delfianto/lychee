@@ -6,6 +6,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
+import PromptDialog from "../../components/PromptDialog.vue";
 import { toast } from "../../lib/toast";
 
 interface TaxRow {
@@ -59,12 +60,19 @@ async function toggleTax(row: TaxRow): Promise<void> {
     body: { enabled: row.enabled },
   });
 }
-async function addTax(): Promise<void> {
-  const name = window.prompt("New tag name?");
-  if (!name?.trim()) return;
+const addTagOpen = ref(false);
+const addTagBusy = ref(false);
+
+function openAddTax(): void {
+  addTagOpen.value = true;
+}
+
+async function addTax(name: string): Promise<void> {
+  addTagBusy.value = true;
   const { data } = await api.POST("/api/taxonomy", {
     body: { name: name.trim(), category: "genre" },
   });
+  addTagBusy.value = false;
   if (data) {
     taxonomy.value.push({
       id: data.id,
@@ -75,6 +83,9 @@ async function addTax(): Promise<void> {
       system: data.system,
     });
     toast(`Added “${data.name}”`);
+    addTagOpen.value = false;
+  } else {
+    toast("Couldn't add tag", "error");
   }
 }
 async function removeTax(row: TaxRow): Promise<void> {
@@ -108,7 +119,7 @@ onMounted(loadTaxonomy);
         <button class="btn btn-ghost btn-sm gap-1" :disabled="refreshing" @click="refreshTaxonomy">
           <RefreshCw class="size-4" :class="{ 'animate-spin': refreshing }" />{{ refreshing ? "Refreshing…" : "Refresh" }}
         </button>
-        <button class="btn btn-primary btn-sm gap-1" @click="addTax"><Plus class="size-4" />Add</button>
+        <button class="btn btn-primary btn-sm gap-1" @click="openAddTax"><Plus class="size-4" />Add</button>
       </div>
     </div>
 
@@ -171,5 +182,16 @@ onMounted(loadTaxonomy);
         </button>
       </div>
     </div>
+
+    <PromptDialog
+      :open="addTagOpen"
+      title="Add tag"
+      label="Tag name"
+      placeholder="e.g. Slice of Life"
+      confirm-label="Add tag"
+      :busy="addTagBusy"
+      @submit="addTax"
+      @cancel="addTagOpen = false"
+    />
   </div>
 </template>

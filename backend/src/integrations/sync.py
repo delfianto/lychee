@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.catalog.models import Chapter, Series
+from src.catalog.models import Series
+from src.catalog.remote_chapters import upsert_provider_chapters
 from src.core.logging import get_logger
 from src.downloads.provider import get_provider
 from src.integrations.models import Provider, SyncState
@@ -65,11 +66,14 @@ def _sync_work() -> Work:
             provider = get_provider(series.provider or "")
             if provider is not None:
                 try:
-                    remote = provider.list_chapters(series.provider_series_id or "", language=language)
-                    local = set(
-                        session.scalars(select(Chapter.number).where(Chapter.series_id == series.id))
+                    remote = provider.list_chapters(
+                        series.provider_series_id or "", language=language
                     )
-                    series.available_chapters = sum(1 for r in remote if r.number not in local)
+                    # Persist full feed (not just the count) so series detail can list
+                    # undownloaded chapters with download status.
+                    _ = upsert_provider_chapters(
+                        session, series, remote, provider=series.provider or provider.id
+                    )
                     total_new += series.available_chapters
                 except Exception as exc:  # noqa: BLE001 - per-series best-effort
                     logger.warning("sync_series_failed", series=series.title, error=str(exc))

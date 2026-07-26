@@ -11,6 +11,8 @@ import SeriesCollection from "../components/SeriesCollection.vue";
 import { toast } from "../lib/toast";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
 
+defineOptions({ name: "LibraryView" });
+
 const props = defineProps<{ libraryKey: string }>();
 const route = useRoute();
 

@@ -20,9 +20,7 @@ from typing import Self
 
 from src.core.exceptions import BadRequestError, NotFoundError
 
-IMAGE_EXTS = frozenset(
-    {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif"}
-)
+IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif"})
 
 _NUM = re.compile(r"(\d+)")
 
