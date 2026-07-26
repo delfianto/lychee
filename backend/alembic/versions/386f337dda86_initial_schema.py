@@ -1,16 +1,17 @@
 """initial schema
 
-Revision ID: 3559dc57489f
+Revision ID: 386f337dda86
 Revises: 
-Create Date: 2026-07-25 00:00:54.512243
+Create Date: 2026-07-26 08:34:24.002091
 
 """
 from alembic import op
 import sqlalchemy as sa
 
+from src.catalog.search_index import SEARCH_INDEX_DROP_STATEMENTS, SEARCH_INDEX_STATEMENTS
 
 # revision identifiers, used by Alembic.
-revision = '3559dc57489f'
+revision = '386f337dda86'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -21,7 +22,22 @@ def upgrade() -> None:
     op.create_table('collection',
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('provider', sa.String(length=32), nullable=True),
+    sa.Column('provider_list_id', sa.String(length=64), nullable=True),
     sa.Column('id', sa.String(length=12), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('collection', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_collection_provider_list_id'), ['provider_list_id'], unique=False)
+
+    op.create_table('import_config',
+    sa.Column('id', sa.String(length=32), nullable=False),
+    sa.Column('enabled', sa.Boolean(), nullable=False),
+    sa.Column('quality', sa.Integer(), nullable=False),
+    sa.Column('filename_pattern', sa.String(length=512), nullable=False),
+    sa.Column('pattern_presets', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
@@ -45,6 +61,11 @@ def upgrade() -> None:
     sa.Column('language', sa.String(length=16), nullable=False),
     sa.Column('auto_match', sa.Boolean(), nullable=False),
     sa.Column('fetch_covers', sa.Boolean(), nullable=False),
+    sa.Column('data_saver', sa.Boolean(), nullable=False),
+    sa.Column('account_name', sa.String(length=128), nullable=True),
+    sa.Column('client_id', sa.String(length=128), nullable=True),
+    sa.Column('client_secret_enc', sa.Text(), nullable=True),
+    sa.Column('refresh_token_enc', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
@@ -78,8 +99,11 @@ def upgrade() -> None:
     sa.Column('connected', sa.Boolean(), nullable=False),
     sa.Column('sync_on_read', sa.Boolean(), nullable=False),
     sa.Column('account_name', sa.String(length=128), nullable=True),
-    sa.Column('access_token', sa.String(length=2048), nullable=True),
-    sa.Column('refresh_token', sa.String(length=2048), nullable=True),
+    sa.Column('client_id', sa.String(length=128), nullable=True),
+    sa.Column('client_secret_enc', sa.Text(), nullable=True),
+    sa.Column('access_token_enc', sa.Text(), nullable=True),
+    sa.Column('refresh_token_enc', sa.Text(), nullable=True),
+    sa.Column('pkce_verifier', sa.String(length=128), nullable=True),
     sa.Column('token_expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -97,13 +121,16 @@ def upgrade() -> None:
     sa.Column('year', sa.Integer(), nullable=True),
     sa.Column('origin_country', sa.String(length=2), nullable=True),
     sa.Column('rating', sa.Float(), nullable=True),
+    sa.Column('user_rating', sa.Float(), nullable=True),
     sa.Column('favorite', sa.Boolean(), nullable=False),
     sa.Column('library_status', sa.String(length=16), nullable=False),
     sa.Column('total_chapters', sa.Integer(), nullable=True),
+    sa.Column('available_chapters', sa.Integer(), nullable=False),
     sa.Column('path_rel', sa.String(length=1024), nullable=True),
     sa.Column('cover_source', sa.String(length=1024), nullable=True),
     sa.Column('provider', sa.String(length=32), nullable=True),
     sa.Column('provider_series_id', sa.String(length=64), nullable=True),
+    sa.Column('external_ids_json', sa.JSON(), nullable=True),
     sa.Column('image_count', sa.Integer(), nullable=True),
     sa.Column('source', sa.String(length=512), nullable=True),
     sa.Column('characters_json', sa.JSON(), nullable=True),
@@ -134,6 +161,7 @@ def upgrade() -> None:
     sa.Column('page_count', sa.Integer(), nullable=False),
     sa.Column('file_last_modified', sa.DateTime(timezone=True), nullable=True),
     sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('restore_progress_json', sa.JSON(), nullable=True),
     sa.Column('id', sa.String(length=12), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -226,6 +254,8 @@ def upgrade() -> None:
     sa.Column('progress', sa.Integer(), nullable=False),
     sa.Column('size_bytes', sa.Integer(), nullable=True),
     sa.Column('error', sa.Text(), nullable=True),
+    sa.Column('provider', sa.String(length=32), nullable=True),
+    sa.Column('remote_json', sa.JSON(), nullable=True),
     sa.Column('id', sa.String(length=12), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -255,8 +285,19 @@ def upgrade() -> None:
 
     # ### end Alembic commands ###
 
+    # FTS5 full-text search index over series (title / alt-titles / authors).
+    # Hand-managed raw SQL — excluded from autogenerate (see alembic/env.py) and
+    # shared with the app/test harness (see src/catalog/search_index.py). Runs last,
+    # after series / title_variant / series_credit exist (its triggers reference them).
+    for statement in SEARCH_INDEX_STATEMENTS:
+        op.execute(statement)
+
 
 def downgrade() -> None:
+    # Drop the FTS index first — its triggers reference series / title_variant / series_credit.
+    for statement in SEARCH_INDEX_DROP_STATEMENTS:
+        op.execute(statement)
+
     # ### commands auto generated by Alembic - please adjust! ###
     with op.batch_alter_table('reading_progress', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_reading_progress_series_id'))
@@ -308,5 +349,9 @@ def downgrade() -> None:
     op.drop_table('sync_state')
     op.drop_table('provider')
     op.drop_table('library')
+    op.drop_table('import_config')
+    with op.batch_alter_table('collection', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_collection_provider_list_id'))
+
     op.drop_table('collection')
     # ### end Alembic commands ###
