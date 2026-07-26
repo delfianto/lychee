@@ -11,6 +11,9 @@ class CollectionOut(CamelModel):
     name: str
     description: str | None = None
     series_ids: list[str]
+    # "manga" | "comic" | "gallery" if every member series shares one kind, "mixed" if
+    # they differ, null if the list is empty — lets the UI group/tab lists by content type.
+    kind: str | None = None
 
 
 class CollectionDetailOut(CamelModel):

@@ -43,3 +43,26 @@ def test_update_and_missing(client: TestClient) -> None:
     assert updated["name"] == "Renamed"
 
     assert client.get("/api/collections/nope").status_code == 404
+
+
+def test_kind_reflects_membership(client: TestClient, db_session: Session) -> None:
+    manga = make_series(db_session, title="M", kind="manga")
+    manga2 = make_series(db_session, title="M2", kind="manga")
+    gallery = make_series(db_session, title="G", kind="gallery")
+    db_session.commit()
+
+    cid = client.post("/api/collections", json={"name": "Mixed test"}).json()["id"]
+    assert client.get("/api/collections").json()[0]["kind"] is None  # empty list
+
+    client.post(f"/api/collections/{cid}/series", json={"seriesId": manga.id})
+    assert client.get(f"/api/collections/{cid}").json  # detail still works
+    single = client.get("/api/collections").json()[0]
+    assert single["kind"] == "manga"
+
+    client.post(f"/api/collections/{cid}/series", json={"seriesId": manga2.id})
+    still_single = client.get("/api/collections").json()[0]
+    assert still_single["kind"] == "manga"
+
+    client.post(f"/api/collections/{cid}/series", json={"seriesId": gallery.id})
+    mixed = client.get("/api/collections").json()[0]
+    assert mixed["kind"] == "mixed"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from src.catalog import repository as catalog_repo
 from src.catalog.models import Series
@@ -18,12 +18,23 @@ from src.collections.schema import (
 from src.core.exceptions import NotFoundError
 
 
+def _collection_kind(collection: Collection) -> str | None:
+    """The member series' shared kind — "mixed" if they differ, ``None`` if empty."""
+    kinds = {entry.series.kind for entry in collection.entries}
+    if not kinds:
+        return None
+    if len(kinds) == 1:
+        return next(iter(kinds))
+    return "mixed"
+
+
 def _to_out(collection: Collection) -> CollectionOut:
     return CollectionOut(
         id=collection.id,
         name=collection.name,
         description=collection.description,
         series_ids=[entry.series_id for entry in collection.entries],
+        kind=_collection_kind(collection),
     )
 
 
@@ -35,7 +46,11 @@ def _get(session: Session, collection_id: str) -> Collection:
 
 
 def list_collections(session: Session) -> list[CollectionOut]:
-    collections = session.scalars(select(Collection).order_by(Collection.created_at)).all()
+    collections = session.scalars(
+        select(Collection)
+        .order_by(Collection.created_at)
+        .options(selectinload(Collection.entries).selectinload(CollectionSeries.series))
+    ).all()
     return [_to_out(c) for c in collections]
 
 

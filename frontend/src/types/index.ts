@@ -127,4 +127,6 @@ export interface Collection {
   name: string;
   description?: string;
   seriesIds: string[];
+  /** Shared kind of every member series; "mixed" if they differ, undefined if empty. */
+  kind?: "manga" | "comic" | "gallery" | "mixed";
 }

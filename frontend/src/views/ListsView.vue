@@ -1,16 +1,42 @@
 <script setup lang="ts">
 import { Layers, Plus, Trash2 } from "lucide-vue-next";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import { toast } from "../lib/toast";
 import { useCollections } from "../stores/collections";
+import type { Collection } from "../types";
 
 defineOptions({ name: "ListsView" });
 
 const collections = useCollections();
 const creating = ref(false);
 const newName = ref("");
+
+// --- Kind tabs (mirrors LibraryView's shelf-status tabs) -----------------
+type KindTab = "all" | "manga" | "comic" | "gallery";
+const DEFAULT_TAB_KEY = "lychee.listsDefaultTab";
+function initialTab(): KindTab {
+  const stored = localStorage.getItem(DEFAULT_TAB_KEY);
+  return stored === "manga" || stored === "comic" || stored === "gallery" || stored === "all"
+    ? stored
+    : "manga";
+}
+const kindTabs: { value: KindTab; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "manga", label: "Manga" },
+  { value: "comic", label: "Comics" },
+  { value: "gallery", label: "Gallery" },
+];
+const activeTab = ref<KindTab>(initialTab());
+
+function matchesTab(list: Collection): boolean {
+  return activeTab.value === "all" || list.kind === activeTab.value;
+}
+const visibleLists = computed(() => collections.lists.filter(matchesTab));
+const activeTabLabel = computed(
+  () => kindTabs.find((t) => t.value === activeTab.value)?.label ?? "",
+);
 
 async function create(): Promise<void> {
   const name = newName.value.trim();
@@ -19,6 +45,9 @@ async function create(): Promise<void> {
   toast(`Created “${name}”`);
   newName.value = "";
   creating.value = false;
+  // A brand-new list has no series yet, so it has no kind — jump to "All" so it
+  // doesn't silently vanish from whichever kind tab was active.
+  activeTab.value = "all";
 }
 function covers(seriesIds: string[]): string[] {
   return seriesIds.slice(0, 4).map((id) => `/api/series/${id}/cover`);
@@ -30,11 +59,25 @@ function covers(seriesIds: string[]): string[] {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">Lists</h1>
-        <p class="text-sm text-base-content/60">{{ collections.lists.length }} lists</p>
+        <p class="text-sm text-base-content/60">{{ visibleLists.length }} lists</p>
       </div>
       <button class="btn btn-primary btn-sm gap-1.5" @click="creating = !creating">
         <Plus class="size-4" />New list
       </button>
+    </div>
+
+    <!-- Kind tabs -->
+    <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
+      <a
+        v-for="tab in kindTabs"
+        :key="tab.value"
+        role="tab"
+        class="tab whitespace-nowrap"
+        :class="{ 'tab-active': activeTab === tab.value }"
+        @click="activeTab = tab.value"
+      >
+        {{ tab.label }}
+      </a>
     </div>
 
     <!-- Inline create -->
@@ -53,9 +96,12 @@ function covers(seriesIds: string[]): string[] {
     <div v-if="!collections.lists.length" class="py-16 text-center text-base-content/60">
       No lists yet — create one to group series together.
     </div>
+    <div v-else-if="!visibleLists.length" class="py-16 text-center text-base-content/60">
+      No {{ activeTab === "all" ? "" : `${activeTabLabel} ` }}lists yet.
+    </div>
 
     <div v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      <div v-for="l in collections.lists" :key="l.id" class="group relative">
+      <div v-for="l in visibleLists" :key="l.id" class="group relative">
         <RouterLink
           :to="`/lists/${l.id}`"
           class="block overflow-hidden rounded-box surface-border bg-base-100 transition hover:shadow-md"

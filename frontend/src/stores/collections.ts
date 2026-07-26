@@ -13,10 +13,17 @@ interface ApiCollection {
   name: string;
   description?: string | null;
   seriesIds: string[];
+  kind?: string | null;
 }
 
 function toCollection(c: ApiCollection): Collection {
-  return { id: c.id, name: c.name, description: c.description ?? undefined, seriesIds: c.seriesIds };
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description ?? undefined,
+    seriesIds: c.seriesIds,
+    kind: (c.kind ?? undefined) as Collection["kind"],
+  };
 }
 
 export const useCollections = defineStore("collections", () => {
