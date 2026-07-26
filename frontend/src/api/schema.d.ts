@@ -1059,6 +1059,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse
+         * @description List a directory under the configured storage root.
+         *
+         *     Used by the Add Library / Import path browsers so operators pick a folder
+         *     instead of typing a server path. Paths outside the storage root are rejected.
+         */
+        get: operations["browse_api_fs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fs/mkdir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mkdir
+         * @description Create a new folder under the storage root (path browser “New folder”).
+         */
+        post: operations["mkdir_api_fs_mkdir_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1267,6 +1310,45 @@ export interface components {
             detail?: string | null;
             /** Sizebytes */
             sizeBytes?: number | null;
+        };
+        /**
+         * FsEntry
+         * @description One directory entry under the storage root.
+         */
+        FsEntry: {
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dir" | "file";
+        };
+        /**
+         * FsListing
+         * @description Directory listing for the path browser UI.
+         */
+        FsListing: {
+            /** Root */
+            root: string;
+            /** Path */
+            path: string;
+            /** Parent */
+            parent: string | null;
+            /** Entries */
+            entries: components["schemas"]["FsEntry"][];
+        };
+        /**
+         * FsMkdir
+         * @description Create a directory under the storage root.
+         */
+        FsMkdir: {
+            /** Parent */
+            parent: string;
+            /** Name */
+            name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3748,6 +3830,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_api_fs_get: {
+        parameters: {
+            query?: {
+                /** @description Absolute path under the storage root, or relative to it. Empty = root. */
+                path?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsListing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mkdir_api_fs_mkdir_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FsMkdir"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsEntry"];
+                };
             };
             /** @description Validation Error */
             422: {
