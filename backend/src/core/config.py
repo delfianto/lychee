@@ -37,8 +37,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: list[str] = ["*"]
 
-    # Logging
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    # Logging — DEBUG by default (dev-friendly); production deployments should set
+    # LOG_LEVEL=INFO explicitly (see .env.example).
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "DEBUG"
     log_format: Literal["json", "console"] = "console"
 
     model_config = SettingsConfigDict(
