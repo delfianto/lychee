@@ -4,15 +4,15 @@
 import { Download, Globe, Image, Languages, Wand2 } from "lucide-vue-next";
 import { onMounted, reactive, watch } from "vue";
 
-import { api } from "../../api/client";
+import { fetchProviders, updateProvider } from "../../api/settingsQueries";
 
 const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true, dataSaver: false });
 const providerLanguages = ["en", "ja", "ko", "zh"];
 let providerLoaded = false;
 
 async function loadProvider(): Promise<void> {
-  const { data } = await api.GET("/api/providers");
-  const md = (data ?? []).find((p) => p.id === "mangadex") ?? (data ?? [])[0];
+  const data = await fetchProviders();
+  const md = data.find((p) => p.id === "mangadex") ?? data[0];
   if (md) {
     provider.id = md.id;
     provider.enabled = md.enabled;
@@ -26,15 +26,12 @@ watch(
   () => ({ ...provider }),
   () => {
     if (!providerLoaded) return;
-    void api.PATCH("/api/providers/{provider_id}", {
-      params: { path: { provider_id: provider.id } },
-      body: {
-        enabled: provider.enabled,
-        language: provider.language,
-        autoMatch: provider.autoMatch,
-        fetchCovers: provider.fetchCovers,
-        dataSaver: provider.dataSaver,
-      },
+    void updateProvider(provider.id, {
+      enabled: provider.enabled,
+      language: provider.language,
+      autoMatch: provider.autoMatch,
+      fetchCovers: provider.fetchCovers,
+      dataSaver: provider.dataSaver,
     });
   },
 );

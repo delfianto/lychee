@@ -4,10 +4,20 @@
 import { Globe, Pause, Play, RefreshCw, Square, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
-import { api } from "../../api/client";
+import type { DownloadTask } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
-import type { components } from "../../api/schema";
+import {
+  bulkDownloadAction,
+  clearCompletedDownloads,
+  deleteDownloadTask,
+  fetchDownloadTasks,
+  fetchSyncState,
+  pauseDownload as pauseDownloadRemote,
+  resumeDownload as resumeDownloadRemote,
+  retryDownload as retryDownloadRemote,
+  runSync,
+} from "../../api/settingsQueries";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 import CoverImage from "../../components/CoverImage.vue";
 import { toast } from "../../lib/toast";
@@ -49,7 +59,7 @@ function formatBytes(n: number | null | undefined): string {
   if (!n) return "—";
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
 }
-function mapRows(rows: components["schemas"]["DownloadTaskOut"][] | undefined): DlRow[] {
+function mapRows(rows: DownloadTask[] | null | undefined): DlRow[] {
   return (rows ?? []).map((d) => ({
     id: d.id,
     series: { coverUrl: d.series.coverUrl, title: d.series.title },
@@ -71,54 +81,52 @@ function progressLabel(d: DlRow): string {
   return `${phase}${pages} · ${d.progress}%`;
 }
 async function loadDownloads(): Promise<void> {
-  const { data } = await api.GET("/api/downloads");
-  dl.value = mapRows(data);
+  dl.value = mapRows(await fetchDownloadTasks());
 }
 async function loadSync(): Promise<void> {
-  const { data } = await api.GET("/api/sync");
+  const data = await fetchSyncState();
   if (!data) return;
   sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "never";
   sync.newChapters = data.newChapters;
 }
 async function syncNow(): Promise<void> {
   sync.syncing = true;
-  await api.POST("/api/sync"); // runs on the queue; state reloads on the sync task's done event
+  await runSync(); // runs on the queue; state reloads on the sync task's done event
   toast("Checking for new chapters…");
 }
 async function retryDownload(d: DlRow): Promise<void> {
-  await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: d.id } } });
+  await retryDownloadRemote(d.id);
   toast("Download queued"); // the list refreshes when the download.done event arrives
 }
 async function pauseDownload(d: DlRow): Promise<void> {
-  const { data } = await api.POST("/api/downloads/{task_id}/pause", { params: { path: { task_id: d.id } } });
+  const data = await pauseDownloadRemote(d.id);
   if (data) dl.value = mapRows(data); // endpoint returns the refreshed list
 }
 async function resumeDownload(d: DlRow): Promise<void> {
-  const { data } = await api.POST("/api/downloads/{task_id}/resume", { params: { path: { task_id: d.id } } });
+  const data = await resumeDownloadRemote(d.id);
   if (data) dl.value = mapRows(data); // resumed chapter drains on the queue; rows climb on download.* events
 }
 async function removeDownload(d: DlRow): Promise<void> {
-  await api.DELETE("/api/downloads/{task_id}", { params: { path: { task_id: d.id } } });
+  await deleteDownloadTask(d.id);
   await loadDownloads();
 }
 async function clearDone(): Promise<void> {
-  await api.POST("/api/downloads/clear-completed");
+  await clearCompletedDownloads();
   await loadDownloads();
 }
 
 const cancelAllOpen = ref(false);
 
 async function runBulkAction(action: "pause-all" | "cancel-all" | "resume-all"): Promise<void> {
-  const { data, error, response } = await api.POST("/api/downloads", {
-    body: { action },
-  });
-  if (error) {
-    toast("Couldn't update downloads", "error");
+  let result;
+  try {
+    result = await bulkDownloadAction(action);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't update downloads", "error");
     return;
   }
-  // Bulk actions return the refreshed list (200); create returns 202 TaskOut.
-  if (response.status === 200 && Array.isArray(data)) {
-    dl.value = mapRows(data as components["schemas"]["DownloadTaskOut"][]);
+  if (result.rows) {
+    dl.value = mapRows(result.rows);
   } else {
     await loadDownloads();
   }

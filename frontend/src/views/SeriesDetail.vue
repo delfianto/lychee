@@ -7,11 +7,8 @@ import { onTaskDone } from "../api/events";
 import {
   fetchArt,
   fetchChapters,
-  fetchMatchCandidates,
   fetchRelated,
   fetchSeries,
-  type MatchCandidate,
-  matchSeries,
   patchSeries,
   deleteChapterLocal,
   queueDownload,
@@ -24,10 +21,10 @@ import CountryFlag from "../components/CountryFlag.vue";
 import CoverImage from "../components/CoverImage.vue";
 import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
+import MatchSeriesModal from "../components/MatchSeriesModal.vue";
 import SeriesDescription from "../components/SeriesDescription.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
-import { useFocusTrap } from "../lib/focusTrap";
 import { createStaleGuard } from "../lib/staleGuard";
 import { toast } from "../lib/toast";
 import type { LibraryStatus, Series, VolumeGroup } from "../types";
@@ -197,28 +194,11 @@ function onEdited(): void {
 const isMatched = computed(() => !!series.value?.provider);
 const chaptersSynced = computed(() => !!series.value?.chaptersSyncedAt);
 const matchOpen = ref(false);
-const matchQuery = ref("");
-const matchLoading = ref(false);
-const matchResults = ref<MatchCandidate[]>([]);
-const matchModalBox = ref<HTMLElement | null>(null);
-useFocusTrap(matchModalBox, matchOpen);
-
-async function runMatchSearch(): Promise<void> {
-  if (!series.value) return;
-  matchLoading.value = true;
-  matchResults.value = await fetchMatchCandidates(series.value.id, matchQuery.value.trim() || undefined);
-  matchLoading.value = false;
-}
 function openMatch(): void {
   if (!series.value) return;
-  matchQuery.value = series.value.title;
-  matchResults.value = [];
   matchOpen.value = true;
-  void runMatchSearch();
 }
-async function pickMatch(c: MatchCandidate): Promise<void> {
-  if (!series.value) return;
-  await matchSeries(series.value.id, c.providerSeriesId);
+function onMatched(): void {
   matchOpen.value = false;
   toast("Matched — fetching metadata…");
 }
@@ -470,43 +450,13 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
     </div>
 
     <!-- Match-on-MangaDex modal -->
-    <div v-if="matchOpen" class="modal modal-open" @click.self="matchOpen = false">
-      <div ref="matchModalBox" class="modal-box max-w-2xl">
-        <div class="mb-3 flex items-center justify-between">
-          <h3 class="text-lg font-bold">Match on MangaDex</h3>
-          <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="matchOpen = false">
-            <X class="size-4" />
-          </button>
-        </div>
-        <label class="input input-bordered flex items-center gap-2">
-          <input v-model="matchQuery" class="grow" placeholder="Search title…" aria-label="Search for a matching series" @keyup.enter="runMatchSearch" />
-          <button class="btn btn-primary btn-sm" @click="runMatchSearch">Search</button>
-        </label>
-        <div v-if="matchLoading" class="flex justify-center py-8">
-          <span class="loading loading-spinner text-primary" />
-        </div>
-        <ul v-else class="mt-4 max-h-96 space-y-2 overflow-y-auto">
-          <li v-for="c in matchResults" :key="c.providerSeriesId">
-            <button
-              class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-200"
-              @click="pickMatch(c)"
-            >
-              <img v-if="c.coverUrl" :src="c.coverUrl" :alt="c.title" class="h-16 w-12 shrink-0 rounded object-cover" />
-              <div v-else class="h-16 w-12 shrink-0 rounded bg-base-300" />
-              <div class="min-w-0">
-                <div class="truncate font-medium">{{ c.title }}</div>
-                <div class="text-xs text-base-content/60">
-                  {{ [c.year, c.status].filter(Boolean).join(" · ") || "—" }}
-                </div>
-              </div>
-            </button>
-          </li>
-          <li v-if="!matchResults.length" class="py-8 text-center text-sm text-base-content/50">
-            No matches found
-          </li>
-        </ul>
-      </div>
-    </div>
+    <MatchSeriesModal
+      v-if="matchOpen && series"
+      :series-id="series.id"
+      :initial-query="series.title"
+      @close="matchOpen = false"
+      @matched="onMatched"
+    />
 
     <!-- Edit metadata modal -->
     <EditSeriesModal v-if="editOpen" :series="series" @close="editOpen = false" @saved="onEdited" />

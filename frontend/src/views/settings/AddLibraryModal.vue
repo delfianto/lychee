@@ -5,7 +5,7 @@
 import { FolderPlus, X } from "lucide-vue-next";
 import { reactive, ref } from "vue";
 
-import { api } from "../../api/client";
+import { addLibrary } from "../../api/settingsQueries";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
@@ -28,14 +28,14 @@ function onPathPicked(path: string): void {
 
 async function add(): Promise<void> {
   form.busy = true;
-  const { error } = await api.POST("/api/libraries", {
-    body: { name: form.name.trim(), path: form.path.trim(), kind: form.kind },
-  });
-  form.busy = false;
-  if (error) {
-    toast("Couldn't add library — check the path exists on the server", "error");
+  try {
+    await addLibrary({ name: form.name.trim(), path: form.path.trim(), kind: form.kind });
+  } catch (e) {
+    form.busy = false;
+    toast(e instanceof Error ? e.message : "Couldn't add library", "error");
     return;
   }
+  form.busy = false;
   emit("added");
 }
 </script>

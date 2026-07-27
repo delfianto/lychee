@@ -6,7 +6,7 @@
 import { Eye, EyeOff, FileUp, Link2, X } from "lucide-vue-next";
 import { reactive, ref } from "vue";
 
-import { api } from "../../api/client";
+import { connectMangaDex } from "../../api/settingsQueries";
 import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
@@ -86,20 +86,19 @@ async function onFileSelected(event: Event): Promise<void> {
 
 async function connect(): Promise<void> {
   form.busy = true;
-  const { error } = await api.POST("/api/providers/{provider_id}/connect", {
-    params: { path: { provider_id: "mangadex" } },
-    body: {
+  try {
+    await connectMangaDex({
       clientId: form.clientId,
       clientSecret: form.clientSecret,
       username: form.username,
       password: form.password,
-    },
-  });
-  form.busy = false;
-  if (error) {
-    toast("Connect failed — check credentials & LYCHEE_SECRET_KEY", "error");
+    });
+  } catch (e) {
+    form.busy = false;
+    toast(e instanceof Error ? e.message : "Connect failed", "error");
     return;
   }
+  form.busy = false;
   emit("connected");
 }
 </script>

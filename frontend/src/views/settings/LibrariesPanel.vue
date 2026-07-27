@@ -4,9 +4,9 @@
 import { Library, Plus, RefreshCw } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
 import { relativeTime } from "../../api/format";
+import { deleteLibrary, fetchLibraryRows, scanAllLibraries, scanLibrary } from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 import AddLibraryModal from "./AddLibraryModal.vue";
 
@@ -24,8 +24,8 @@ const scanning = computed(() =>
   activeTasks.value.some((t) => t.kind === "scan" || t.kind === "thumbs"),
 );
 async function loadLibraries(): Promise<void> {
-  const { data } = await api.GET("/api/libraries");
-  libraries.value = (data ?? []).map((l) => ({
+  const data = await fetchLibraryRows();
+  libraries.value = data.map((l) => ({
     id: l.id,
     name: l.name,
     path: l.path,
@@ -34,15 +34,15 @@ async function loadLibraries(): Promise<void> {
   }));
 }
 async function scanAll(): Promise<void> {
-  await api.POST("/api/libraries/scan");
+  await scanAllLibraries();
   toast("Scan started"); // libraries refresh when the scan.done event arrives
 }
 async function scanOne(id: string): Promise<void> {
-  await api.POST("/api/libraries/{library_id}/scan", { params: { path: { library_id: id } } });
+  await scanLibrary(id);
   toast("Scan started");
 }
 async function removeLibrary(id: string): Promise<void> {
-  await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
+  await deleteLibrary(id);
   await loadLibraries();
 }
 async function onLibraryAdded(): Promise<void> {

@@ -5,7 +5,7 @@
 import { Link2, X } from "lucide-vue-next";
 import { reactive, ref } from "vue";
 
-import { api } from "../../api/client";
+import { beginTrackerConnect, completeTrackerConnect, loginTracker } from "../../api/settingsQueries";
 import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
@@ -23,16 +23,17 @@ const form = reactive({
 
 async function beginTrackerAuth(): Promise<void> {
   form.busy = true;
-  const { data, error } = await api.POST("/api/trackers/{tracker_id}/connect", {
-    params: { path: { tracker_id: props.tracker.id } },
-    body: { clientId: form.clientId, clientSecret: form.clientSecret, redirectUri: form.redirectUri },
-  });
-  form.busy = false;
-  if (error || !data) {
-    toast("Couldn't start auth — check credentials & LYCHEE_SECRET_KEY", "error");
-    return;
+  try {
+    form.authorizeUrl = await beginTrackerConnect(props.tracker.id, {
+      clientId: form.clientId,
+      clientSecret: form.clientSecret,
+      redirectUri: form.redirectUri,
+    });
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't start auth", "error");
+  } finally {
+    form.busy = false;
   }
-  form.authorizeUrl = data.authorizeUrl;
 }
 async function completeTrackerAuth(): Promise<void> {
   form.busy = true;
@@ -40,28 +41,26 @@ async function completeTrackerAuth(): Promise<void> {
   // backend's TrackerAuthUrl response) — round-trip it invisibly rather than asking
   // the user to also paste it; the backend verifies it matches what it generated.
   const state = new URL(form.authorizeUrl).searchParams.get("state") ?? "";
-  const { error } = await api.POST("/api/trackers/{tracker_id}/callback", {
-    params: { path: { tracker_id: props.tracker.id } },
-    body: { code: form.code.trim(), redirectUri: form.redirectUri, state },
-  });
-  form.busy = false;
-  if (error) {
-    toast("Authorization failed — is the code correct?", "error");
+  try {
+    await completeTrackerConnect(props.tracker.id, { code: form.code.trim(), redirectUri: form.redirectUri, state });
+  } catch (e) {
+    form.busy = false;
+    toast(e instanceof Error ? e.message : "Authorization failed", "error");
     return;
   }
+  form.busy = false;
   emit("connected");
 }
-async function loginTracker(): Promise<void> {
+async function loginTrackerAccount(): Promise<void> {
   form.busy = true;
-  const { error } = await api.POST("/api/trackers/{tracker_id}/login", {
-    params: { path: { tracker_id: props.tracker.id } },
-    body: { username: form.username, password: form.password },
-  });
-  form.busy = false;
-  if (error) {
-    toast("Login failed — check credentials & LYCHEE_SECRET_KEY", "error");
+  try {
+    await loginTracker(props.tracker.id, { username: form.username, password: form.password });
+  } catch (e) {
+    form.busy = false;
+    toast(e instanceof Error ? e.message : "Login failed", "error");
     return;
   }
+  form.busy = false;
   emit("connected");
 }
 </script>
@@ -86,7 +85,7 @@ async function loginTracker(): Promise<void> {
         <button
           class="btn btn-primary btn-sm self-start"
           :disabled="form.busy || !form.username || !form.password"
-          @click="loginTracker"
+          @click="loginTrackerAccount"
         >
           {{ form.busy ? "Signing in…" : "Sign in" }}
         </button>

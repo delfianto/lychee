@@ -4,8 +4,14 @@
 import { Plus, RefreshCw, Search } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
+import {
+  createTaxonomyTag,
+  deleteTaxonomyTag,
+  fetchTaxonomy,
+  refreshTaxonomy as refreshTaxonomyRemote,
+  setTaxonomyEnabled,
+} from "../../api/settingsQueries";
 import PromptDialog from "../../components/PromptDialog.vue";
 import { toast } from "../../lib/toast";
 
@@ -28,8 +34,8 @@ const CAT_LABEL: Record<string, string> = {
 // The vocabulary is small, so load it once and filter/paginate on the client.
 const taxonomy = ref<TaxRow[]>([]);
 async function loadTaxonomy(): Promise<void> {
-  const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
-  taxonomy.value = (data?.items ?? []).map((t) => ({
+  const items = await fetchTaxonomy();
+  taxonomy.value = items.map((t) => ({
     id: t.id,
     name: t.name,
     category: CAT_LABEL[t.category] ?? t.category,
@@ -55,10 +61,7 @@ const taxRows = computed(() =>
 );
 watch([taxSearch, taxCat], () => (taxPage.value = 0));
 async function toggleTax(row: TaxRow): Promise<void> {
-  await api.PATCH("/api/taxonomy/{tag_id}", {
-    params: { path: { tag_id: row.id } },
-    body: { enabled: row.enabled },
-  });
+  await setTaxonomyEnabled(row.id, row.enabled);
 }
 const addTagOpen = ref(false);
 const addTagBusy = ref(false);
@@ -69,11 +72,8 @@ function openAddTax(): void {
 
 async function addTax(name: string): Promise<void> {
   addTagBusy.value = true;
-  const { data } = await api.POST("/api/taxonomy", {
-    body: { name: name.trim(), category: "genre" },
-  });
-  addTagBusy.value = false;
-  if (data) {
+  try {
+    const data = await createTaxonomyTag(name.trim(), "genre");
     taxonomy.value.push({
       id: data.id,
       name: data.name,
@@ -84,26 +84,27 @@ async function addTax(name: string): Promise<void> {
     });
     toast(`Added “${data.name}”`);
     addTagOpen.value = false;
-  } else {
-    toast("Couldn't add tag", "error");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't add tag", "error");
+  } finally {
+    addTagBusy.value = false;
   }
 }
 async function removeTax(row: TaxRow): Promise<void> {
-  const { error } = await api.DELETE("/api/taxonomy/{tag_id}", {
-    params: { path: { tag_id: row.id } },
-  });
-  if (error) {
-    const body = error as { error?: { message?: string } };
-    toast(body?.error?.message ?? "Couldn't delete tag", "error");
+  try {
+    await deleteTaxonomyTag(row.id);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't delete tag", "error");
     return;
   }
   taxonomy.value = taxonomy.value.filter((r) => r.id !== row.id);
 }
 const refreshing = computed(() => activeTasks.value.some((t) => t.kind === "taxonomy"));
 async function refreshTaxonomy(): Promise<void> {
-  const { error } = await api.POST("/api/taxonomy/refresh");
-  if (error) {
-    toast("Refresh failed", "error");
+  try {
+    await refreshTaxonomyRemote();
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Refresh failed", "error");
     return;
   }
   toast("Refreshing tags from MangaDex…"); // reloads on the taxonomy task's done event
