@@ -8,6 +8,7 @@ import FilterPanel from "../components/FilterPanel.vue";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import ErrorState from "../components/ErrorState.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
+import { type Density, useDensity } from "../lib/density";
 import { toast } from "../lib/toast";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
 
@@ -17,16 +18,11 @@ const props = defineProps<{ libraryKey: string }>();
 const route = useRoute();
 
 // --- Density -------------------------------------------------------------
-type Density = "list" | "compact" | "gallery";
-const DENSITY_KEY = "lychee.density";
-function initialDensity(): Density {
-  const q = route.query.view;
-  if (q === "list" || q === "compact" || q === "gallery") return q;
-  const stored = localStorage.getItem(DENSITY_KEY);
-  return stored === "compact" || stored === "gallery" ? stored : "list";
-}
-const density = ref<Density>(initialDensity());
-watch(density, (d) => localStorage.setItem(DENSITY_KEY, d));
+const { density } = useDensity();
+// A `?view=` query param overrides (and persists over) the shared default, same
+// as before this was extracted to a shared setting.
+const q = route.query.view;
+if (q === "list" || q === "compact" || q === "gallery") density.value = q;
 const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "list", icon: List, label: "List view" },
   { value: "compact", icon: Grid2x2, label: "Compact view" },
@@ -67,6 +63,18 @@ function resetFilters(): void {
   filters.demographics = new Set();
   filters.statuses = new Set();
   filters.readStates = new Set();
+}
+
+// Cycle a tag chip: neutral → include → exclude → neutral.
+function cycleTag(id: string): void {
+  const cur = filters.tags[id];
+  if (!cur) filters.tags[id] = "include";
+  else if (cur === "include") filters.tags[id] = "exclude";
+  else delete filters.tags[id];
+}
+function toggleInSet<T>(set: Set<T>, value: T): void {
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
 }
 
 const tagGroups = ref<TagGroup[]>([]);
@@ -233,16 +241,17 @@ watch(
 
     <!-- Shelf-status tabs -->
     <div v-if="showTabs" role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
-      <a
+      <button
         v-for="tab in statusTabs"
         :key="tab.value"
+        type="button"
         role="tab"
         class="tab whitespace-nowrap"
         :class="{ 'tab-active': activeTab === tab.value }"
         @click="activeTab = tab.value"
       >
         {{ tab.label }}
-      </a>
+      </button>
     </div>
 
     <!-- Saved presets -->
@@ -276,7 +285,16 @@ watch(
 
     <!-- Foldable advanced filters -->
     <div v-if="showFilters" class="flex flex-col gap-4 rounded-box surface-border bg-base-100 p-4">
-      <FilterPanel :filters="filters" :tag-groups="tagGroups" />
+      <FilterPanel
+        :filters="filters"
+        :tag-groups="tagGroups"
+        @set-tag-mode="filters.tagMode = $event"
+        @toggle-tag="cycleTag"
+        @toggle-rating="toggleInSet(filters.ratings, $event)"
+        @toggle-demographic="toggleInSet(filters.demographics, $event)"
+        @toggle-status="toggleInSet(filters.statuses, $event)"
+        @toggle-read-state="toggleInSet(filters.readStates, $event)"
+      />
       <div class="divider my-0"></div>
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-sm font-medium">Save as preset</span>

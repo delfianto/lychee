@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { X } from "lucide-vue-next";
-import { onMounted, onUnmounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+
+import { useFocusTrap } from "../lib/focusTrap";
 
 const props = withDefaults(
   defineProps<{
@@ -24,6 +26,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(
+  modalBox,
+  computed(() => props.open),
+);
+
 function onKey(e: KeyboardEvent): void {
   if (!props.open) return;
   if (e.key === "Escape") emit("cancel");
@@ -45,7 +53,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="open" class="modal modal-open" role="alertdialog" aria-modal="true" @click.self="emit('cancel')">
-    <div class="modal-box max-w-md">
+    <div ref="modalBox" class="modal-box max-w-md">
       <div class="mb-3 flex items-start justify-between gap-3">
         <h3 class="text-lg font-bold leading-snug">{{ title }}</h3>
         <button

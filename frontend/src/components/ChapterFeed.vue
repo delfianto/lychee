@@ -26,7 +26,7 @@ withDefaults(
         v-if="view === 'thumb'"
         :src="u.series.coverUrl"
         :alt="u.series.title"
-        class="cover h-14 w-[2.333rem] shrink-0 rounded"
+        class="cover h-14 shrink-0 rounded"
       />
       <div class="flex min-w-0 grow items-center gap-2">
         <CountryFlag v-if="u.series.originCountry" :cc="u.series.originCountry" />

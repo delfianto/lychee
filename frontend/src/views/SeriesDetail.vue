@@ -27,6 +27,8 @@ import ErrorState from "../components/ErrorState.vue";
 import SeriesDescription from "../components/SeriesDescription.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
+import { useFocusTrap } from "../lib/focusTrap";
+import { createStaleGuard } from "../lib/staleGuard";
 import { toast } from "../lib/toast";
 import type { LibraryStatus, Series, VolumeGroup } from "../types";
 
@@ -37,6 +39,8 @@ const volumes = ref<VolumeGroup[]>([]);
 const related = ref<Series[]>([]);
 const artCovers = ref<string[]>([]);
 const loading = ref(true);
+const chapterLanguage = ref("");
+const chapterOrder = ref<"asc" | "desc">("desc");
 
 const expanded = ref(false);
 const favorite = ref(false);
@@ -46,7 +50,12 @@ const userRating = ref<number | null>(null);
 const hoverRating = ref(0);
 
 const failed = ref(false);
+// Guards both loaders below against out-of-order responses (e.g. navigating series
+// A → B before A's slower request resolves, or changing the chapter language/order
+// again before the previous change's request lands) — whichever started last wins.
+const staleGuard = createStaleGuard();
 async function load(id: string, opts: { soft?: boolean } = {}): Promise<void> {
+  const token = staleGuard.next();
   // Soft reload keeps existing content visible (same series refresh / download done).
   if (!opts.soft) {
     series.value = null;
@@ -56,10 +65,11 @@ async function load(id: string, opts: { soft?: boolean } = {}): Promise<void> {
   try {
     const [s, vols, rel, art] = await Promise.all([
       fetchSeries(id),
-      fetchChapters(id),
+      fetchChapters(id, { language: chapterLanguage.value, order: chapterOrder.value }),
       fetchRelated(id),
       fetchArt(id),
     ]);
+    if (!staleGuard.isCurrent(token)) return;
     series.value = s;
     volumes.value = vols;
     related.value = rel;
@@ -68,12 +78,29 @@ async function load(id: string, opts: { soft?: boolean } = {}): Promise<void> {
     libraryStatus.value = s.libraryStatus ?? "none";
     userRating.value = s.userRating ?? null;
   } catch {
-    failed.value = true;
+    if (staleGuard.isCurrent(token)) failed.value = true;
   } finally {
-    loading.value = false;
+    if (staleGuard.isCurrent(token)) loading.value = false;
   }
 }
 const reload = (): void => void load(String(route.params.id));
+
+async function reloadChapters(): Promise<void> {
+  const token = staleGuard.next();
+  const vols = await fetchChapters(String(route.params.id), {
+    language: chapterLanguage.value,
+    order: chapterOrder.value,
+  });
+  if (staleGuard.isCurrent(token)) volumes.value = vols;
+}
+function onLanguageChange(language: string): void {
+  chapterLanguage.value = language;
+  void reloadChapters();
+}
+function onOrderChange(order: "asc" | "desc"): void {
+  chapterOrder.value = order;
+  void reloadChapters();
+}
 watch(
   () => route.params.id,
   (id, prev) => void load(String(id), { soft: prev !== undefined && String(id) === String(prev) }),
@@ -173,6 +200,8 @@ const matchOpen = ref(false);
 const matchQuery = ref("");
 const matchLoading = ref(false);
 const matchResults = ref<MatchCandidate[]>([]);
+const matchModalBox = ref<HTMLElement | null>(null);
+useFocusTrap(matchModalBox, matchOpen);
 
 async function runMatchSearch(): Promise<void> {
   if (!series.value) return;
@@ -429,16 +458,20 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
           :series-id="series.id"
           :matched="isMatched"
           :synced="chaptersSynced"
+          :language="chapterLanguage"
+          :order="chapterOrder"
           @download="downloadChapter"
           @download-all="downloadAll"
           @delete-chapter="onDeleteChapter"
+          @update:language="onLanguageChange"
+          @update:order="onOrderChange"
         />
       </div>
     </div>
 
     <!-- Match-on-MangaDex modal -->
     <div v-if="matchOpen" class="modal modal-open" @click.self="matchOpen = false">
-      <div class="modal-box max-w-2xl">
+      <div ref="matchModalBox" class="modal-box max-w-2xl">
         <div class="mb-3 flex items-center justify-between">
           <h3 class="text-lg font-bold">Match on MangaDex</h3>
           <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="matchOpen = false">
@@ -458,7 +491,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
               class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-200"
               @click="pickMatch(c)"
             >
-              <img v-if="c.coverUrl" :src="c.coverUrl" alt="" class="h-16 w-12 shrink-0 rounded object-cover" />
+              <img v-if="c.coverUrl" :src="c.coverUrl" :alt="c.title" class="h-16 w-12 shrink-0 rounded object-cover" />
               <div v-else class="h-16 w-12 shrink-0 rounded bg-base-300" />
               <div class="min-w-0">
                 <div class="truncate font-medium">{{ c.title }}</div>

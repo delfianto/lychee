@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { X } from "lucide-vue-next";
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+
+import { useFocusTrap } from "../lib/focusTrap";
 
 const props = withDefaults(
   defineProps<{
@@ -25,6 +27,11 @@ const emit = defineEmits<{ submit: [value: string]; cancel: [] }>();
 
 const value = ref("");
 const inputEl = ref<HTMLInputElement | null>(null);
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(
+  modalBox,
+  computed(() => props.open),
+);
 
 watch(
   () => props.open,
@@ -58,7 +65,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="open" class="modal modal-open" role="dialog" aria-modal="true" @click.self="emit('cancel')">
-    <div class="modal-box max-w-md">
+    <div ref="modalBox" class="modal-box max-w-md">
       <div class="mb-3 flex items-start justify-between gap-3">
         <h3 class="text-lg font-bold">{{ title }}</h3>
         <button

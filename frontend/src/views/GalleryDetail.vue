@@ -10,6 +10,7 @@ import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
 import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass, contentRatingLabel } from "../lib/display";
+import { createStaleGuard } from "../lib/staleGuard";
 import type { GalleryMediaItem, Series } from "../types";
 
 const route = useRoute();
@@ -18,16 +19,21 @@ const items = ref<GalleryMediaItem[]>([]);
 const favorite = ref(false);
 
 const failed = ref(false);
+// Guards against a slower earlier load (e.g. gallery A → B navigated quickly)
+// overwriting state a newer load already populated.
+const staleGuard = createStaleGuard();
 async function load(id: string): Promise<void> {
+  const token = staleGuard.next();
   gallery.value = null;
   failed.value = false;
   try {
     const [g, media] = await Promise.all([fetchSeries(id), fetchGalleryImages(id)]);
+    if (!staleGuard.isCurrent(token)) return;
     gallery.value = g;
     items.value = media;
     favorite.value = g.favorite ?? false;
   } catch {
-    failed.value = true;
+    if (staleGuard.isCurrent(token)) failed.value = true;
   }
 }
 const reload = (): void => void load(String(route.params.id));

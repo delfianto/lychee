@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Settings → About: version/platform/uptime + a library-at-a-glance summary.
-import { BookText, Bug, Check, Cherry, Github, RefreshCw } from "lucide-vue-next";
+import { Cherry } from "lucide-vue-next";
 import { computed, onMounted, reactive, ref } from "vue";
 
 import { api } from "../../api/client";
@@ -58,20 +58,6 @@ onMounted(loadAbout);
             </div>
             <p class="text-sm text-base-content/60">Self-hosted manga, comic &amp; art-gallery server.</p>
           </div>
-          <div class="flex flex-col items-end gap-1.5">
-            <span class="flex items-center gap-1.5 text-xs font-medium text-success">
-              <Check class="size-4" />Up to date
-            </span>
-            <button class="btn btn-ghost btn-sm gap-2 surface-border">
-              <RefreshCw class="size-4" />Check for updates
-            </button>
-          </div>
-        </div>
-        <div class="divider my-0"></div>
-        <div class="flex flex-wrap gap-2">
-          <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><Github class="size-4" />GitHub</a>
-          <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><BookText class="size-4" />Docs</a>
-          <a class="btn btn-ghost btn-sm gap-2 surface-border" href="#"><Bug class="size-4" />Report an issue</a>
         </div>
       </div>
     </div>

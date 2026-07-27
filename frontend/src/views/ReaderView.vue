@@ -12,6 +12,7 @@ import {
   type ReaderMode,
   useReaderSettings,
 } from "../lib/readerSettings";
+import { createStaleGuard } from "../lib/staleGuard";
 
 const route = useRoute();
 const router = useRouter();
@@ -30,8 +31,13 @@ const controls = ref(true);
 const settingsOpen = ref(false);
 const showEnd = ref(false);
 
+// Guards against a slower earlier chapter load (jumping chapter → chapter quickly,
+// e.g. via the selector or next-chapter button) overwriting a newer one's state.
+const staleGuard = createStaleGuard();
 async function load(id: string): Promise<void> {
+  const token = staleGuard.next();
   const detail = await fetchChapterDetail(id);
+  if (!staleGuard.isCurrent(token)) return;
   seriesId.value = detail.seriesId;
   chapterLabel.value = detail.title ? `Ch. ${detail.number} · ${detail.title}` : `Ch. ${detail.number}`;
   pages.value = Array.from(
@@ -41,6 +47,7 @@ async function load(id: string): Promise<void> {
   currentPage.value = 1;
   showEnd.value = false;
   const [s, vols] = await Promise.all([fetchSeries(detail.seriesId), fetchChapters(detail.seriesId)]);
+  if (!staleGuard.isCurrent(token)) return;
   seriesTitle.value = s.title;
   // Reader only navigates local (downloaded) chapters.
   const ascending = vols

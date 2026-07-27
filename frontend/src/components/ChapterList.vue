@@ -18,6 +18,11 @@ const props = withDefaults(
     /** True once the provider's chapter feed has been fetched at least once — lets the
      *  empty state say "the provider has none" instead of "not synced yet". */
     synced?: boolean;
+    /** Current language filter ("" = all languages) and chapter sort order — both are
+     *  server-side (`GET .../chapters?language=&order=`), so changes must round-trip
+     *  through the parent rather than being applied client-side to the loaded volumes. */
+    language?: string;
+    order?: "asc" | "desc";
   }>(),
   {
     related: () => [],
@@ -25,6 +30,8 @@ const props = withDefaults(
     seriesId: undefined,
     matched: false,
     synced: false,
+    language: "",
+    order: "desc",
   },
 );
 
@@ -33,7 +40,13 @@ const emit = defineEmits<{
   download: [providerChapterId: string, done: () => void];
   downloadAll: [done: () => void];
   deleteChapter: [chapterId: string, done: () => void];
+  "update:language": [language: string];
+  "update:order": [order: "asc" | "desc"];
 }>();
+
+function toggleOrder(): void {
+  emit("update:order", props.order === "desc" ? "asc" : "desc");
+}
 
 const tabs = [
   { key: "chapters", label: "Chapters" },
@@ -161,24 +174,30 @@ const statusLabel: Record<string, string> = {
   <div class="flex flex-col gap-3">
     <!-- Tabs -->
     <div role="tablist" class="tabs tabs-border">
-      <a
+      <button
         v-for="t in tabs"
         :key="t.key"
+        type="button"
         role="tab"
         class="tab"
         :class="{ 'tab-active': tab === t.key }"
         @click="tab = t.key"
       >
         {{ t.label }}
-      </a>
+      </button>
     </div>
 
     <!-- Chapters -->
     <template v-if="tab === 'chapters'">
       <div class="flex items-center gap-2">
-        <select class="select select-bordered select-sm w-40">
-          <option>English</option>
-          <option>All languages</option>
+        <select
+          class="select select-bordered select-sm w-40"
+          :value="language"
+          aria-label="Filter by language"
+          @change="emit('update:language', ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="en">English</option>
+          <option value="">All languages</option>
         </select>
         <button
           v-if="seriesId && hasAvailable()"
@@ -189,7 +208,9 @@ const statusLabel: Record<string, string> = {
           <Loader2 v-if="downloadAllBusy" class="size-4 animate-spin" />
           <Download v-else class="size-4" />Download available
         </button>
-        <button class="btn btn-ghost btn-sm ml-auto gap-1">Newest<ChevronDown class="size-4" /></button>
+        <button class="btn btn-ghost btn-sm ml-auto gap-1" @click="toggleOrder">
+          {{ order === "desc" ? "Newest" : "Oldest" }}<ChevronDown class="size-4" :class="{ 'rotate-180': order === 'asc' }" />
+        </button>
       </div>
 
       <div v-if="!hasAny()" class="py-10 text-center text-sm text-base-content/60">
@@ -297,7 +318,7 @@ const statusLabel: Record<string, string> = {
     <!-- Art -->
     <template v-else>
       <div v-if="artCovers.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        <img v-for="(c, i) in artCovers" :key="i" :src="c" alt="" class="cover w-full rounded-box object-cover" />
+        <img v-for="(c, i) in artCovers" :key="i" :src="c" :alt="`Related art ${i + 1}`" class="cover w-full rounded-box object-cover" />
       </div>
       <div v-else class="py-8 text-center text-sm text-base-content/60">No extra art.</div>
     </template>

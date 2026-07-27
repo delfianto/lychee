@@ -66,3 +66,44 @@ describe("useSeriesList paging guard", () => {
     expect(api.GET).toHaveBeenCalledTimes(1);
   });
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal ApiSeries fixture
+function seriesFixture(id: string): any {
+  return {
+    id,
+    title: id,
+    coverUrl: "",
+    authors: [],
+    artists: [],
+    status: "ongoing",
+    contentRating: "safe",
+    demographic: "none",
+    tags: [],
+    chapterCount: 0,
+    unreadCount: 0,
+    favorite: false,
+    availableChapters: 0,
+  };
+}
+
+describe("useSeriesList stale-response guard", () => {
+  it("keeps the newer reload's result even if the older, slower one resolves later", async () => {
+    const { api } = await import("./client");
+    type Resolver = (v: { data: unknown; error: undefined }) => void;
+    const resolvers: Resolver[] = [];
+    vi.mocked(api.GET).mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve as Resolver)) as ReturnType<typeof api.GET>,
+    );
+
+    const list = useSeriesList();
+    const older = list.reload({ kind: "manga" }); // fired first, resolves second
+    const newer = list.reload({ kind: "comic" }); // fired second, resolves first
+
+    resolvers[1]!({ data: { items: [seriesFixture("comic-1")], nextCursor: null }, error: undefined });
+    await newer;
+    resolvers[0]!({ data: { items: [seriesFixture("manga-1")], nextCursor: null }, error: undefined });
+    await older;
+
+    expect(list.items.value.map((s) => s.id)).toEqual(["comic-1"]);
+  });
+});

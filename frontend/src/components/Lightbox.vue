@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
     <img
       v-if="current()?.kind !== 'video'"
       :src="current()?.url"
-      alt=""
+      :alt="`Item ${index + 1} of ${items.length}`"
       class="max-h-[90vh] max-w-[90vw] rounded object-contain shadow-2xl"
     />
     <div
