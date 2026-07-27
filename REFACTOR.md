@@ -263,23 +263,37 @@
 
 ### Test coverage — priority order (cheap → expensive)
 
-Current state: 3 test files (`api/queries.test.ts`, `components/ErrorState.test.ts`,
+Starting state: 3 test files (`api/queries.test.ts`, `components/ErrorState.test.ts`,
 `lib/description.test.ts`) against ~7,900 lines of source; no coverage tool configured at all.
 
-1. [ ] `frontend/src/api/format.ts` — `relativeTime`: pure, deterministic with `vi.useFakeTimers()`, zero
-       current coverage, used on every dashboard/updates/chapter row.
-2. [ ] `frontend/src/lib/sort.ts` — `sortSeries`: pure, trivial, same shape as the existing
-       `buildLibraryQuery` test to copy from.
-3. [ ] Extend `frontend/src/api/queries.test.ts` — cover `toChapter`'s nullish-coalescing defaults and the
+1. [x] `frontend/src/api/format.ts` — `relativeTime`: pure, deterministic with `vi.useFakeTimers()`, zero
+       current coverage, used on every dashboard/updates/chapter row. **Done** — `api/format.test.ts`
+       (5 tests: past at every unit, future/clock-skew, and the `numeric:"auto"` → "now" edge case).
+2. [x] `frontend/src/lib/sort.ts` — `sortSeries`: pure, trivial, same shape as the existing
+       `buildLibraryQuery` test to copy from. **Done** — `lib/sort.test.ts` (5 tests, including that it
+       doesn't mutate its input).
+3. [x] Extend `frontend/src/api/queries.test.ts` — cover `toChapter`'s nullish-coalescing defaults and the
        error-body→`Error` path in `queueDownload`/`deleteChapterLocal` (success + `{error:{message}}`
-       failure) — the layer the whole app's error UX depends on, almost entirely untested.
-4. [ ] `frontend/src/stores/collections.ts` — `toggleSeries`/`hasSeries`/`removeSeries` optimistic-update
+       failure) — the layer the whole app's error UX depends on, almost entirely untested. **Done** — 6 new
+       tests; extended the file's `vi.mock("./client")` to cover `POST`/`DELETE` alongside the existing
+       `GET`.
+4. [x] `frontend/src/stores/collections.ts` — `toggleSeries`/`hasSeries`/`removeSeries` optimistic-update
        logic (needs `setActivePinia(createPinia())` in the test setup). Only Pinia store in the app.
-5. [ ] `frontend/src/lib/readerSettings.ts` — `load()`'s malformed-JSON fallback + defaults-merge behavior.
-6. [ ] `frontend/src/components/ChapterList.vue` — mount-test gating predicates (`canDownload`/`canDelete`/
+       **Done** — `stores/collections.test.ts` (4 tests). Note: the store auto-fetches on creation (`void
+       refresh()` inside the setup function) — tests await `flushPromises()` after construction rather than
+       calling `refresh()` again, which would otherwise re-fetch with the default (empty) mock and
+       overwrite the seeded fixture.
+5. [x] `frontend/src/lib/readerSettings.ts` — `load()`'s malformed-JSON fallback + defaults-merge behavior.
+       **Done** — `lib/readerSettings.test.ts` (4 tests, using `vi.resetModules()` + dynamic `import()` per
+       test since `settings` is a module-level singleton seeded once on import).
+6. [x] `frontend/src/components/ChapterList.vue` — mount-test gating predicates (`canDownload`/`canDelete`/
        `isInFlight`) and emitted-event contracts (`download`/`deleteChapter` fire with the right id).
-7. [ ] `frontend/src/api/events.ts` — dedup/cap-at-50 and `.done`/`.failed` → `onTaskDone` dispatch (needs a
-       fake `EventSource`/`MessageEvent` harness).
+       **Done** — `components/ChapterList.test.ts` (8 tests; stubs `RouterLink` via `RouterLinkStub` since
+       downloaded rows render one).
+7. [x] `frontend/src/api/events.ts` — dedup/cap-at-50 and `.done`/`.failed` → `onTaskDone` dispatch (needs a
+       fake `EventSource`/`MessageEvent` harness). **Done** — `api/events.test.ts` (7 tests): a minimal
+       `FakeEventSource` class stubbed via `vi.stubGlobal`, `vi.resetModules()` per test since `source`/
+       `tasks` are module-level singletons seeded by `connectTaskStream()`.
 8. [ ] Full view mounts last (highest value, highest setup cost — router + multi-endpoint + SSE mocking):
        `SeriesDetail.vue`, `ReaderView.vue`, `LibraryView.vue`.
 

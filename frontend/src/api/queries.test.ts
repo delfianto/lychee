@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { BrowseFilters } from "../types";
-import { buildLibraryQuery, useSeriesList } from "./queries";
+import { buildLibraryQuery, deleteChapterLocal, fetchChapters, queueDownload, useSeriesList } from "./queries";
 
 vi.mock("./client", () => ({
-  api: { GET: vi.fn(async () => ({ data: { items: [], nextCursor: null }, error: undefined })) },
+  api: {
+    GET: vi.fn(async () => ({ data: { items: [], nextCursor: null }, error: undefined })),
+    POST: vi.fn(async () => ({ data: undefined, error: undefined, response: { status: 200 } })),
+    DELETE: vi.fn(async () => ({ data: undefined, error: undefined, response: { status: 200 } })),
+  },
 }));
 
 function filters(overrides: Partial<BrowseFilters> = {}): BrowseFilters {
@@ -105,5 +109,106 @@ describe("useSeriesList stale-response guard", () => {
     await older;
 
     expect(list.items.value.map((s) => s.id)).toEqual(["comic-1"]);
+  });
+});
+
+describe("fetchChapters / toChapter defaults", () => {
+  it("nullish-coalesces optional API fields to their UI defaults", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.GET).mockResolvedValueOnce({
+      data: [
+        {
+          volume: null,
+          chapters: [
+            {
+              id: null,
+              volume: null,
+              number: "1",
+              title: null,
+              group: null,
+              language: "en",
+              uploadedAt: null,
+              read: null,
+              comments: null,
+              status: null,
+              providerChapterId: null,
+            },
+          ],
+        },
+      ],
+      error: undefined,
+      response: { status: 200 },
+    } as Awaited<ReturnType<typeof api.GET>>);
+
+    const [group] = await fetchChapters("s1");
+    const [chapter] = group!.chapters;
+    expect(chapter).toMatchObject({
+      id: null,
+      title: undefined,
+      group: undefined,
+      uploadedAt: "",
+      read: false,
+      comments: 0,
+      status: "downloaded",
+      providerChapterId: null,
+    });
+  });
+});
+
+describe("queueDownload error handling", () => {
+  it("resolves without throwing on success", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.POST).mockResolvedValueOnce({
+      data: undefined,
+      error: undefined,
+      response: { status: 202 },
+    } as Awaited<ReturnType<typeof api.POST>>);
+    await expect(queueDownload("series-1")).resolves.toBeUndefined();
+  });
+
+  it("throws the backend's error message on failure", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.POST).mockResolvedValueOnce({
+      data: undefined,
+      error: { error: { code: "bad_request", message: "series is not linked to a provider" } },
+      response: { status: 400 },
+    } as Awaited<ReturnType<typeof api.POST>>);
+    await expect(queueDownload("series-1")).rejects.toThrow("series is not linked to a provider");
+  });
+
+  it("falls back to a generic message when the error body has no message", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.POST).mockResolvedValueOnce({
+      data: undefined,
+      error: {},
+      response: { status: 500 },
+    } as Awaited<ReturnType<typeof api.POST>>);
+    await expect(queueDownload("series-1")).rejects.toThrow("Download failed (500)");
+  });
+});
+
+describe("deleteChapterLocal error handling", () => {
+  it("returns the mapped result on success", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.DELETE).mockResolvedValueOnce({
+      data: { mode: "local", redownloadable: false, seriesId: "s1" },
+      error: undefined,
+      response: { status: 200 },
+    } as Awaited<ReturnType<typeof api.DELETE>>);
+    await expect(deleteChapterLocal("c1")).resolves.toEqual({
+      mode: "local",
+      redownloadable: false,
+      seriesId: "s1",
+    });
+  });
+
+  it("throws the backend's error message on failure", async () => {
+    const { api } = await import("./client");
+    vi.mocked(api.DELETE).mockResolvedValueOnce({
+      data: undefined,
+      error: { error: { code: "not_found", message: "chapter 'c1' not found" } },
+      response: { status: 404 },
+    } as Awaited<ReturnType<typeof api.DELETE>>);
+    await expect(deleteChapterLocal("c1")).rejects.toThrow("chapter 'c1' not found");
   });
 });
