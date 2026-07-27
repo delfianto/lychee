@@ -265,8 +265,9 @@ def plan_downloads(
         from src.catalog.remote_chapters import upsert_provider_chapters
 
         _ = upsert_provider_chapters(session, series, remotes, provider=provider.id)
-    except Exception:  # noqa: BLE001 - planning must not fail on index write
-        pass
+    except Exception as exc:  # noqa: BLE001 - planning must not fail on index write
+        session.rollback()
+        logger.warning("remote_index_upsert_failed", series_id=series.id, error=str(exc))
     local = set(session.scalars(select(Chapter.number).where(Chapter.series_id == series.id)))
     local_pids = set(
         session.scalars(

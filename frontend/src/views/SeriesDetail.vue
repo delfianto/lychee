@@ -168,6 +168,7 @@ function onEdited(): void {
 
 // --- Metadata: match to MangaDex + refresh ---
 const isMatched = computed(() => !!series.value?.provider);
+const chaptersSynced = computed(() => !!series.value?.chaptersSyncedAt);
 const matchOpen = ref(false);
 const matchQuery = ref("");
 const matchLoading = ref(false);
@@ -427,6 +428,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
           :art-covers="artCovers"
           :series-id="series.id"
           :matched="isMatched"
+          :synced="chaptersSynced"
           @download="downloadChapter"
           @download-all="downloadAll"
           @delete-chapter="onDeleteChapter"

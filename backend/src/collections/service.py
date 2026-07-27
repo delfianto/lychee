@@ -45,6 +45,20 @@ def _get(session: Session, collection_id: str) -> Collection:
     return collection
 
 
+def _reloaded(session: Session, collection_id: str) -> Collection:
+    """Re-fetch with the same eager-load as `list_collections`, for `_to_out` after a write.
+
+    `session.refresh()` alone doesn't apply eager-load options, so `_to_out`'s
+    `_collection_kind` (which walks `entry.series` per member) would otherwise
+    lazy-load once per entry.
+    """
+    return session.scalars(
+        select(Collection)
+        .where(Collection.id == collection_id)
+        .options(selectinload(Collection.entries).selectinload(CollectionSeries.series))
+    ).one()
+
+
 def list_collections(session: Session) -> list[CollectionOut]:
     collections = session.scalars(
         select(Collection)
@@ -68,8 +82,7 @@ def create_collection(session: Session, data: CollectionCreate) -> CollectionOut
     collection = Collection(name=data.name, description=data.description)
     session.add(collection)
     session.commit()
-    session.refresh(collection)
-    return _to_out(collection)
+    return _to_out(_reloaded(session, collection.id))
 
 
 def update_collection(
@@ -81,8 +94,7 @@ def update_collection(
     if data.description is not None:
         collection.description = data.description
     session.commit()
-    session.refresh(collection)
-    return _to_out(collection)
+    return _to_out(_reloaded(session, collection_id))
 
 
 def delete_collection(session: Session, collection_id: str) -> None:
@@ -91,7 +103,7 @@ def delete_collection(session: Session, collection_id: str) -> None:
 
 
 def add_series(session: Session, collection_id: str, series_id: str) -> CollectionOut:
-    collection = _get(session, collection_id)
+    _ = _get(session, collection_id)  # 404 if missing
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
     exists = session.scalar(
@@ -113,12 +125,11 @@ def add_series(session: Session, collection_id: str, series_id: str) -> Collecti
             CollectionSeries(collection_id=collection_id, series_id=series_id, position=next_pos)
         )
         session.commit()
-    session.refresh(collection)
-    return _to_out(collection)
+    return _to_out(_reloaded(session, collection_id))
 
 
 def remove_series(session: Session, collection_id: str, series_id: str) -> CollectionOut:
-    collection = _get(session, collection_id)
+    _ = _get(session, collection_id)  # 404 if missing
     entry = session.scalar(
         select(CollectionSeries).where(
             CollectionSeries.collection_id == collection_id,
@@ -128,5 +139,4 @@ def remove_series(session: Session, collection_id: str, series_id: str) -> Colle
     if entry is not None:
         session.delete(entry)
         session.commit()
-    session.refresh(collection)
-    return _to_out(collection)
+    return _to_out(_reloaded(session, collection_id))

@@ -1,5 +1,7 @@
 """Tracker OAuth connect flow: begin (authorize URL) + callback (token) — no network."""
 
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -7,6 +9,10 @@ from src.core.config import settings
 from src.core.crypto import decrypt
 from src.integrations.models import Tracker
 from src.trackers.base import TokenPair, register_tracker
+
+
+def _state_from(authorize_url: str) -> str:
+    return parse_qs(urlparse(authorize_url).query)["state"][0]
 
 
 class _FakeAniList:
@@ -98,12 +104,14 @@ def test_callback_completes_and_stores_encrypted_token(
     monkeypatch.setattr(settings, "secret_key", "test-key")
     register_tracker(_FakeAniList())  # avoid the real network exchange
 
-    client.post(
+    begin = client.post(
         "/api/trackers/anilist/connect",
         json={"clientId": "cid", "clientSecret": "csecret", "redirectUri": "http://cb"},
     )
+    state = _state_from(begin.json()["authorizeUrl"])
     resp = client.post(
-        "/api/trackers/anilist/callback", json={"code": "the-code", "redirectUri": "http://cb"}
+        "/api/trackers/anilist/callback",
+        json={"code": "the-code", "redirectUri": "http://cb", "state": state},
     )
     assert resp.status_code == 200
     assert resp.json()["connected"] is True
@@ -113,6 +121,57 @@ def test_callback_completes_and_stores_encrypted_token(
     row = db_session.get(Tracker, "anilist")
     assert row is not None
     assert decrypt(row.access_token_enc or "") == "access-1"
+    assert row.state is None  # one-time use, cleared on success
+
+
+def test_callback_rejects_missing_or_mismatched_state(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A code obtained outside the flow this instance actually started (fixed/guessed/replayed
+    state) must not be redeemable — this is the fix for the login-CSRF gap where `state` used
+    to be hardcoded to the tracker id and never verified on callback."""
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    register_tracker(_FakeAniList())
+
+    client.post(
+        "/api/trackers/anilist/connect",
+        json={"clientId": "cid", "clientSecret": "csecret", "redirectUri": "http://cb"},
+    )
+
+    wrong = client.post(
+        "/api/trackers/anilist/callback",
+        json={"code": "the-code", "redirectUri": "http://cb", "state": "guessed-or-stale-value"},
+    )
+    assert wrong.status_code == 400
+
+    db_session.expire_all()
+    row = db_session.get(Tracker, "anilist")
+    assert row is not None
+    assert row.connected is False  # rejected before the token exchange ever ran
+
+
+def test_callback_state_cannot_be_replayed(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    register_tracker(_FakeAniList())
+
+    begin = client.post(
+        "/api/trackers/anilist/connect",
+        json={"clientId": "cid", "clientSecret": "csecret", "redirectUri": "http://cb"},
+    )
+    state = _state_from(begin.json()["authorizeUrl"])
+    first = client.post(
+        "/api/trackers/anilist/callback",
+        json={"code": "the-code", "redirectUri": "http://cb", "state": state},
+    )
+    assert first.status_code == 200
+
+    replay = client.post(
+        "/api/trackers/anilist/callback",
+        json={"code": "the-code", "redirectUri": "http://cb", "state": state},
+    )
+    assert replay.status_code == 400
 
 
 def test_myanimelist_connect_uses_pkce(

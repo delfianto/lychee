@@ -277,3 +277,23 @@ def test_refresh_requires_a_provider_match(client: TestClient, db_session: Sessi
     db_session.commit()
     assert client.post(f"/api/series/{series.id}/refresh").status_code == 400
     assert client.post("/api/series/nope/refresh").status_code == 404
+
+
+def test_chapters_synced_at_reflects_index_sync(client: TestClient, db_session: Session) -> None:
+    """Distinguishes "never synced" (null) from "synced, provider has zero chapters"."""
+    unmatched = make_series(db_session, title="Unmatched2")
+    matched = make_series(db_session, title="Matched, unsynced")
+    matched.provider = "mangadex"
+    matched.provider_series_id = "does-not-matter"
+    db_session.commit()
+
+    assert client.get(f"/api/series/{unmatched.id}").json()["chaptersSyncedAt"] is None
+    assert client.get(f"/api/series/{matched.id}").json()["chaptersSyncedAt"] is None
+
+    # Loading the chapters list triggers a best-effort remote-index sync; the offline
+    # provider stub (conftest) returns zero chapters — the "provider genuinely has no
+    # chapters" case, not "never synced".
+    assert client.get(f"/api/series/{matched.id}/chapters").json() == []
+    got = client.get(f"/api/series/{matched.id}").json()
+    assert got["chaptersSyncedAt"] is not None
+    assert got["availableChapters"] == 0

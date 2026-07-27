@@ -49,10 +49,16 @@ class TrackerAuthUrl(CamelModel):
 
 
 class TrackerCallback(CamelModel):
-    """Complete the flow with the authorization code returned to the redirect URI."""
+    """Complete the flow with the authorization code returned to the redirect URI.
+
+    ``state`` must match the nonce ``TrackerAuthUrl`` embedded in the authorize URL —
+    verified server-side so a code obtained outside the flow this instance actually
+    started (e.g. pasted in from somewhere else) can't be redeemed.
+    """
 
     code: str
     redirect_uri: str
+    state: str
 
 
 class TrackerLogin(CamelModel):

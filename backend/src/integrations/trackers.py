@@ -70,11 +70,15 @@ def begin_connect(session: Session, tracker_id: str, data: TrackerConnect) -> Tr
     if impl.uses_pkce:
         row.pkce_verifier = secrets.token_urlsafe(64)[:128]  # PKCE "plain": challenge == verifier
         challenge = row.pkce_verifier
+    # Random per-attempt nonce, verified on callback — a fixed state (the tracker id) would let
+    # a code obtained outside this flow (e.g. from a different browser/session) be redeemed here.
+    state = secrets.token_urlsafe(32)
+    row.state = state
     session.commit()
     url = impl.authorize_url(
         client_id=data.client_id,
         redirect_uri=data.redirect_uri,
-        state=tracker_id,
+        state=state,
         code_challenge=challenge,
     )
     return TrackerAuthUrl(authorize_url=url)
@@ -88,6 +92,8 @@ def complete_connect(session: Session, tracker_id: str, data: TrackerCallback) -
         raise BadRequestError(f"tracker {tracker_id!r} is not supported yet")
     if not (row.client_id and row.client_secret_enc):
         raise BadRequestError("start the connect flow first")
+    if not row.state or not secrets.compare_digest(data.state, row.state):
+        raise BadRequestError("connect flow expired or was not started from this instance")
     tokens = impl.exchange_code(
         code=data.code,
         client_id=row.client_id,
@@ -99,6 +105,7 @@ def complete_connect(session: Session, tracker_id: str, data: TrackerCallback) -
     row.refresh_token_enc = encrypt(tokens.refresh_token) if tokens.refresh_token else None
     row.account_name = impl.account_name(tokens.access_token)
     row.pkce_verifier = None  # one-time use
+    row.state = None  # one-time use
     row.connected = True
     session.commit()
     return tracker_out(row)

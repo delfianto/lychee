@@ -31,9 +31,13 @@ async function beginTrackerAuth(): Promise<void> {
 }
 async function completeTrackerAuth(): Promise<void> {
   form.busy = true;
+  // The state nonce rides in the authorize URL we were just handed (embedded by the
+  // backend's TrackerAuthUrl response) — round-trip it invisibly rather than asking
+  // the user to also paste it; the backend verifies it matches what it generated.
+  const state = new URL(form.authorizeUrl).searchParams.get("state") ?? "";
   const { error } = await api.POST("/api/trackers/{tracker_id}/callback", {
     params: { path: { tracker_id: props.tracker.id } },
-    body: { code: form.code.trim(), redirectUri: form.redirectUri },
+    body: { code: form.code.trim(), redirectUri: form.redirectUri, state },
   });
   form.busy = false;
   if (error) {

@@ -10,6 +10,7 @@ list into a managed Collection. It downloads no pages (download stays a triggere
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -45,7 +46,11 @@ _READING_STATUSES = {"reading", "on_hold", "plan_to_read", "dropped", "re_readin
 
 logger = get_logger(__name__)
 # Access token cached in-memory (~14 min) so a burst of pushes doesn't re-refresh (and
-# re-rotate the refresh token) each time. The single-worker task queue makes this race-free.
+# re-rotate the refresh token) each time. Every current caller happens to run on the
+# single-worker task queue, but that's an external invariant this module can't see —
+# _TOKEN_LOCK makes the refresh-and-persist section safe regardless, since MangaDex
+# rotates the refresh token on every use and redeeming a stale one can revoke the pair.
+_TOKEN_LOCK = threading.Lock()
 _TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 
 
@@ -87,23 +92,26 @@ def _authed_provider(access_token: str) -> MangaDexProvider:
 
 def _access_token(session: Session, config: Provider) -> str:
     """A valid access token for the connected account, cached in-memory (persisting the
-    rotated refresh token whenever it does refresh)."""
+    rotated refresh token whenever it does refresh). Locked end-to-end: two concurrent
+    callers redeeming the same not-yet-rotated refresh token would race with MangaDex's
+    server-side rotation, and the loser's redemption can permanently break the connection."""
     if not (config.client_id and config.client_secret_enc and config.refresh_token_enc):
         raise BadRequestError("MangaDex account is not connected")
     cache_key = config.client_id or ""
-    cached = _TOKEN_CACHE.get(cache_key)
-    now = time.monotonic()
-    if cached and cached[1] > now:
-        return cached[0]
-    tokens = refresh_grant(
-        client_id=config.client_id,
-        client_secret=decrypt(config.client_secret_enc),
-        refresh_token=decrypt(config.refresh_token_enc),
-    )
-    config.refresh_token_enc = encrypt(tokens.refresh_token)
-    session.commit()  # persist the rotated refresh token before it's used again
-    _TOKEN_CACHE[cache_key] = (tokens.access_token, now + 14 * 60)
-    return tokens.access_token
+    with _TOKEN_LOCK:
+        cached = _TOKEN_CACHE.get(cache_key)
+        now = time.monotonic()
+        if cached and cached[1] > now:
+            return cached[0]
+        tokens = refresh_grant(
+            client_id=config.client_id,
+            client_secret=decrypt(config.client_secret_enc),
+            refresh_token=decrypt(config.refresh_token_enc),
+        )
+        config.refresh_token_enc = encrypt(tokens.refresh_token)
+        session.commit()  # persist the rotated refresh token before it's used again
+        _TOKEN_CACHE[cache_key] = (tokens.access_token, now + 14 * 60)
+        return tokens.access_token
 
 
 def _mangadex_library(session: Session) -> Library:

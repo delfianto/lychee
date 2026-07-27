@@ -1,12 +1,15 @@
 """MangaDex account: connect (encrypted secrets) + follows import (monkeypatched, no network)."""
 
+import threading
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from src.catalog.models import Book, Chapter, Library, Series
 from src.core.config import settings
-from src.core.crypto import decrypt
+from src.core.crypto import decrypt, encrypt
 from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
 from src.progress.models import ReadingProgress
@@ -267,6 +270,66 @@ def test_push_series_sends_status_and_read_markers(
     assert calls["status"] == ("md-9", "completed")  # shelf → MangaDex status
     assert calls["read"] == ("md-9", ["ch-9"])  # completed chapter → read marker
     assert calls["rating"] == ("md-9", 8)  # personal score → /rating
+
+
+def test_access_token_refresh_is_serialized_under_concurrency(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MangaDex rotates the refresh token on every use, so two concurrent callers each
+    redeeming the same not-yet-rotated token can desync the stored pair and permanently
+    break the connection. _TOKEN_LOCK must serialize the whole refresh-and-persist section
+    so a second concurrent caller reuses the freshly cached token instead of re-redeeming."""
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    mangadex_account._TOKEN_CACHE.clear()
+
+    provider = Provider(
+        id="mangadex-lock-test",
+        name="MangaDex (lock test)",
+        client_id="lock-test-client",
+        client_secret_enc=encrypt("secret"),
+        refresh_token_enc=encrypt("refresh-0"),
+    )
+    db_session.add(provider)
+    db_session.commit()
+    engine = db_session.get_bind()
+
+    call_count = 0
+    count_lock = threading.Lock()
+
+    def _slow_refresh(**_kw: object) -> TokenPair:
+        nonlocal call_count
+        # Held while inside _TOKEN_LOCK: if the lock didn't serialize callers, a second
+        # thread would slip in here (racing to redeem the same stale refresh token) while
+        # this one sleeps, instead of blocking until this one commits + caches its result.
+        time.sleep(0.05)
+        with count_lock:
+            call_count += 1
+            n = call_count
+        return TokenPair(f"acc-{n}", f"refresh-{n}")
+
+    monkeypatch.setattr(mangadex_account, "refresh_grant", _slow_refresh)
+
+    results: list[str] = []
+    errors: list[BaseException] = []
+
+    def _call() -> None:
+        try:
+            with Session(engine) as session:
+                config = session.get(Provider, "mangadex-lock-test")
+                assert config is not None
+                results.append(mangadex_account._access_token(session, config))
+        except BaseException as exc:  # noqa: BLE001 - surfaced via `errors` below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_call) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert not errors
+    assert call_count == 1  # only the first caller actually redeemed a refresh token
+    assert results == ["acc-1"] * 4  # everyone else got the cached result, not a fresh one
 
 
 def test_shelf_change_enqueues_mangadex_push(
