@@ -8,6 +8,7 @@ set shell := ["bash", "-c"]
 
 backend_dir := "backend"
 frontend_dir := "frontend"
+mcp_dir := "mcp"
 
 be_port := "8000"
 fe_port := "5173"
@@ -124,6 +125,42 @@ fe-prod:
 [group('frontend')]
 fe-stop: (kill-port fe_port "frontend (dev)") (kill-port fe_preview_port "frontend (preview)")
 
+# ────────────────────────────────── mcp ──────────────────────────────────
+# Agent-tool server over the backend's REST API (notes/plan.md PART J).
+# Stdio-only, no port of its own — spawned per-session by an MCP client, so
+# it has no `-dev`/`-stop`/`status` port lifecycle like backend/frontend.
+
+# Install MCP server dependencies into mcp/.venv (uv sync, incl. dev extras).
+[group('mcp')]
+mcp-install:
+    cd {{ mcp_dir }} && uv sync --extra dev
+
+# Reinstall MCP dependencies from scratch — delete .venv, then resync.
+[group('mcp')]
+mcp-reinstall: && mcp-install
+    rm -rf {{ mcp_dir }}/.venv
+
+# Run the server in the browser-based MCP Inspector for interactive testing.
+# Needs `just be-dev` running in another terminal (talks to :8000 by default).
+[group('mcp')]
+mcp-dev:
+    cd {{ mcp_dir }} && uv run fastmcp dev inspector server.py
+
+# Call one tool directly from the CLI, e.g. `just mcp-call list_series limit=5`.
+[group('mcp')]
+mcp-call tool *args:
+    cd {{ mcp_dir }} && uv run fastmcp call server.py {{ tool }} {{ args }}
+
+# Auto-fix MCP server lint + format (ruff format + ruff check --fix).
+[group('mcp')]
+mcp-fix:
+    cd {{ mcp_dir }} && uv run ruff format . && uv run ruff check --fix .
+
+# Lint + type-check + test the MCP server — the full CI gate (no auto-fix).
+[group('mcp')]
+mcp-check:
+    cd {{ mcp_dir }} && uv run ruff check . && uv run basedpyright && uv run pytest -q
+
 # ─────────────────────────────── codegen ────────────────────────────────
 
 # Regenerate backend/openapi.json, then the frontend's typed API client.
@@ -134,13 +171,13 @@ api-gen:
 
 # ──────────────────────────────── project ───────────────────────────────
 
-# Install everything (backend + frontend).
+# Install everything (backend + frontend + mcp).
 [group('project')]
-install: be-install fe-install
+install: be-install fe-install mcp-install
 
-# Run the whole CI gate locally (backend + frontend).
+# Run the whole CI gate locally (backend + frontend + mcp).
 [group('project')]
-check: be-check fe-check
+check: be-check fe-check mcp-check
 
 # Show which dev services are currently running.
 # Only counts processes *listening* on the port — client connections (browsers,
