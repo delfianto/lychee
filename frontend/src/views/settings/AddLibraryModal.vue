@@ -3,15 +3,20 @@
 // a name and kind. Path can be typed or picked via the shared storage browser.
 // Emits `added` on success (parent reloads + closes).
 import { FolderPlus, X } from "lucide-vue-next";
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 
 import { api } from "../../api/client";
 import ServerPathField from "../../components/ServerPathField.vue";
+import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
 const emit = defineEmits<{ close: []; added: [] }>();
 
 const form = reactive({ name: "", path: "", kind: "manga", busy: false });
+
+// No `open` prop — the parent mounts this component only while shown.
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(modalBox, ref(true));
 
 function onPathPicked(path: string): void {
   // Suggest a name from the folder when the name field is still empty.
@@ -37,7 +42,7 @@ async function add(): Promise<void> {
 
 <template>
   <div class="modal modal-open" @click.self="emit('close')">
-    <div class="modal-box">
+    <div ref="modalBox" class="modal-box">
       <div class="mb-3 flex items-center justify-between">
         <h3 class="text-lg font-bold">Add library</h3>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="emit('close')">

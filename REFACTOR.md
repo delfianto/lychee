@@ -115,26 +115,34 @@
 
 ### Bugs / correctness
 
-- [ ] **`FilterPanel.vue` has no `defineEmits` and mutates props directly.**
-      `frontend/src/components/FilterPanel.vue` — `cycleTag()` writes into `props.filters.tags`, `toggle()`
-      calls `.add()`/`.delete()` on the prop's `Set`s directly; there is no emit at all. Only works because
-      `LibraryView.vue` happens to pass the same live `reactive()` object down. Breaks one-way data flow,
-      makes the component unreusable with a copied/immutable filters object, and untestable via the
-      emitted-event pattern the rest of the codebase uses (see `ErrorState.test.ts`).
-      **Fix:** emit `update:filters` (or per-facet events) and let the parent own the mutation.
+- [x] **`FilterPanel.vue` has no `defineEmits` and mutates props directly.**
+      `frontend/src/components/FilterPanel.vue` — `cycleTag()` wrote into `props.filters.tags`, `toggle()`
+      called `.add()`/`.delete()` on the prop's `Set`s directly; there was no emit at all. Only worked
+      because `LibraryView.vue` happened to pass the same live `reactive()` object down. **Fixed** — the
+      component now only reads `props.filters` and emits `set-tag-mode` / `toggle-tag` / `toggle-rating` /
+      `toggle-demographic` / `toggle-status` / `toggle-read-state`; `LibraryView.vue` handles each event and
+      owns the mutation (`cycleTag`/`toggleInSet` helpers, same behavior as before). No other consumer of
+      `FilterPanel` existed. Added `components/FilterPanel.test.ts` (3 tests) asserting the emit contract
+      and that the prop object is never mutated by the component itself.
 
-- [ ] **Race condition on rapid navigation (no staleness guard), 4 call sites.**
-      `frontend/src/views/SeriesDetail.vue:76-81`, `GalleryDetail.vue:33-34`, `ReaderView.vue:33-53`, and
-      `frontend/src/api/queries.ts:182-199` (`useSeriesList.fetchPage`) all fire an async load from a route/
-      filter watcher with no request generation/abort guard. Navigate quickly (series A → series B) and a
-      slower earlier response can resolve after the newer one, overwriting the view with stale data.
-      **Fix:** track a per-call generation id and ignore responses that aren't for the latest one (or use
-      `AbortController` if `openapi-fetch` supports it here).
+- [x] **Race condition on rapid navigation (no staleness guard), 4 call sites.**
+      `SeriesDetail.vue`, `GalleryDetail.vue`, `ReaderView.vue`, and `api/queries.ts`'s
+      `useSeriesList.fetchPage` all fired an async load from a route/filter watcher with no request
+      generation guard — navigate quickly and a slower earlier response could resolve after the newer one,
+      overwriting the view with stale data. **Fixed** — added `lib/staleGuard.ts` (a tiny shared
+      generation-counter helper: `next()`/`isCurrent(token)`) and applied it at all 4 sites; `SeriesDetail`
+      shares one guard between its full `load()` and its lighter `reloadChapters()` since both write
+      `volumes.value` and can race each other too. Regression tests: `lib/staleGuard.test.ts` (the helper
+      itself) and `api/queries.test.ts`'s new "stale-response guard" test (two overlapping `reload()` calls
+      resolving out of order — the newer one's data wins); verified the `queries.ts` test fails with the
+      guard check removed.
 
-- [ ] **Optimistic UI update not guarded by the actual result.** `frontend/src/views/settings/ContentPanel.vue:91-94`
-      (`removeTax`) removes the tag from the local list unconditionally, even when `api.DELETE` returns an
-      error (e.g. "tag in use") — the row disappears from the UI until the next full reload despite the
-      delete having failed.
+- [x] **Optimistic UI update not guarded by the actual result.** `frontend/src/views/settings/ContentPanel.vue:91-94`
+      (`removeTax`) removed the tag from the local list unconditionally, even when `api.DELETE` returned an
+      error (e.g. "tag in use") — the row disappeared from the UI until the next full reload despite the
+      delete having failed. **Fixed** — checks `error` first, toasts the backend's message (or a fallback)
+      and returns without touching the list on failure. (Left as an inline fix, not routed through
+      `queries.ts` — see the separate settings-panels layering item below, which covers this file too.)
 
 ### Layering / architecture violations
 
@@ -149,59 +157,92 @@
       **Fix:** move these calls into `queries.ts` (or a settings-specific sibling module) so error-body
       parsing and response mapping are written once.
 
-- [ ] **`toSeries` bridges the generated schema with a full unchecked cast.** `frontend/src/api/queries.ts:18-19`
-      — `return s as unknown as Series;`. Partly deliberate (a file-top comment explains the wider-backend-
-      union-to-narrow-UI-union bridge), but unlike `toChapter` a few lines below (real field-by-field
-      mapping), a backend value outside the narrow UI union (bad data, a new enum) is caught nowhere and
-      silently misrenders (e.g. `statusColor[series.status]` → `undefined`).
-      **Fix:** give `toSeries` the same explicit per-field mapping `toChapter` already uses.
+- [x] **`toSeries` bridges the generated schema with a full unchecked cast.** `frontend/src/api/queries.ts:18-19`
+      — `return s as unknown as Series;`. **Fixed** — replaced with an explicit per-field mapper matching
+      `toChapter`'s style (each narrow-union field cast individually, nullable fields `?? undefined`),
+      including `tags[]` (previously not mapped at all, so `Tag.group`'s narrow union went unchecked too).
+      `bun run typecheck` clean after the change confirms every field the codebase actually reads was
+      covered.
 
 ### State management inconsistency
 
-- [ ] **Duplicated, disconnected localStorage-backed state.** "Library density" is independently
-      reimplemented (same key, no shared reactivity) in `frontend/src/views/LibraryView.vue:21-29`,
-      `AddedView.vue:10-13`, and `views/settings/AppearancePanel.vue:100-105` — changing it in Settings has
-      no effect on an already-mounted view. Same pattern for `lychee.listsDefaultTab` between
-      `ListsView.vue:18-24` and `AppearancePanel.vue:107-112`. Contrast with `theme`/`fontSize`/
-      `readerSettings`, each a proper shared reactive singleton in `lib/`.
-      **Fix:** extract `lib/density.ts` (and fold the lists-default-tab key in) mirroring `lib/fontSize.ts`'s shape.
+- [x] **Duplicated, disconnected localStorage-backed state.** "Library density" was independently
+      reimplemented (same key, no shared reactivity) in `LibraryView.vue`, `AddedView.vue`, and
+      `AppearancePanel.vue` — changing it in Settings had no effect on an already-mounted view. Same
+      pattern for `lychee.listsDefaultTab` between `ListsView.vue` and `AppearancePanel.vue`. **Fixed** —
+      new `lib/density.ts` (mirrors `lib/fontSize.ts`'s shared-singleton shape) with `useDensity()` (fully
+      shared, two-way — all three consumers bind directly) and `useListsDefaultTab()` (the persisted
+      *default*; `ListsView.vue`'s own current-tab selection seeds from it and stays live-synced via a
+      `watch`, but the page's own tab clicks don't write back, preserving the original
+      default-vs-current-session distinction).
+      Confirmed this was a real, reproducible bug and is now fixed via a live browser check: `AppShell.vue`
+      wraps `LibraryView` in `<KeepAlive>`, so visiting `/manga`, changing the default density in Settings,
+      then navigating back (no reload, same kept-alive instance) used to leave the old density in place —
+      verified failing before the fix and passing after (density toggle reflects the new value immediately
+      on nav-back).
 
 ### Styling convention drift
 
-- [ ] `frontend/src/components/ChapterFeed.vue:29` (`w-[2.333rem]`) and `RecentUpdates.vue:18`
-      (`w-[3.333rem]`) hand-compute a 2:3 cover box instead of using the existing `.cover` utility
-      (`style.css:453-457`), whose comment explicitly says it exists to prevent this exact pattern.
-      **Fix:** `class="cover h-14 shrink-0 rounded"` reproduces the same box without the magic number.
+- [x] `frontend/src/components/ChapterFeed.vue:29` (`w-[2.333rem]`) and `RecentUpdates.vue:18`
+      (`w-[3.333rem]`) hand-computed a 2:3 cover box instead of relying on the existing `.cover` utility
+      (`style.css:453-457`, `aspect-ratio: 2/3`), whose comment explicitly says it exists to prevent this
+      exact pattern. **Fixed** — dropped the arbitrary width class on both; `.cover` + a fixed height alone
+      already renders the identical box (confirmed against `SeriesListCard.vue`'s equivalent
+      width-omitted usage), matching the pattern every other `.cover` consumer in the codebase uses.
 - [—] Minor/secondary, lower priority: `text-[10px]`/`text-[11px]` in `DownloadsPanel.vue:259` and
       `PathBrowserModal.vue:316`; `!z-[1100]` in `PathBrowserModal.vue:189` (already comment-justified).
 
 ### Component complexity / duplication
 
-- [ ] **`UnreadView.vue` and `UpdatesView.vue` are near-duplicates** — identical except the boolean passed
-      to `fetchUpdates()`, the heading, and empty-state copy. **Fix:** collapse into one
-      `ChapterFeedView.vue` parameterized by a prop/route meta.
+- [x] **`UnreadView.vue` and `UpdatesView.vue` are near-duplicates** — identical except the boolean passed
+      to `fetchUpdates()`, the heading, and empty-state copy. **Fixed** — collapsed into
+      `views/ChapterFeedView.vue`, parameterized by an `unreadOnly` route prop (`router/index.ts`'s
+      `/updates` and `/unread` routes now both point at it, same pattern already used for `LibraryView`'s
+      `libraryKey` prop); both old files deleted.
 - [ ] **`SeriesDetail.vue` (482 lines, 16 top-level refs) carries a full inline match-search modal**
       (`matchOpen`/`matchQuery`/`matchLoading`/`matchResults`/`runMatchSearch`/`openMatch`/`pickMatch`,
       ~40 lines state/logic + ~35 lines template, `SeriesDetail.vue:439-476`). Self-contained enough to
       extract into `MatchSeriesModal.vue`, matching the precedent of `EditSeriesModal.vue`.
-- [ ] **Dead/unwired controls, misleading as live UI:** `ChapterList.vue:179-182` (language `<select>`,
-      no `v-model`), `ChapterList.vue:192` ("Newest" sort button, no `@click` handler),
-      `AboutPanel.vue:65,72-74` ("Check for updates" button + three `href="#"` links), and
-      `DownloadsPanel.vue:161-164` (an `if` block whose body is only a leftover comment).
-      **Fix:** wire them up, remove them, or visibly disable/mark as "coming soon."
+- [x] **Dead/unwired controls, misleading as live UI:**
+      - `ChapterList.vue:179-182`/`:192` (language `<select>`, "Newest" sort button) — **fixed**: both are
+        now real, wired to backend functionality that already existed but was never exposed
+        (`GET .../chapters?language=&order=`, `catalog/service.py:list_chapters`). Added `language`/`order`
+        props + `update:language`/`update:order` emits to `ChapterList.vue`; `SeriesDetail.vue` owns the
+        state and refetches just the chapters (not the whole series) on change.
+      - `AboutPanel.vue` ("Check for updates" button + hardcoded "Up to date" badge + three `href="#"`
+        GitHub/Docs/Report-an-issue links) — **removed**, per explicit user decision: no backend
+        update-check exists and no real URLs were available to wire the links to, so the fake
+        "Up to date" status and dead links were actively misleading rather than merely unimplemented.
+      - `DownloadsPanel.vue:161-164` (dead `if` block, body only a leftover comment) — **removed**.
 
 ### Accessibility (extends the sweep `PLAN.md` already flags as partial)
 
-- [ ] **Tab strips with no keyboard path.** `ChapterList.vue:164-174`, `ListsView.vue:71-81`,
-      `LibraryView.vue:236-246` render `role="tab"` on an `<a>` with only `@click` — no `href`, `tabindex`,
-      or Enter/Space handling; not reachable or operable via keyboard/AT.
-      **Fix:** add `tabindex="0"` + keydown handler, or use `<button>`.
-- [ ] **No focus trap in any modal** — `ConfirmDialog.vue`, `PromptDialog.vue`, `EditSeriesModal.vue`,
+- [x] **Tab strips with no keyboard path.** `ChapterList.vue`, `ListsView.vue`, `LibraryView.vue` rendered
+      `role="tab"` on an `<a>` with only `@click` — no `href`, `tabindex`, or Enter/Space handling; not
+      reachable or operable via keyboard/AT. **Fixed** — converted all three to `<button type="button"
+      role="tab">`, which is natively focusable and handles Enter/Space without extra JS. Verified live
+      (Playwright): Tab-focusing a tab button and pressing Enter activates it.
+- [x] **No focus trap in any modal** — `ConfirmDialog.vue`, `PromptDialog.vue`, `EditSeriesModal.vue`,
       `AddLibraryModal.vue`, `MangaDexConnectModal.vue`, `TrackerConnectModal.vue`, `PathBrowserModal.vue`,
-      and `SeriesDetail.vue`'s inline match modal all close on Escape but never trap Tab focus.
-- [ ] **Informative images with empty `alt`:** `Lightbox.vue:132-137` (main viewer image),
-      `SeriesDetail.vue:461` (match-candidate cover), `ChapterList.vue:300` (art covers). Contrast with the
-      correct `alt="" aria-hidden="true"` on `SeriesDetail.vue:247-252`'s genuinely decorative backdrop.
+      and `SeriesDetail.vue`'s inline match modal all closed on Escape but never trapped Tab focus. **Fixed**
+      — new `lib/focusTrap.ts` (`useFocusTrap(container, active)`), wired into all 8. Two distinct
+      lifecycle shapes needed handling: components with a real `open` prop that stay mounted
+      (ConfirmDialog/PromptDialog/the match modal) toggle `active`; components with no `open` prop that the
+      parent mounts/unmounts instead (the other 5) pass a static `ref(true)` — for those, relying only on
+      `watch(active, ...)` never fires the "closed" branch since the value never changes, so focus-restore
+      and listener cleanup silently never ran. Caught this by actually testing in a browser (a DOM-substring
+      check gave a false pass — `document.activeElement` had fallen back to `<body>`, whose `textContent`
+      trivially contains everything); fixed by also cleaning up unconditionally in `onUnmounted`. Regression
+      tests: `lib/focusTrap.test.ts` (3 tests, including the exact unmount-restores-focus case that caught
+      the bug — verified it fails without the `onUnmounted` fix) plus a live Playwright check of both
+      lifecycle shapes (Tab-trapping, focus auto-entry, and focus-restore-on-close, confirmed via exact DOM
+      node identity, not text matching).
+- [x] **Informative images with empty `alt`:** `Lightbox.vue`'s main viewer image, `SeriesDetail.vue`'s
+      match-candidate cover, `ChapterList.vue`'s art covers. **Fixed** — match-candidate cover now uses the
+      candidate's title; the other two lack any per-item label in their data, so given an indexed
+      description (`"Item N of M"` / `"Related art N"`) rather than leaving them empty. Left
+      `SeriesDetail.vue`'s blurred backdrop image alone — it already correctly has `alt=""
+      aria-hidden="true"` since it's genuinely decorative.
 
 ### Test coverage — priority order (cheap → expensive)
 

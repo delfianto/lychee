@@ -5,12 +5,9 @@ import { type Component, ref, watch } from "vue";
 import { useSeriesList } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
+import { type Density, useDensity } from "../lib/density";
 
-type Density = "list" | "compact" | "gallery";
-const DENSITY_KEY = "lychee.density";
-const stored = localStorage.getItem(DENSITY_KEY);
-const density = ref<Density>(stored === "compact" || stored === "gallery" ? stored : "list");
-watch(density, (d) => localStorage.setItem(DENSITY_KEY, d));
+const { density } = useDensity();
 const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "list", icon: List, label: "List view" },
   { value: "compact", icon: Grid2x2, label: "Compact view" },

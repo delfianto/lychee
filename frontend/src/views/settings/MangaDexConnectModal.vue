@@ -7,6 +7,7 @@ import { Eye, EyeOff, FileUp, Link2, X } from "lucide-vue-next";
 import { reactive, ref } from "vue";
 
 import { api } from "../../api/client";
+import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
 const emit = defineEmits<{ close: []; connected: [] }>();
@@ -15,6 +16,10 @@ const form = reactive({ clientId: "", clientSecret: "", username: "", password: 
 const showSecret = ref(false);
 const showPassword = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// No `open` prop — the parent mounts this component only while shown.
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(modalBox, ref(true));
 
 /** Exact KEY=VAL names → form fields. No aliases. */
 const ENV_FIELDS = {
@@ -101,7 +106,7 @@ async function connect(): Promise<void> {
 
 <template>
   <div class="modal modal-open" @click.self="emit('close')">
-    <div class="modal-box max-w-lg">
+    <div ref="modalBox" class="modal-box max-w-lg">
       <div class="mb-3 flex items-center justify-between">
         <h3 class="text-lg font-bold">Connect MangaDex</h3>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="emit('close')">

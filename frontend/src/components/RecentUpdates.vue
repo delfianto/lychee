@@ -15,7 +15,7 @@ defineProps<{ updates: RecentUpdate[] }>();
       :to="`/series/${u.series.id}`"
       class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2 transition hover:bg-base-300/40"
     >
-      <CoverImage :src="u.series.coverUrl" :alt="u.series.title" class="cover h-20 w-[3.333rem] shrink-0 rounded" />
+      <CoverImage :src="u.series.coverUrl" :alt="u.series.title" class="cover h-20 shrink-0 rounded" />
       <div class="flex min-w-0 grow flex-col gap-0.5">
         <div class="flex items-start justify-between gap-2">
           <h4 class="line-clamp-1 text-sm font-medium">{{ u.series.title }}</h4>

@@ -4,7 +4,8 @@
 
 import { computed, ref } from "vue";
 
-import type { BrowseFilters, Chapter, RecentUpdate, Series, VolumeGroup } from "../types";
+import { createStaleGuard } from "../lib/staleGuard";
+import type { BrowseFilters, Chapter, RecentUpdate, Series, Tag, VolumeGroup } from "../types";
 import {
   type Chapter as ApiChapter,
   type Series as ApiSeries,
@@ -16,7 +17,35 @@ import { relativeTime } from "./format";
 import type { paths } from "./schema";
 
 function toSeries(s: ApiSeries): Series {
-  return s as unknown as Series;
+  return {
+    id: s.id,
+    title: s.title,
+    coverUrl: s.coverUrl,
+    authors: s.authors,
+    artists: s.artists,
+    status: s.status as Series["status"],
+    contentRating: s.contentRating as Series["contentRating"],
+    demographic: s.demographic as Series["demographic"],
+    tags: s.tags.map((t): Tag => ({ id: t.id, name: t.name, group: t.group as Tag["group"] })),
+    chapterCount: s.chapterCount,
+    unreadCount: s.unreadCount,
+    year: s.year ?? undefined,
+    description: s.description ?? undefined,
+    lastReadChapter: s.lastReadChapter ?? undefined,
+    totalChapters: s.totalChapters ?? undefined,
+    originCountry: s.originCountry ?? undefined,
+    rating: s.rating ?? undefined,
+    userRating: s.userRating ?? undefined,
+    favorite: s.favorite,
+    kind: (s.kind as Series["kind"]) ?? undefined,
+    imageCount: s.imageCount ?? undefined,
+    source: s.source ?? undefined,
+    characters: s.characters ?? undefined,
+    libraryStatus: (s.libraryStatus as Series["libraryStatus"]) ?? undefined,
+    provider: s.provider,
+    availableChapters: s.availableChapters,
+    chaptersSyncedAt: s.chaptersSyncedAt,
+  };
 }
 
 function toUpdate(u: ApiUpdate): RecentUpdate {
@@ -178,13 +207,18 @@ export function useSeriesList() {
   const cursor = ref<string | null>(null);
   let params: SeriesQuery = {};
   let started = false; // no paging until the first reload sets a real query
+  // Guards against an in-flight page/reset landing after a newer one already did —
+  // e.g. filter change A's request still pending when filter change B's lands first.
+  const staleGuard = createStaleGuard();
 
   async function fetchPage(reset: boolean): Promise<void> {
     if (loading.value && started && !reset) return;
+    const token = staleGuard.next();
     loading.value = true;
     const query: SeriesQuery = { ...params, limit: 24 };
     if (!reset && cursor.value) query.cursor = cursor.value;
     const { data, error } = await api.GET("/api/series", { params: { query } });
+    if (!staleGuard.isCurrent(token)) return;
     if (!error && data) {
       const mapped = data.items.map(toSeries);
       items.value = reset ? mapped : [...items.value, ...mapped];
@@ -280,9 +314,15 @@ export async function fetchSeries(id: string): Promise<Series> {
   return toSeries(data);
 }
 
-export async function fetchChapters(id: string): Promise<VolumeGroup[]> {
+export async function fetchChapters(
+  id: string,
+  opts?: { language?: string; order?: "asc" | "desc" },
+): Promise<VolumeGroup[]> {
   const { data, error } = await api.GET("/api/series/{series_id}/chapters", {
-    params: { path: { series_id: id } },
+    params: {
+      path: { series_id: id },
+      query: { language: opts?.language || undefined, order: opts?.order },
+    },
   });
   if (error || !data) return [];
   return data.map((group) => ({

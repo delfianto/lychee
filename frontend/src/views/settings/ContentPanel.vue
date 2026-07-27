@@ -89,7 +89,14 @@ async function addTax(name: string): Promise<void> {
   }
 }
 async function removeTax(row: TaxRow): Promise<void> {
-  await api.DELETE("/api/taxonomy/{tag_id}", { params: { path: { tag_id: row.id } } });
+  const { error } = await api.DELETE("/api/taxonomy/{tag_id}", {
+    params: { path: { tag_id: row.id } },
+  });
+  if (error) {
+    const body = error as { error?: { message?: string } };
+    toast(body?.error?.message ?? "Couldn't delete tag", "error");
+    return;
+  }
   taxonomy.value = taxonomy.value.filter((r) => r.id !== row.id);
 }
 const refreshing = computed(() => activeTasks.value.some((t) => t.kind === "taxonomy"));

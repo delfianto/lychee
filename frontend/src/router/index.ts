@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 
 import AppShell from "../layouts/AppShell.vue";
 import AddedView from "../views/AddedView.vue";
+import ChapterFeedView from "../views/ChapterFeedView.vue";
 import GalleryDetail from "../views/GalleryDetail.vue";
 import GalleryView from "../views/GalleryView.vue";
 import LibraryHome from "../views/LibraryHome.vue";
@@ -13,8 +14,6 @@ import ReaderView from "../views/ReaderView.vue";
 import SearchView from "../views/SearchView.vue";
 import SeriesDetail from "../views/SeriesDetail.vue";
 import SettingsView from "../views/SettingsView.vue";
-import UnreadView from "../views/UnreadView.vue";
-import UpdatesView from "../views/UpdatesView.vue";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -32,8 +31,8 @@ export const router = createRouter({
         { path: "comics", name: "comics", component: LibraryView, props: { libraryKey: "comics" } },
         { path: "gallery", name: "gallery", component: GalleryView },
         { path: "gallery/:id", name: "gallery-detail", component: GalleryDetail },
-        { path: "updates", name: "updates", component: UpdatesView },
-        { path: "unread", name: "unread", component: UnreadView },
+        { path: "updates", name: "updates", component: ChapterFeedView, props: { unreadOnly: false } },
+        { path: "unread", name: "unread", component: ChapterFeedView, props: { unreadOnly: true } },
         { path: "added", name: "added", component: AddedView },
         { path: "lists", name: "lists", component: ListsView },
         { path: "lists/:id", name: "list-detail", component: ListDetailView },

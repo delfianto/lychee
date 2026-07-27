@@ -5,11 +5,17 @@ import { onMounted, reactive, ref } from "vue";
 import { fetchTagGroups, patchSeries, type TagGroup } from "../api/queries";
 import type { SeriesUpdate } from "../api/client";
 import { contentRatingLabel, statusLabel } from "../lib/display";
+import { useFocusTrap } from "../lib/focusTrap";
 import { toast } from "../lib/toast";
 import type { ContentRating, Demographic, PublicationStatus, Series } from "../types";
 
 const props = defineProps<{ series: Series }>();
 const emit = defineEmits<{ close: []; saved: [] }>();
+
+// No `open` prop here — the parent mounts this component only while shown, so
+// "mounted" is the modal's whole lifetime.
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(modalBox, ref(true));
 
 const isGallery = props.series.kind === "gallery";
 
@@ -119,7 +125,7 @@ async function save(): Promise<void> {
 
 <template>
   <div class="modal modal-open" @click.self="emit('close')">
-    <div class="modal-box max-w-2xl">
+    <div ref="modalBox" class="modal-box max-w-2xl">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-lg font-bold">{{ isGallery ? "Edit gallery" : "Edit series" }}</h3>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="emit('close')">

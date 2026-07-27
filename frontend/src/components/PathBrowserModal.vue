@@ -15,6 +15,7 @@ import {
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import { api } from "../api/client";
+import { useFocusTrap } from "../lib/focusTrap";
 
 const props = withDefaults(
   defineProps<{
@@ -32,6 +33,10 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ close: []; select: [path: string] }>();
+
+// No `open` prop — the parent mounts this component only while shown.
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(modalBox, ref(true));
 
 interface Entry {
   name: string;
@@ -191,7 +196,7 @@ onUnmounted(() => {
       aria-modal="true"
       @click.self="emit('close')"
     >
-      <div class="modal-box flex max-h-[min(36rem,90vh)] max-w-xl flex-col gap-0 p-0">
+      <div ref="modalBox" class="modal-box flex max-h-[min(36rem,90vh)] max-w-xl flex-col gap-0 p-0">
         <div class="flex items-start justify-between gap-3 border-b border-base-content/10 px-5 py-4">
           <div class="min-w-0">
             <h3 class="text-lg font-bold">{{ title }}</h3>

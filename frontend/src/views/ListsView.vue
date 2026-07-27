@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Layers, Plus, Trash2 } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
+import { type ListsTab, useListsDefaultTab } from "../lib/density";
 import { toast } from "../lib/toast";
 import { useCollections } from "../stores/collections";
 import type { Collection } from "../types";
@@ -14,21 +15,19 @@ const creating = ref(false);
 const newName = ref("");
 
 // --- Kind tabs (mirrors LibraryView's shelf-status tabs) -----------------
-type KindTab = "all" | "manga" | "comic" | "gallery";
-const DEFAULT_TAB_KEY = "lychee.listsDefaultTab";
-function initialTab(): KindTab {
-  const stored = localStorage.getItem(DEFAULT_TAB_KEY);
-  return stored === "manga" || stored === "comic" || stored === "gallery" || stored === "all"
-    ? stored
-    : "manga";
-}
-const kindTabs: { value: KindTab; label: string }[] = [
+const { listsDefaultTab } = useListsDefaultTab();
+const kindTabs: { value: ListsTab; label: string }[] = [
   { value: "all", label: "All" },
   { value: "manga", label: "Manga" },
   { value: "comic", label: "Comics" },
   { value: "gallery", label: "Gallery" },
 ];
-const activeTab = ref<KindTab>(initialTab());
+// Seeded from (and kept live with) the shared default, but the page's own tab
+// clicks are session-local and don't write back to it — only Settings does.
+const activeTab = ref<ListsTab>(listsDefaultTab.value);
+watch(listsDefaultTab, (t) => {
+  activeTab.value = t;
+});
 
 function matchesTab(list: Collection): boolean {
   return activeTab.value === "all" || list.kind === activeTab.value;
@@ -68,16 +67,17 @@ function covers(seriesIds: string[]): string[] {
 
     <!-- Kind tabs -->
     <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
-      <a
+      <button
         v-for="tab in kindTabs"
         :key="tab.value"
+        type="button"
         role="tab"
         class="tab whitespace-nowrap"
         :class="{ 'tab-active': activeTab === tab.value }"
         @click="activeTab = tab.value"
       >
         {{ tab.label }}
-      </a>
+      </button>
     </div>
 
     <!-- Inline create -->

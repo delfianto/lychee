@@ -156,12 +156,8 @@ const disposeDone = onTaskDone((task) => {
 // While a download runs, refresh the table on progress events (throttled) so rows
 // climb mid-chapter rather than appearing only when the whole job finishes.
 let dlReloadTimer: ReturnType<typeof setTimeout> | null = null;
-const disposeProgress = onTaskEvent((event, task) => {
+const disposeProgress = onTaskEvent((event) => {
   if (!event.startsWith("download.") || dlReloadTimer !== null) return;
-  // Surface phase text (Fetching… / Encoding…) from the live task detail if present.
-  if (task.detail && task.status === "running") {
-    // soft hint: next loadDownloads will get DB progress %
-  }
   dlReloadTimer = setTimeout(() => {
     dlReloadTimer = null;
     void loadDownloads();

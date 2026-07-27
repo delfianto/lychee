@@ -3,13 +3,18 @@
 // paste code; credentials trackers (MangaUpdates) do a one-step username/password
 // login. Emits `connected` on success (parent reloads + closes).
 import { Link2, X } from "lucide-vue-next";
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 
 import { api } from "../../api/client";
+import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
 const props = defineProps<{ tracker: { id: string; name: string; authKind: string } }>();
 const emit = defineEmits<{ close: []; connected: [] }>();
+
+// No `open` prop — the parent mounts this component only while shown.
+const modalBox = ref<HTMLElement | null>(null);
+useFocusTrap(modalBox, ref(true));
 
 const form = reactive({
   clientId: "", clientSecret: "", redirectUri: window.location.origin,
@@ -63,7 +68,7 @@ async function loginTracker(): Promise<void> {
 
 <template>
   <div class="modal modal-open" @click.self="emit('close')">
-    <div class="modal-box">
+    <div ref="modalBox" class="modal-box">
       <div class="mb-3 flex items-center justify-between">
         <h3 class="text-lg font-bold">Connect {{ tracker.name }}</h3>
         <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="emit('close')">

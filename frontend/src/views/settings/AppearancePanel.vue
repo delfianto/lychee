@@ -17,6 +17,7 @@ import {
 import { type Component, ref, watch } from "vue";
 
 import SegmentedToggle from "../../components/SegmentedToggle.vue";
+import { useDensity, useListsDefaultTab } from "../../lib/density";
 import {
   DEFAULT_FONT_SIZE,
   MAX_FONT_SIZE,
@@ -97,19 +98,8 @@ function setReader(k: ReaderChoiceKey, v: string): void {
   (reader as unknown as Record<string, string>)[k] = v;
 }
 
-const DENSITY_KEY = "lychee.density";
-const density = ref(localStorage.getItem(DENSITY_KEY) ?? "list");
-function setDensity(d: string): void {
-  density.value = d;
-  localStorage.setItem(DENSITY_KEY, d);
-}
-
-const LISTS_TAB_KEY = "lychee.listsDefaultTab";
-const listsTab = ref(localStorage.getItem(LISTS_TAB_KEY) ?? "manga");
-function setListsTab(k: string): void {
-  listsTab.value = k;
-  localStorage.setItem(LISTS_TAB_KEY, k);
-}
+const { density } = useDensity();
+const { listsDefaultTab } = useListsDefaultTab();
 
 const language = ref("English");
 
@@ -180,11 +170,7 @@ function onFontSizeUp(): void {
                   <div class="text-xs text-base-content/50">How libraries open by default</div>
                 </div>
               </div>
-              <select
-                class="select select-bordered select-sm w-28"
-                :value="density"
-                @change="setDensity(($event.target as HTMLSelectElement).value)"
-              >
+              <select v-model="density" class="select select-bordered select-sm w-28">
                 <option value="list">List</option>
                 <option value="compact">Compact</option>
                 <option value="gallery">Gallery</option>
@@ -198,11 +184,7 @@ function onFontSizeUp(): void {
                   <div class="text-xs text-base-content/50">Which kind opens first on the Lists page</div>
                 </div>
               </div>
-              <select
-                class="select select-bordered select-sm w-28"
-                :value="listsTab"
-                @change="setListsTab(($event.target as HTMLSelectElement).value)"
-              >
+              <select v-model="listsDefaultTab" class="select select-bordered select-sm w-28">
                 <option value="all">All</option>
                 <option value="manga">Manga</option>
                 <option value="comic">Comics</option>
