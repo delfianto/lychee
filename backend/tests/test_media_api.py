@@ -133,6 +133,24 @@ def test_gallery_images_list_and_serve(
     assert client.get(f"/api/series/{series.id}/images/0/thumb").status_code == 200
 
 
+def test_gallery_item_thumb_shards_by_series_not_fixed_prefix(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    """Regression: gallery-item thumbnail ids used to be built as f"gi-{series_id}-{index}",
+    so the store's id[:2] sharding put every gallery item in the library under one fixed
+    "gi" directory instead of spreading across shards like every other thumbnail kind."""
+    series, _ = _make_book_series(db_session, tmp_path, kind="gallery", pages=1, with_chapter=False)
+
+    resp = client.get(f"/api/series/{series.id}/images/0/thumb")
+    assert resp.status_code == 200
+
+    thumb_root = tmp_path / "storage" / "thumbnails"
+    shard_dir = thumb_root / series.id[:2]
+    assert shard_dir.is_dir()
+    assert any(p.name.startswith(series.id) for p in shard_dir.iterdir())
+    assert not (thumb_root / "gi").exists()
+
+
 def test_gallery_mp4_stream_and_range(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:

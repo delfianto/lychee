@@ -19,8 +19,8 @@ class DownloadTask(BaseModel):
 
     __tablename__ = "download_task"
 
-    series_id: Mapped[str | None] = mapped_column(
-        ForeignKey("series.id", ondelete="SET NULL"), index=True, nullable=True
+    series_id: Mapped[str] = mapped_column(
+        ForeignKey("series.id", ondelete="CASCADE"), index=True, nullable=False
     )
     chapter_id: Mapped[str | None] = mapped_column(
         ForeignKey("chapter.id", ondelete="SET NULL"), nullable=True

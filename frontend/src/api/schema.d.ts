@@ -1696,6 +1696,8 @@ export interface components {
              * @default 0
              */
             availableChapters: number;
+            /** Chapterssyncedat */
+            chaptersSyncedAt?: string | null;
         };
         /**
          * SeriesUpdate
@@ -1811,12 +1813,18 @@ export interface components {
         /**
          * TrackerCallback
          * @description Complete the flow with the authorization code returned to the redirect URI.
+         *
+         *     ``state`` must match the nonce ``TrackerAuthUrl`` embedded in the authorize URL —
+         *     verified server-side so a code obtained outside the flow this instance actually
+         *     started (e.g. pasted in from somewhere else) can't be redeemed.
          */
         TrackerCallback: {
             /** Code */
             code: string;
             /** Redirecturi */
             redirectUri: string;
+            /** State */
+            state: string;
         };
         /**
          * TrackerConnect

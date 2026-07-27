@@ -69,9 +69,12 @@ def db_engine(tmp_path: Path) -> Iterator[Engine]:
     @event.listens_for(engine, "connect")
     def _pragmas(dbapi_connection: Any, _record: Any) -> None:
         # WAL lets the background task worker write while the request thread reads,
-        # matching production and avoiding cross-thread "database is locked".
+        # matching production and avoiding cross-thread "database is locked". FK
+        # enforcement must match production too — otherwise ON DELETE CASCADE/SET NULL
+        # behavior across the schema goes completely unverified by the test suite.
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=5000")
         cursor.close()
 

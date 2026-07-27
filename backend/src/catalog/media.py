@@ -390,8 +390,13 @@ def get_gallery_image(session: Session, series_id: str, index: int) -> Served:
 
 
 def _gallery_item_thumb_id(series_id: str, index: int) -> str:
-    """Stable ThumbnailStore id for one gallery media item (grid preview)."""
-    return f"gi-{series_id}-{index}"
+    """Stable ThumbnailStore id for one gallery media item (grid preview).
+
+    ``series_id`` leads so the store's ``id[:2]`` sharding spreads gallery items
+    across shards by series (a fixed literal prefix like ``gi-`` would put every
+    gallery item in the library under one shard directory).
+    """
+    return f"{series_id}-gi-{index}"
 
 
 def ensure_gallery_item_thumb(

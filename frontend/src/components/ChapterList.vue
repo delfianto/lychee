@@ -15,12 +15,16 @@ const props = withDefaults(
     /** Series id for queue-download actions (remote-only rows). */
     seriesId?: string;
     matched?: boolean;
+    /** True once the provider's chapter feed has been fetched at least once — lets the
+     *  empty state say "the provider has none" instead of "not synced yet". */
+    synced?: boolean;
   }>(),
   {
     related: () => [],
     artCovers: () => [],
     seriesId: undefined,
     matched: false,
+    synced: false,
   },
 );
 
@@ -189,7 +193,11 @@ const statusLabel: Record<string, string> = {
       </div>
 
       <div v-if="!hasAny()" class="py-10 text-center text-sm text-base-content/60">
-        <template v-if="matched">No chapters listed yet — try refreshing metadata or sync.</template>
+        <template v-if="matched && synced">
+          MangaDex lists no chapters for this title — it may have been removed or isn't
+          available in your selected language.
+        </template>
+        <template v-else-if="matched">No chapters listed yet — try refreshing metadata or sync.</template>
         <template v-else>No chapters in the library for this series.</template>
       </div>
 

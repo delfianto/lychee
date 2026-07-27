@@ -43,6 +43,9 @@ class SeriesOut(CamelModel):
     library_status: str | None = None
     provider: str | None = None  # matched metadata provider slug, or null if unmatched
     available_chapters: int = 0  # remote chapters not yet local (from the last sync)
+    # When the provider's chapter feed was last successfully fetched, or null if never
+    # (distinguishes "provider genuinely has zero chapters" from "not synced yet").
+    chapters_synced_at: UtcDatetime | None = None
 
 
 class SeriesUpdate(CamelModel):

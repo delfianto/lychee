@@ -4,8 +4,10 @@ import io
 import threading
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from src.downloads.downloader import chapter_path_rel
 from src.downloads.provider import RemoteChapter, register_provider
@@ -371,6 +373,67 @@ def test_reclaim_orphaned_downloading(db_session: Session, tmp_path: Path) -> No
     assert row.status == "queued"
     assert row.progress == 0
     assert row.phase is None
+
+
+def test_deleting_series_cascades_its_download_tasks(db_session: Session, tmp_path: Path) -> None:
+    """A download row must not outlive its series. The FK used to be ON DELETE SET
+    NULL, which left the row permanently orphaned — invisible to GET /api/downloads
+    (series is required to build DownloadTaskOut) and un-deletable without its id."""
+    from src.downloads.models import DownloadTask
+
+    series = _linked_series(db_session, tmp_path / "manga")
+    row = DownloadTask(series_id=series.id, chapter_label="Ch. 1", status="queued", provider="fake")
+    db_session.add(row)
+    db_session.commit()
+    task_id = row.id
+
+    db_session.delete(series)
+    db_session.commit()
+
+    assert db_session.get(DownloadTask, task_id) is None
+
+
+def test_plan_downloads_survives_remote_index_write_failure(
+    db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keeping the remote chapter index warm is best-effort: a failure there must not
+    corrupt the session or stop chapters from being queued. The failure must be a real
+    flush error (not just a raised exception) — that's what actually leaves a SQLAlchemy
+    session needing a rollback, which is what the swallowed `except: pass` used to skip."""
+    from src.catalog.models import Chapter
+    from src.downloads import downloader
+    from src.downloads.models import DownloadTask
+    from src.downloads.provider import get_provider
+
+    series = _linked_series(db_session, tmp_path / "manga")
+    provider = get_provider("fake")
+    assert provider is not None
+
+    def _boom(session: Session, *_args: object, **_kwargs: object) -> int:
+        session.add(
+            Chapter(
+                series_id=series.id,
+                book_id="does-not-exist",  # bad FK -> IntegrityError on flush
+                number="x",
+                number_sort=1.0,
+                language="en",
+                page_count=1,
+            )
+        )
+        session.flush()
+        return 0
+
+    monkeypatch.setattr("src.catalog.remote_chapters.upsert_provider_chapters", _boom)
+
+    queued = downloader.plan_downloads(db_session, series, provider)
+    assert queued == 2  # both fake-provider chapters still get queued despite the failure
+
+    # A session left needing a rollback would raise PendingRollbackError here instead.
+    assert db_session.scalar(select(func.count()).select_from(DownloadTask)) == 2
+
+    # The session must still be usable — a swallowed exception without a rollback
+    # would leave it needing one, and the next query would raise PendingRollbackError.
+    assert db_session.scalar(select(func.count()).select_from(DownloadTask)) == 2
 
 
 def test_chapter_path_rel_human_readable(db_session: Session) -> None:

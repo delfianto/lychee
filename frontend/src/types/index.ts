@@ -59,6 +59,9 @@ export interface Series {
   provider?: string | null;
   /** Remote chapters not yet local, from the last sync (drives the "new" badge). */
   availableChapters?: number;
+  /** When the provider's chapter feed was last fetched; absent/null if never synced —
+   *  distinguishes "provider genuinely has zero chapters" from "not synced yet". */
+  chaptersSyncedAt?: string | null;
 }
 
 export interface RecentUpdate {
