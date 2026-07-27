@@ -11,17 +11,19 @@ API and (in production) the built frontend.
 lychee/
 ├── backend/    Python 3.14 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite — see backend/AGENTS.md
 ├── frontend/   Vue 3 · TypeScript · Vite · Tailwind v4 · DaisyUI 5 · Bun — see frontend/AGENTS.md
+├── mcp/        MCP server (agent-tool access to the library) — a client of the backend's
+│               REST API, not part of the one deployable — see mcp/AGENTS.md, notes/plan.md PART J
 ├── notes/      reference research + architecture decisions (ADRs, notes/decisions/01–18);
 │               also plan.md (build-status tracker) + refactor.md (code-quality backlog)
-└── justfile    canonical task runner — one entrypoint for db / backend / frontend
+└── justfile    canonical task runner — one entrypoint for db / backend / frontend / mcp
 ```
 
 **This file covers monorepo-wide concerns only.** For anything specific to one
-half — stack details, module layout, conventions, test patterns, commands —
-read **[backend/AGENTS.md](backend/AGENTS.md)** or
-**[frontend/AGENTS.md](frontend/AGENTS.md)**, whichever the task touches. Most
-real work happens in one half at a time; read both when a change crosses the
-API boundary (new/changed endpoint, new response field, etc.).
+surface — stack details, module layout, conventions, test patterns, commands —
+read **[backend/AGENTS.md](backend/AGENTS.md)**, **[frontend/AGENTS.md](frontend/AGENTS.md)**,
+or **[mcp/AGENTS.md](mcp/AGENTS.md)**, whichever the task touches. Most real
+work happens in one at a time; read backend + frontend both when a change
+crosses the API boundary (new/changed endpoint, new response field, etc.).
 
 ## The one thing that spans both halves: the API contract
 
@@ -43,10 +45,11 @@ The root `justfile` is the canonical entrypoint for both halves and the
 database; run `just --list` for the full, grouped recipe list. Highlights:
 
 ```sh
-just install          # be-install + fe-install
+just install          # be-install + fe-install + mcp-install
 just be-dev           # backend dev server, :8000, auto-reload (frees the port first)
 just fe-dev           # frontend dev server, :5173 (proxies /api → :8000)
-just check            # full CI gate, both halves (be-check + fe-check)
+just mcp-dev          # MCP server in the browser-based Inspector (needs be-dev running)
+just check            # full CI gate, everything (be-check + fe-check + mcp-check)
 just db-migrate       # upgrade the database to head
 just api-gen          # regenerate openapi.json + the frontend client
 just status           # what's currently listening on the dev ports
@@ -80,10 +83,10 @@ in-progress cleanup, see `notes/refactor.md`.
 
 - **Work on the current branch.** Don't create branches or push unless
   explicitly asked.
-- Each half keeps its own toolchain and quality gate — see
-  `backend/AGENTS.md` / `frontend/AGENTS.md` for the exact commands — but the
-  shape is the same both places: format/lint, type-check, test, in that order,
-  before calling a change done.
+- Each surface keeps its own toolchain and quality gate — see
+  `backend/AGENTS.md` / `frontend/AGENTS.md` / `mcp/AGENTS.md` for the exact
+  commands — but the shape is the same everywhere: format/lint, type-check,
+  test, in that order, before calling a change done.
 - Don't add a dependency, abstraction, or config knob "for later." Both ADRs
   and `notes/plan.md` are explicit about what's in scope; unplanned scope creep
   (e.g. OPDS support, multi-user auth) has usually already been considered

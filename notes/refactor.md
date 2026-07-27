@@ -109,6 +109,18 @@
       `state` — done as part of the fix above (`test_callback_rejects_missing_or_mismatched_state`,
       `test_callback_state_cannot_be_replayed`).
 
+### Dependencies / deprecations
+
+- [ ] **`starlette.testclient` warns its `httpx` integration is deprecated.** Surfaces on every
+      `pytest` run (`just be-check` / `just check`):
+      `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install
+      httpx2 instead` — from `.venv/lib/python3.14/site-packages/fastapi/testclient.py:1`
+      (FastAPI/Starlette's own import), not code in this repo. First noticed 2026-07-27 running the
+      full CI gate. No action yet: nothing here currently depends on `httpx2`, and it isn't a drop-in
+      swap until Starlette actually cuts `TestClient` over — just tracked so the warning isn't
+      mistaken for something the mcp/ or backend httpx usage introduced. Revisit when Starlette/FastAPI
+      ship the real migration path.
+
 ---
 
 ## Frontend

@@ -53,6 +53,10 @@
          download/scan (not lazy-on-request); a Settings "Local import" page that transcodes containers to
          AVIF (server path + browser upload; UI quality + enable toggle); and a configurable token-template
          filename→metadata pattern that auto-fills series/volume/chapter/title. **G0–G5 done.** ✅
+   - [ ] **MCP server for agent-assisted batch operations** (PART J) — 🟡 proposed, not started. Let a
+         local (later, optionally cloud-based) LLM agent drive bulk tagging/downloads/matching instead of
+         clicking through the webapp one series at a time. See PART J for the architecture recommendation
+         (separate `mcp/` directory, stdio-first, when to add API-key auth).
 3. **Coverage:**
    - [—] Extra containers RAR/7z/PDF/EPUB + `python-magic` content sniffing — **not planned**. CBZ/ZIP +
          image directories (plus AVIF-dir for downloads) cover the common cases; the rest isn't worth the
@@ -706,6 +710,100 @@ numbered volumes, and the FE has no label for `volume: null`.
 
 **Testing (all):** offline — stub the provider (no network), fixtures in `tmp_path`; migrations for
 `Collection.provider/provider_list_id` + `Chapter.provider_chapter_id` (`alembic check` clean).
+
+# PART J — MCP server for agent-assisted library operations — 🟡 proposed, not started
+
+> Discussed 2026-07-27, not yet started. This is an architecture recommendation to
+> decide against before building, not a committed design like PART F–I. Goal: let an
+> LLM agent (local today; possibly cloud-based later) drive the batch/tedious library
+> operations that are annoying to click through one series at a time — bulk tagging,
+> bulk downloads, finding unmatched/untagged series, bulk shelf-status updates.
+
+## Decision (recommended)
+
+- **Separate top-level `mcp/` directory**, sibling to `backend/`/`frontend/` — **not**
+  `backend/src/mcp/`. The MCP server is a **client of the existing REST API**, the same
+  relationship the frontend already has to the backend, not a new direct consumer of
+  the ORM/service layer. Reasons:
+  - The described use cases (bulk tag, bulk download, bulk shelf update) are
+    **orchestration over endpoints that already exist** — `PATCH /api/series/{id}`
+    already accepts `tagIds`/`libraryStatus`/`favorite`; `POST /api/downloads` already
+    accepts a `seriesId` or `providerChapterIds` list. **Zero backend changes are
+    required to build v1** — the MCP layer just loops over the current contract, the
+    same way a batch script hitting the API would. (A handful of true bulk endpoints —
+    e.g. `PATCH` many series at once — would cut round-trips later, but aren't needed
+    to start.)
+  - Keeps `fastmcp` + the MCP SDK (and whatever HTTP client it needs) **out of the
+    backend's `pyproject.toml`/lockfile** entirely. Nobody who just wants the media
+    server pays for that dependency surface, and the backend's own quality gate
+    (ruff/basedpyright/pytest) doesn't have to cover agent-tool code.
+  - Matches [ADR 15](decisions/15-api-surface.md)'s own escape hatch: "the clean REST
+    API + entity model don't preclude adding … a public API later if a non-webapp
+    client ever appears." An MCP server is exactly that second client — but it's an
+    **owner-operated automation surface**, not the OPDS/Komga-compat/third-party-reader
+    ecosystem ADR 15 explicitly rejected, so it doesn't reopen that decision, just
+    exercises the reversibility it already banked.
+  - Structurally: `backend/` + `frontend/` stay "the one deployable" (per the root
+    `CLAUDE.md`); `mcp/` is optional tooling you run only if you want agent access, same
+    spirit as `notes/` or `scripts/` — not part of what a self-hoster has to run.
+  - **Alternative considered:** mount FastMCP as an ASGI sub-app inside the existing
+    FastAPI process (`app.mount("/mcp", mcp.http_app())`), reusing `Depends(get_db)`
+    directly. Rejected for now — saves an HTTP hop that's irrelevant next to
+    chapter-download/provider I/O, but permanently couples the backend's dependency
+    footprint and release surface to the MCP surface for no real gain given v1 needs no
+    new service-layer access.
+- **Shape, once built:** own `pyproject.toml` (`uv`-managed like `backend/`), own
+  `AGENTS.md`, a typed client generated from `backend/openapi.json` (mirrors the
+  frontend's `openapi-typescript` step — e.g. `openapi-python-client` or a hand-rolled
+  `httpx` wrapper over the same schema, decide at build time), and `just mcp-install` /
+  `just mcp-dev` recipes alongside `be-*`/`fe-*` in the root `justfile`.
+- **Tool surface is the batch primitives, not 1:1 endpoint passthrough** — e.g.
+  `find_untagged_series` / `find_unmatched_series` (fetch + filter client-side; no new
+  backend filter needed for v1), `bulk_tag_series(series_ids, tag_ids, mode)`,
+  `bulk_queue_downloads(series_ids)`, `bulk_set_library_status(series_ids, status)`.
+  Resolving tag names → ids goes through the existing `GET /api/taxonomy`.
+
+## Transport + auth: when the API key actually earns its keep
+
+- **Start on stdio transport.** FastMCP spawned via stdio (how Claude Desktop / Claude
+  Code launch local MCP servers) has **no network listener at all** — the OS process
+  boundary is the entire trust boundary. This is a full match for "local server only"
+  as stated today, and needs **zero auth code**. Don't add an API-key check before
+  there's actually a socket for it to guard — it would be pure theater.
+- **The trigger point: the moment the transport becomes HTTP/SSE instead of stdio.**
+  That's the same moment a network listener exists, and — not coincidentally — the
+  same moment a **cloud-based model** could actually participate (it needs a reachable
+  URL, almost certainly via a tunnel: Tailscale funnel, Cloudflare tunnel, etc.).
+  Local-stdio-only and cloud-reachable-HTTP aren't two points on a spectrum here;
+  they're two different transports, and the second one is exactly when auth stops
+  being optional.
+- **When that happens:** bolt on a minimal API key, read from an env var
+  (`LYCHEE_MCP_API_KEY` or similar), checked via FastMCP's HTTP-transport auth hook
+  (e.g. a bearer-token / `X-API-Key` check) on every tool call. This is scoped to the
+  **MCP server's own listener** — it does not require adding auth to the backend's
+  FastAPI app, which stays open/localhost-only per [ADR 12](decisions/12-auth-users.md)
+  exactly as it does today; the MCP→backend hop is unaffected.
+  - This is literally backlog item **#1** from ADR 12's own auth backlog — "single
+    shared password + API key … cheapest, covers 'put it on the internet safely'" —
+    just landing on the MCP surface first instead of the whole webapp API. If it ever
+    proves out there, promoting the same mechanism to the main API later is a natural,
+    already-anticipated next step rather than a new decision.
+- **Not required now, so not built now:** rate limiting, per-tool scoping/roles,
+  request logging/audit trail. Revisit only if the MCP surface actually goes
+  network-reachable — same "don't build it until the transport requires it" logic as
+  the API key itself.
+
+## Open before starting (decide at build time, not speculatively now)
+- Exact tool list + argument shapes (the four above are illustrative, not final).
+- Typed-client generation approach for the Python side (`openapi-python-client` vs.
+  hand-rolled `httpx` + the existing `schema` types).
+- Whether any bulk backend endpoints (e.g. `PATCH` many series in one call) are worth
+  adding once real usage shows the per-item round-trip cost actually matters.
+- Whether this warrants its own ADR once scope firms up — plan.md tracks it as a
+  proposal for now; an ADR would be the place to formally record the "second REST
+  client" decision if/when this actually gets built.
+
+---
 
 ## Handy commands
 - Backend: `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates+seeds).
