@@ -14,7 +14,8 @@ import {
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
-import { api } from "../api/client";
+import type { FsEntry, FsListing } from "../api/client";
+import { browsePath, makeDirectory } from "../api/settingsQueries";
 import { useFocusTrap } from "../lib/focusTrap";
 
 const props = withDefaults(
@@ -38,20 +39,7 @@ const emit = defineEmits<{ close: []; select: [path: string] }>();
 const modalBox = ref<HTMLElement | null>(null);
 useFocusTrap(modalBox, ref(true));
 
-interface Entry {
-  name: string;
-  path: string;
-  kind: "dir" | "file";
-}
-
-interface Listing {
-  root: string;
-  path: string;
-  parent: string | null;
-  entries: Entry[];
-}
-
-const listing = ref<Listing | null>(null);
+const listing = ref<FsListing | null>(null);
 const loading = ref(false);
 const error = ref("");
 const selectedFile = ref<string | null>(null);
@@ -68,11 +56,10 @@ async function load(path?: string | null, opts: { fallbackRoot?: boolean } = {})
   error.value = "";
   selectedFile.value = null;
   cancelCreate();
-  const { data, error: err } = await api.GET("/api/fs", {
-    params: { query: path ? { path } : {} },
-  });
-  loading.value = false;
-  if (err || !data) {
+  try {
+    listing.value = await browsePath(path);
+  } catch {
+    loading.value = false;
     // Initial path outside storage / missing → open at the storage root once.
     if (path && fallbackRoot) {
       await load(null, { fallbackRoot: false });
@@ -81,7 +68,7 @@ async function load(path?: string | null, opts: { fallbackRoot?: boolean } = {})
     error.value = "Couldn't read that folder on the server";
     return;
   }
-  listing.value = data;
+  loading.value = false;
 }
 
 const crumbs = computed(() => {
@@ -108,7 +95,7 @@ function openDir(path: string): void {
   void load(path, { fallbackRoot: false });
 }
 
-function onEntryActivate(entry: Entry): void {
+function onEntryActivate(entry: FsEntry): void {
   if (entry.kind === "dir") {
     openDir(entry.path);
     return;
@@ -151,18 +138,15 @@ async function submitCreate(): Promise<void> {
   createBusy.value = true;
   createError.value = "";
   const parent = listing.value.path;
-  const { data, error: err } = await api.POST("/api/fs/mkdir", {
-    body: { parent, name },
-  });
-  createBusy.value = false;
-  if (err || !data) {
-    const status = (err as { status?: number } | undefined)?.status;
-    createError.value =
-      status === 409 ? "A folder with that name already exists" : "Couldn't create the folder";
+  try {
+    listing.value = await makeDirectory(parent, name);
+  } catch (e) {
+    createBusy.value = false;
+    createError.value = e instanceof Error ? e.message : "Couldn't create the folder";
     return;
   }
+  createBusy.value = false;
   cancelCreate();
-  await load(parent, { fallbackRoot: false });
 }
 
 function onKey(e: KeyboardEvent): void {

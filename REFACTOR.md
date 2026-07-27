@@ -146,16 +146,28 @@
 
 ### Layering / architecture violations
 
-- [ ] **~11 Settings panels bypass `api/queries.ts` entirely**, calling `api.GET/POST/PATCH/DELETE` directly
+- [x] **~11 Settings panels bypass `api/queries.ts` entirely**, calling `api.GET/POST/PATCH/DELETE` directly
       and hand-rolling response mapping + error handling instead of going through the layer `frontend/AGENTS.md`
       defines for exactly this: `AccountsPanel.vue`, `PathBrowserModal.vue`, `ImportPanel.vue`,
       `LibrariesPanel.vue`, `MangaDexConnectModal.vue`, `ContentPanel.vue`, `DownloadsPanel.vue`,
       `AddLibraryModal.vue`, `TrackerConnectModal.vue`, `ProviderPanel.vue`, `AboutPanel.vue`.
-      Concretely causes discarded backend error messages — `AddLibraryModal.vue:30-33`,
-      `MangaDexConnectModal.vue:94-97`, `TrackerConnectModal.vue:26-29,39-42,52-55` all show one generic
-      hardcoded toast string instead of reading `error.error.message`.
-      **Fix:** move these calls into `queries.ts` (or a settings-specific sibling module) so error-body
-      parsing and response mapping are written once.
+      Concretely caused discarded backend error messages — several showed one generic hardcoded toast
+      string instead of reading `error.error.message`. **Fixed** — new `api/settingsQueries.ts` (a
+      settings-specific sibling to `queries.ts`, per the fix direction originally noted here), covering
+      providers, trackers, libraries, the server path browser, taxonomy, downloads/sync, and local import
+      (~30 functions). Added `apiErrorMessage()` to `queries.ts` (the one place the
+      `{"error":{"code","message"}}`/`{"detail"}` parsing happens now — also backfilled into
+      `queueDownload`/`deleteChapterLocal`, which had their own inline copies) and reused it throughout.
+      Callers now surface the backend's actual error message via `catch (e) { toast(e instanceof Error ?
+      e.message : ...) }` instead of a fixed string. Also fixed a real latent bug found while migrating
+      `PathBrowserModal`'s `makeDirectory`: the 409-conflict check read `.status` off the *error body*
+      (`{"error":{"code","message"}}` has no such field), not off the HTTP response, so "a folder with that
+      name already exists" could never actually show — now checks `response.status === 409` and the fix was
+      verified live (create a folder, create it again → the specific message appears).
+      All 11 files' `api.*` call counts confirmed at 0; full `just fe-check` green; verified live via a
+      14-check Playwright sweep across every Settings panel (General/Libraries/Content/Downloads/About) plus
+      a dedicated create → duplicate-create round trip for the mkdir 409 fix — no console errors anywhere,
+      real dev data loaded/toggled/browsed correctly end to end.
 
 - [x] **`toSeries` bridges the generated schema with a full unchecked cast.** `frontend/src/api/queries.ts:18-19`
       — `return s as unknown as Series;`. **Fixed** — replaced with an explicit per-field mapper matching
@@ -199,10 +211,15 @@
       `views/ChapterFeedView.vue`, parameterized by an `unreadOnly` route prop (`router/index.ts`'s
       `/updates` and `/unread` routes now both point at it, same pattern already used for `LibraryView`'s
       `libraryKey` prop); both old files deleted.
-- [ ] **`SeriesDetail.vue` (482 lines, 16 top-level refs) carries a full inline match-search modal**
+- [x] **`SeriesDetail.vue` (482 lines, 16 top-level refs) carries a full inline match-search modal**
       (`matchOpen`/`matchQuery`/`matchLoading`/`matchResults`/`runMatchSearch`/`openMatch`/`pickMatch`,
-      ~40 lines state/logic + ~35 lines template, `SeriesDetail.vue:439-476`). Self-contained enough to
-      extract into `MatchSeriesModal.vue`, matching the precedent of `EditSeriesModal.vue`.
+      ~40 lines state/logic + ~35 lines template). **Fixed** — extracted into `components/MatchSeriesModal.vue`
+      (`seriesId`/`initialQuery` props, `close`/`matched` emits), matching the precedent of
+      `EditSeriesModal.vue`'s no-`open`-prop/parent-mounts-it-only-while-shown pattern (including its own
+      `useFocusTrap`). `SeriesDetail.vue` now only owns `matchOpen` + a two-line `onMatched` handler.
+      Verified live: the menu item opens the modal pre-filled with the series title, auto-searches and
+      shows the real match candidate, focus moves into the modal, and Close works — behavior identical to
+      before the extraction, confirmed by screenshot.
 - [x] **Dead/unwired controls, misleading as live UI:**
       - `ChapterList.vue:179-182`/`:192` (language `<select>`, "Newest" sort button) — **fixed**: both are
         now real, wired to backend functionality that already existed but was never exposed

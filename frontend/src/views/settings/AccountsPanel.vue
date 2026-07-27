@@ -5,8 +5,15 @@
 import { Link2, RefreshCw } from "lucide-vue-next";
 import { onMounted, onUnmounted, ref } from "vue";
 
-import { api } from "../../api/client";
 import { onTaskDone } from "../../api/events";
+import {
+  disconnectProvider,
+  disconnectTracker,
+  fetchProviders,
+  fetchTrackers,
+  setTrackerSyncOnRead,
+  syncProvider,
+} from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 import MangaDexConnectModal from "./MangaDexConnectModal.vue";
 import TrackerConnectModal from "./TrackerConnectModal.vue";
@@ -26,19 +33,16 @@ const trackerTarget = ref<AccountRow | null>(null);
 const mangadexOpen = ref(false);
 
 async function load(): Promise<void> {
-  const [providers, trackers] = await Promise.all([
-    api.GET("/api/providers"),
-    api.GET("/api/trackers"),
-  ]);
+  const [providers, trackers] = await Promise.all([fetchProviders(), fetchTrackers()]);
   const rows: AccountRow[] = [];
-  const md = (providers.data ?? []).find((p) => p.id === "mangadex");
+  const md = providers.find((p) => p.id === "mangadex");
   if (md) {
     rows.push({
       id: md.id, name: md.name, kind: "provider",
       connected: md.connected, accountName: md.accountName ?? "", syncOnRead: false, authKind: "",
     });
   }
-  for (const t of trackers.data ?? []) {
+  for (const t of trackers) {
     if (t.authKind === "unsupported") continue; // hide trackers with no public API (NovelUpdates)
     rows.push({
       id: t.id, name: t.name, kind: "tracker",
@@ -53,11 +57,8 @@ function connect(a: AccountRow): void {
   else trackerTarget.value = a;
 }
 async function disconnect(a: AccountRow): Promise<void> {
-  if (a.kind === "provider") {
-    await api.POST("/api/providers/{provider_id}/disconnect", { params: { path: { provider_id: a.id } } });
-  } else {
-    await api.DELETE("/api/trackers/{tracker_id}", { params: { path: { tracker_id: a.id } } });
-  }
+  if (a.kind === "provider") await disconnectProvider(a.id);
+  else await disconnectTracker(a.id);
   await load();
   toast(`${a.name} disconnected`, "info");
 }
@@ -73,13 +74,10 @@ async function onMangadexConnected(): Promise<void> {
   toast("MangaDex account connected");
 }
 async function setSyncOnRead(a: AccountRow): Promise<void> {
-  await api.PATCH("/api/trackers/{tracker_id}", {
-    params: { path: { tracker_id: a.id } },
-    body: { syncOnRead: a.syncOnRead },
-  });
+  await setTrackerSyncOnRead(a.id, a.syncOnRead);
 }
 function syncAccount(a: AccountRow): void {
-  void api.POST("/api/providers/{provider_id}/sync", { params: { path: { provider_id: a.id } } });
+  void syncProvider(a.id);
   toast("Syncing your MangaDex account…");
 }
 

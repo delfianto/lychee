@@ -3,8 +3,8 @@
 import { Cherry } from "lucide-vue-next";
 import { computed, onMounted, reactive, ref } from "vue";
 
-import { api } from "../../api/client";
 import { fetchDashboard, fetchLibrarySummaries } from "../../api/queries";
+import { fetchAbout } from "../../api/settingsQueries";
 
 const about = reactive({ version: "0.0.0", platform: "", database: "", uptime: "", started: "" });
 const libStats = ref<{ label: string; value: string }[]>([]);
@@ -21,7 +21,7 @@ function formatUptime(seconds: number): string {
   return days > 0 ? `${days}d ${hours}h` : `${hours}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 async function loadAbout(): Promise<void> {
-  const { data } = await api.GET("/api/about");
+  const data = await fetchAbout();
   if (data) {
     about.version = data.version;
     about.platform = data.platform;

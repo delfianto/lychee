@@ -57,6 +57,15 @@ function toUpdate(u: ApiUpdate): RecentUpdate {
   };
 }
 
+/** Extract the backend's `{"error":{"code","message"}}` message from an openapi-fetch
+ *  error body (falling back to FastAPI's raw `{"detail"}` shape, then a caller-supplied
+ *  default) — the one place this parsing happens, so every mutating call gets the
+ *  backend's actual reason instead of a generic hardcoded string. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  const body = error as { error?: { message?: string }; detail?: string } | undefined;
+  return body?.error?.message ?? (typeof body?.detail === "string" ? body.detail : null) ?? fallback;
+}
+
 function toChapter(c: ApiChapter): Chapter {
   return {
     id: c.id ?? null,
@@ -84,14 +93,7 @@ export async function queueDownload(
       ...(providerChapterIds?.length ? { providerChapterIds } : {}),
     },
   });
-  if (error) {
-    const body = error as { error?: { message?: string }; detail?: string };
-    const msg =
-      body?.error?.message ??
-      (typeof body?.detail === "string" ? body.detail : null) ??
-      `Download failed (${response.status})`;
-    throw new Error(msg);
-  }
+  if (error) throw new Error(apiErrorMessage(error, `Download failed (${response.status})`));
 }
 
 export interface DeleteChapterResult {
@@ -105,10 +107,7 @@ export async function deleteChapterLocal(chapterId: string): Promise<DeleteChapt
   const { data, error, response } = await api.DELETE("/api/chapters/{chapter_id}", {
     params: { path: { chapter_id: chapterId } },
   });
-  if (error || !data) {
-    const body = error as { error?: { message?: string } } | undefined;
-    throw new Error(body?.error?.message ?? `Delete failed (${response.status})`);
-  }
+  if (error || !data) throw new Error(apiErrorMessage(error, `Delete failed (${response.status})`));
   return {
     mode: data.mode,
     redownloadable: data.redownloadable,

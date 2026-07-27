@@ -6,8 +6,13 @@
 import { Bookmark, FileText, FolderInput, Gauge, HardDriveDownload, Save, Upload, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
-import { api } from "../../api/client";
 import { activeTasks, onTaskDone } from "../../api/events";
+import {
+  fetchImportConfig,
+  startImport,
+  updateImportConfig,
+  uploadImportFiles,
+} from "../../api/settingsQueries";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { toast } from "../../lib/toast";
 
@@ -25,7 +30,7 @@ const importForm = reactive({ path: "", kind: "manga" });
 const importing = computed(() => activeTasks.value.some((t) => t.kind === "localimport"));
 
 async function loadConfig(): Promise<void> {
-  const { data } = await api.GET("/api/import/config");
+  const data = await fetchImportConfig();
   if (data) {
     config.enabled = data.enabled;
     config.quality = data.quality;
@@ -37,18 +42,16 @@ watch(
   () => ({ ...config }),
   () => {
     if (!loaded) return;
-    void api.PATCH("/api/import/config", {
-      body: {
-        enabled: config.enabled,
-        quality: config.quality,
-        filenamePattern: config.filenamePattern,
-      },
+    void updateImportConfig({
+      enabled: config.enabled,
+      quality: config.quality,
+      filenamePattern: config.filenamePattern,
     });
   },
 );
 // Presets are saved patterns (server-side, in the import config) you can reuse.
 async function savePresets(): Promise<void> {
-  await api.PATCH("/api/import/config", { body: { patternPresets: presets.value } });
+  await updateImportConfig({ patternPresets: presets.value });
 }
 function savePreset(): void {
   const name = presetName.value.trim();
@@ -68,12 +71,11 @@ function deletePreset(name: string): void {
   presets.value = presets.value.filter((p) => p.name !== name);
   void savePresets();
 }
-async function startImport(): Promise<void> {
-  const { error } = await api.POST("/api/import", {
-    body: { path: importForm.path.trim(), kind: importForm.kind },
-  });
-  if (error) {
-    toast("Import failed — check the path and that import is enabled", "error");
+async function runImport(): Promise<void> {
+  try {
+    await startImport(importForm.path.trim(), importForm.kind);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Import failed", "error");
     return;
   }
   toast("Import started…"); // progress + result arrive via the localimport task's SSE
@@ -82,16 +84,14 @@ async function uploadFiles(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const files = [...(input.files ?? [])];
   if (files.length === 0) return;
-  const form = new FormData();
-  for (const file of files) form.append("files", file); // one batch → one series
-  form.append("kind", importForm.kind);
-  // Raw fetch (multipart) rather than the JSON openapi-fetch client.
-  const resp = await fetch("/api/import/upload", { method: "POST", body: form });
-  input.value = ""; // allow re-picking the same file(s)
-  if (!resp.ok) {
-    toast("Upload failed — check the file type/size and that import is enabled", "error");
+  try {
+    await uploadImportFiles(files, importForm.kind);
+  } catch (e) {
+    input.value = ""; // allow re-picking the same file(s)
+    toast(e instanceof Error ? e.message : "Upload failed", "error");
     return;
   }
+  input.value = "";
   toast(files.length === 1 ? "Upload started…" : `Uploading ${files.length} files…`);
 }
 const disposeDone = onTaskDone((task) => {
@@ -259,7 +259,7 @@ onMounted(async () => {
                 type="button"
                 class="btn btn-primary btn-sm mt-1 self-start gap-1"
                 :disabled="!config.enabled || !importForm.path.trim() || importing"
-                @click="startImport"
+                @click="runImport"
               >
                 <FolderInput class="size-4" />{{ importing ? "Importing…" : "Import" }}
               </button>
