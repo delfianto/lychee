@@ -98,6 +98,13 @@ fe-reinstall: && fe-install
 fe-dev:
     cd {{ frontend_dir }} && bun run dev --port {{ fe_port }}
 
+# Run the frontend against MSW-mocked data instead of a real backend — no
+# `just be-dev` needed. Same port; the /api proxy is disabled in favor of the
+# in-browser mock service worker (see frontend/src/mocks/).
+[group('frontend')]
+fe-mock:
+    cd {{ frontend_dir }} && bun run dev:mock --port {{ fe_port }}
+
 # Run the frontend unit tests (vitest).
 [group('frontend')]
 fe-test:

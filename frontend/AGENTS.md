@@ -80,6 +80,43 @@ Three layers, don't collapse them:
 `activeTasks`, `onTaskDone`, `onTaskEvent` for views to react to scan/download
 progress without each opening their own connection.
 
+## Mock harness (`src/mocks/`) — run the UI without a backend
+
+`bun run dev:mock` (or `just fe-mock`) serves the SPA against
+[MSW](https://mswjs.io/) instead of a real FastAPI backend — no `uv run` / `just
+be-dev` / database required. Set `VITE_USE_MOCKS=true` and Vite's `/api` proxy
+disables itself (`vite.config.ts`) in favor of `public/mockServiceWorker.js`
+intercepting `fetch`/`EventSource` in the browser.
+
+- **`mocks/handlers.ts`** — one `http.get/post/…` handler per real endpoint
+  (series, chapters, dashboard, taxonomy, libraries, providers/trackers,
+  downloads, import, fs browser, `/api/events` SSE). Mutating endpoints edit
+  the in-memory fixtures in place, so create/update/delete/favorite/progress
+  all persist for the rest of the dev session (until a full reload).
+- **`mocks/data/*.ts`** — the fixtures themselves: `series.ts` has ~20
+  hand-authored "flagship" series plus a seeded-random long tail (~120 total
+  across manga/comics/galleries) so grids, search, filters, and pagination
+  have something real to chew on; `chapters.ts` derives per-series chapter
+  rows (volumes, read state, in-flight download demos) from those series;
+  the rest cover libraries, collections, providers/trackers, downloads, and
+  the smaller settings panels (about/import/sync/fs).
+- **`mocks/taskBus.ts`** — simulates the backend's task queue: `simulateTask()`
+  fires `started → progress → done|failed` on a timer, and every `/api/events`
+  connection forwards those events, so scan/sync/match/download/taxonomy-refresh
+  drive real progress bars and toasts instead of resolving instantly.
+- **`mocks/images.ts`** — generates placeholder cover/page/gallery art as
+  seeded SVG (no binary fixtures, no external image host — everything renders
+  offline and stays stable across reloads).
+- **`mocks/utils.ts`** — seeded RNG + date/id/cursor helpers shared by the
+  fixtures, so the mock library looks the same on every reload instead of
+  reshuffling.
+
+This is dev/demo tooling only — it's not wired into `bun run test` (existing
+tests mock `api/client.ts` directly with `vi.mock`; keep doing that for unit
+tests). Regenerate nothing here after an `api:gen` — the mocks are hand-typed
+against `components["schemas"]`, so a backend contract change surfaces as a
+type error in `mocks/` the same way it would anywhere else.
+
 ## Styling conventions
 
 - **Use DaisyUI component classes and canonical Tailwind utilities** (`shrink-0`,
@@ -107,6 +144,7 @@ Run from `frontend/` (or via the root `justfile`):
 ```sh
 bun install                 # install deps
 bun run dev --port 5173     # dev server (proxies /api → :8000)
+bun run dev:mock            # dev server against MSW-mocked data — no backend needed
 bun run typecheck           # vue-tsc --noEmit
 bun run test                # vitest run
 bun run build               # vue-tsc --noEmit && vite build (typecheck is part of build)
