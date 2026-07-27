@@ -11,9 +11,9 @@ API and (in production) the built frontend.
 lychee/
 ├── backend/    Python 3.14 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite — see backend/AGENTS.md
 ├── frontend/   Vue 3 · TypeScript · Vite · Tailwind v4 · DaisyUI 5 · Bun — see frontend/AGENTS.md
-├── notes/      reference research + architecture decisions (ADRs, notes/decisions/01–18)
-├── justfile    canonical task runner — one entrypoint for db / backend / frontend
-└── PLAN.md     living build-status tracker (what's done / in progress / not planned)
+├── notes/      reference research + architecture decisions (ADRs, notes/decisions/01–18);
+│               also plan.md (build-status tracker) + refactor.md (code-quality backlog)
+└── justfile    canonical task runner — one entrypoint for db / backend / frontend
 ```
 
 **This file covers monorepo-wide concerns only.** For anything specific to one
@@ -72,8 +72,9 @@ disagree, the code wins (backend/AGENTS.md flags one known case: the task
 runner).
 
 For **current status** — what's implemented, what's partial, what's
-deliberately not planned — check `PLAN.md` before assuming a feature is
-missing or planning it as new work.
+deliberately not planned — check `notes/plan.md` before assuming a feature is
+missing or planning it as new work. For known code-quality issues and
+in-progress cleanup, see `notes/refactor.md`.
 
 ## Conventions that apply everywhere
 
@@ -84,6 +85,6 @@ missing or planning it as new work.
   shape is the same both places: format/lint, type-check, test, in that order,
   before calling a change done.
 - Don't add a dependency, abstraction, or config knob "for later." Both ADRs
-  and `PLAN.md` are explicit about what's in scope; unplanned scope creep
+  and `notes/plan.md` are explicit about what's in scope; unplanned scope creep
   (e.g. OPDS support, multi-user auth) has usually already been considered
   and deliberately deferred — check `notes/decisions/` before reintroducing it.

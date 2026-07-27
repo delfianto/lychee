@@ -1,7 +1,7 @@
 # lychee — Refactor & Code Quality Backlog
 
 > Tracker for issues found in a deep code-quality pass (backend + frontend), so they
-> don't get lost. Not a build plan — see `PLAN.md` for feature status. Living doc;
+> don't get lost. Not a build plan — see `plan.md` for feature status. Living doc;
 > check items off (and add new ones) as they're addressed.
 >
 > Legend: `[x]` fixed · `[ ]` open · `[~]` partially addressed · `[—]` won't fix (note why)
@@ -232,7 +232,7 @@
         "Up to date" status and dead links were actively misleading rather than merely unimplemented.
       - `DownloadsPanel.vue:161-164` (dead `if` block, body only a leftover comment) — **removed**.
 
-### Accessibility (extends the sweep `PLAN.md` already flags as partial)
+### Accessibility (extends the sweep `plan.md` already flags as partial)
 
 - [x] **Tab strips with no keyboard path.** `ChapterList.vue`, `ListsView.vue`, `LibraryView.vue` rendered
       `role="tab"` on an `<a>` with only `@click` — no `href`, `tabindex`, or Enter/Space handling; not
