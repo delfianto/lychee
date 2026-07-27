@@ -1,8 +1,8 @@
-"""initial_schema
+"""initial schema
 
-Revision ID: 6bd8f0e2bb90
+Revision ID: da574a33f5a8
 Revises: 
-Create Date: 2026-07-26 19:01:53.979281
+Create Date: 2026-07-27 15:04:43.127668
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '6bd8f0e2bb90'
+revision = 'da574a33f5a8'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -103,6 +103,7 @@ def upgrade() -> None:
     sa.Column('access_token_enc', sa.Text(), nullable=True),
     sa.Column('refresh_token_enc', sa.Text(), nullable=True),
     sa.Column('pkce_verifier', sa.String(length=128), nullable=True),
+    sa.Column('state', sa.String(length=128), nullable=True),
     sa.Column('token_expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -270,7 +271,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_chapter_series_id'), ['series_id'], unique=False)
 
     op.create_table('download_task',
-    sa.Column('series_id', sa.String(length=12), nullable=True),
+    sa.Column('series_id', sa.String(length=12), nullable=False),
     sa.Column('chapter_id', sa.String(length=12), nullable=True),
     sa.Column('chapter_label', sa.String(length=128), nullable=False),
     sa.Column('status', sa.String(length=16), nullable=False),
@@ -285,7 +286,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['chapter_id'], ['chapter.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['series_id'], ['series.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['series_id'], ['series.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('download_task', schema=None) as batch_op:
