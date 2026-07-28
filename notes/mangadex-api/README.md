@@ -53,7 +53,7 @@ JSON:API style: every object has `id`, `type`, `attributes`, and `relationships[
 This is the payoff of mirroring MangaDex in [10](../decisions/10-tagging-content-rating.md):
 
 - **`GET /manga/tag`** returns the **entire tag vocabulary** — each tag = a stable **UUID** + localized `name` + `group` ∈ {`content`, `format`, `genre`, `theme`}. → **seed lychee's `tag` / `tag_group` fixtures directly from this**, using the MangaDex tag id/slug as our stable `tag.key` so provider tags map 1:1 with zero fuzzy matching.
-- **`contentRating`** enum = `safe · suggestive · erotica · pornographic` → lychee's `content_rating` fixtures `safe/suggestive/erotica/`**`mature`** (levels 0–3): the first three map 1:1; lychee **renames the top tier `pornographic` → `mature`** (broader, clearer label).
+- **`contentRating`** enum = `safe · suggestive · erotica · pornographic` → lychee's `content_rating` fixtures, mapped **1:1, unrenamed** (see [10](../decisions/10-tagging-content-rating.md)). Gallery-kind series (never MangaDex-synced) get a fifth, lychee-only top tier — `explicit` — with no MangaDex counterpart.
 - **`publicationDemographic`** = `shounen · shoujo · josei · seinen · none` → our `demographic` fixtures.
 - **`status`** = `ongoing · completed · hiatus · cancelled` → our series status.
 
@@ -97,7 +97,7 @@ From the `cover_art` relationship's `fileName`: `https://uploads.mangadex.org/co
 ## 8. Relevance to lychee — concrete integration plan
 
 - **Seed [10](../decisions/10-tagging-content-rating.md) fixtures from `/manga/tag`** (pin a snapshot in-repo; refresh via an admin action). Ratings/demographics/status enums copied verbatim.
-- **Metadata provider = the first plugin** behind the provider interface flagged in [10](../decisions/10-tagging-content-rating.md)/[05](../05-metadata-tagging.md): `MangaDexProvider.match()` + `.fetch() -> patch`, merged onto unlocked fields, run as a task ([08](../decisions/08-task-runner.md)).
+- **Metadata provider = the first plugin** behind the provider interface in [10](../decisions/10-tagging-content-rating.md)/[13](../decisions/13-metadata-providers.md): `MangaDexProvider.match()` + `.fetch() -> patch`, merged onto unlocked fields, run as a task ([08](../decisions/08-task-runner.md)).
 - **New mapping table** for external ids — `external_link(entity_type, entity_id, provider, external_id, url)` — so a series/book can be re-synced and downloads deduped against `mangadex:manga:<uuid>` / `mangadex:chapter:<uuid>`.
 - **Downloader (optional feature)** ties into the task queue ([08](../decisions/08-task-runner.md)): a `download_chapter` task type, gated by a **per-provider rate limiter** (5 req/s global + 40/min @Home), that fetches pages, writes a **CBZ + `ComicInfo.xml`** (KamiYomu's pattern — populated from the MangaDex metadata + scanlation-group credit) into a library folder so the **normal scan** ([07](../decisions/07-scan-pipeline.md)) ingests it. This reuses the whole existing pipeline instead of a separate ingest path.
 - **ToS compliance is non-negotiable in code:** real `User-Agent`, back-off on 429, @Home reporting, credit scanlation groups in the CBZ/UI, honor removal requests, no ads/paywall. Note this is why the download client must be its own rate-limited, well-behaved component.

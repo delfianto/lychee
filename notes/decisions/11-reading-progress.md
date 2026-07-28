@@ -1,79 +1,83 @@
 # 11 — Reading progress & sync
 
-**Status:** ✅ Accepted
+**Status:** Implemented — single-user, chapter-keyed. Outbound tracker sync
+shipped; device/reader-ecosystem sync stays out of scope.
 
-## Context
+## Storage
 
-How lychee tracks "where am I in this book", per user, and how it syncs with the reader ecosystem. Grounded in the four references ([../04-reading-tracker.md]) and prior decisions: [04](04-database-sqlite.md) (`book.page_count`, no page rows), [05](05-domain-model.md) (the `reading_progress` sketch), [10](10-tagging-content-rating.md) (the read-status facet needs per-user state).
-
-What the field teaches us:
-- **Komga** — the model to copy: `READ_PROGRESS(book_id, user_id, page, completed, read_date, device, locator)`, per-user; a **denormalized series rollup**; and real external sync (KOReader, Kobo).
-- **KamiYomu** — per-page scroll-triggered updates; explicit `IsCompleted`; but single-user.
-- **Mango** — good **home-page UX** (continue / recently-added / start-reading) and the "cap progress at page_count" trick — but stores progress in **`info.json` sidecars** (not queryable, write-contention): a clear anti-pattern.
-- **LANraragi** — a **single shared** progress int (no per-user): the other anti-pattern; but its **"hide completed at 85%"** heuristic and **page annotations (stamps)** are worth keeping. Its lesson on sync: Tachiyomi/Mihon needs **no special protocol — just a clean REST API**.
-
-## Decision
-
-### Storage — per-user, relational, keyed `(user, book)`
-
-```
+```python
+# progress/models.py
 reading_progress(
-  user_id → user, book_id → book,
-  current_page  INT,          -- 1-based; NULL/0 = unstarted
-  completed     BOOL DEFAULT 0,
-  locator       JSON NULL,    -- Readium R2Locator (reflowable EPUB only)
-  device_id     TEXT, device_name TEXT,   -- informational: who last updated
-  started_at, last_read_at, completed_at,
-  PRIMARY KEY (user_id, book_id))
--- indexes: (user_id, last_read_at DESC)  -- "continue reading"
---          (book_id)                     -- "who has read this"
+  id,
+  chapter_id → chapter UNIQUE,   # one row per Chapter, not per (user, book)
+  series_id → series,             # denormalized, for rollup queries
+  current_page: int,
+  completed: bool,
+)
 ```
 
-- **Canonical page_count** = `book.page_count` ([04](04-database-sqlite.md)); progress stores only `current_page`, **capped to page_count on read** (Mango's trick) so re-archiving that changes page count never breaks resume.
-- **Resume** = open the book at `current_page` — exactly the minimal model from [04](04-database-sqlite.md) ("book has X pages, resume at Y").
-- **EPUB**: reflowable ebooks store a Readium **`locator`** (href + progression); page int suffices for CBZ/CBR/PDF (DIVINA). Nullable from day one to avoid a later migration (Komga's lesson).
-- Reject sidecar files (Mango) and single-shared progress (LANraragi).
+**No `user_id` column exists anywhere in the schema** — there's no `User`
+table at all ([12](12-auth-users.md)); every field that would have been
+per-user instead lives as a plain column with an implicit single reader.
+`updated_at` (from the base model) doubles as the last-read timestamp; there
+are no separate `started_at`/`completed_at` fields, no `device_id`/
+`device_name`, no `locator` for reflowable EPUB (there's no EPUB support at
+all — `content_kind` is `cbz|zip|image_dir|avif_dir` only).
 
-### Completion semantics
-`completed` is **explicit** (set when the reader hits the last page, or via mark-as-read) — *separate* from `current_page == page_count`, because pages shift on re-archive. Additionally expose an **"effectively read" filter** using an 85%-of-page_count threshold (LANraragi) for "hide completed" / next-up logic, without mutating the stored flag.
+Progress is per **Chapter** (the logical reading unit), not per Book (the
+physical container) — matching the split in [05](05-domain-model.md).
 
-### Series rollup (denormalized, per user)
-```
-series_read_progress(
-  user_id → user, series_id → series,
-  read_count INT, in_progress_count INT, book_count INT, last_read_at,
-  PRIMARY KEY (user_id, series_id))
-```
-Updated in the same transaction as a progress change (or recomputed after a bulk op). Powers fast unread badges, series read-state classification (`unread` = 0/0, `read` = read_count == book_count, else `in_progress`) — this is what makes [10](10-tagging-content-rating.md)'s **read-status facet** index-fast, and it's Komga's exact pattern.
+## No rollup table
 
-### Update API & bulk ops
-- `PUT /api/books/{id}/progress` `{page?, locator?, completed?}` — the reader sends on page-turn (client-debounced; KamiYomu's scroll-trigger is fine). Updates `last_read_at`, derives/keeps `completed`, and updates the series rollup.
-- Bulk **mark read / unread** at book and series level (Komga `readAll`/`unreadAll`, Mango). Unread resets `current_page=0, completed=0`.
-- **Multi-device:** one row per `(user, book)`; `device_*` is informational; conflicts resolve **last-write-wins by `last_read_at`** (simple, adequate for self-hosted).
+There's no `series_read_progress` table. `unreadCount`, `lastReadChapter`,
+and "continue reading" are computed live via correlated SQL subqueries
+(`backend/src/catalog/repository.py` — `_aggregates`, `dashboard_counts`,
+`continue_reading`, `recently_added`), not a denormalized row kept in sync
+on write.
 
-### Home sections (Mango UX)
-Cheap, relational, high-value endpoints: **Continue reading** (in-progress by `last_read_at` desc), **Recently added** (`book.created_at`), **On deck** (next unread book in a series that has progress).
+## Update API
 
-### External sync — scope narrowed (see 15 / 16)
-The client is the **webapp only** ([15](15-api-surface.md)), so device/reader-ecosystem sync — Tachiyomi/Mihon, KOReader, Kobo, OPDS Position Sync, Komga-API compatibility — is **out of scope** (documented as options in [../04-reading-tracker.md], not chosen). The one retained external integration is **outbound read-status tracker sync** (AniList / MyAnimeList / Kitsu / MangaUpdates / MangaDex) → [16](16-tracker-sync.md), fed by the per-user progress defined here. Outbound webhooks (Gotify/Apprise) remain a trivial optional add.
+`PUT /api/chapters/{chapter_id}/progress` (`backend/src/progress/router.py`
+→ `progress/service.py:update_progress`), body `{page, completed?}`.
+Completion is **inferred** (`page >= chapter.page_count`) when `completed`
+is omitted from the request, or set explicitly when the caller passes it.
+On completion, `enqueue_push(session, chapter.series_id)`
+(`trackers/sync.py`) fires outbound tracker sync.
 
-## Consequences
+## Move/restore preserves progress
 
-- Per-user, queryable progress → multi-user shelves, read-state filters, and sync all fall out naturally.
-- The rollup keeps unread badges and the read-status facet O(1)-ish at scale.
-- Read-status feeds **tracker sync** ([16](16-tracker-sync.md)); there is no device/OPDS client ecosystem to serve ([15](15-api-surface.md)).
-- `locator` reserved now avoids the EPUB migration Komga had to do.
+Not part of this table directly, but the mechanism that protects it: on
+soft-delete during a scan, a Book's Chapters' progress is snapshotted
+(`Book.restore_progress_json`, [07](07-scan-pipeline.md)) and re-applied on
+restore, matched back by chapter `number`.
 
-## Follow-ups
+## Home sections
 
-- **Bookmarks / annotations** (LANraragi "stamps"): `bookmark(user_id, book_id, page, note, created_at)` — deferred, optional differentiator.
-- **Komga-API compatibility** decision → API/OPDS ADR (strategic; affects the whole REST surface).
-- **Tracker sync** (AniList/MAL/…) → [16](16-tracker-sync.md); device/reader sync (KOReader/Kobo/OPDS) is out of scope ([15](15-api-surface.md)).
-- Per-user content-rating filter interplay ([10](10-tagging-content-rating.md)) → deferred with auth ([12](12-auth-users.md)); per-user rows resolve to a single default user in v1.
+`GET /api/dashboard` returns `continue_reading`, `recently_added`, and
+stats; `GET /api/updates`/`/api/updates/unread` cover the recent-updates
+feed. There's no separately-named "on deck" concept — it's folded into the
+unread-updates feed rather than being its own endpoint.
 
-## Alternatives considered
+## External sync: tracker push shipped, device/reader sync stays out of scope
 
-- **Sidecar `info.json` progress** (Mango) — rejected: not queryable, write-contention, lost on rescan.
-- **Single shared progress** (LANraragi) / **single-user** (KamiYomu) — rejected: per-user from day one; retrofitting is painful.
-- **Per-device progress rows** — rejected: one row per `(user, book)` + LWW is enough for self-hosted; device is metadata.
-- **Snapshotting `page_count` onto the progress row** (KamiYomu `TotalPages`) — rejected: use canonical `book.page_count` + cap, one source of truth.
+The client is the webapp (and `mcp/`) only ([15](15-api-surface.md)) — no
+Tachiyomi/Mihon, KOReader, Kobo, or OPDS Position Sync, and none of those
+are planned. What **is** shipped: **outbound read-status tracker sync** to
+AniList, MyAnimeList, and MangaUpdates (`backend/src/trackers/`, a
+`Tracker` protocol + registry — see [16](16-tracker-sync.md) for the
+per-tracker detail), fired on chapter completion, gated by `sync_on_read`.
+MangaDex gets its own **two-way** account sync
+(`providers/mangadex_account.py`) — inbound pull (follows, status, custom
+lists, ratings, read markers, MangaDex as source of truth) as well as
+outbound push — built separately from the generic `Tracker` protocol.
+
+## Why chapter-keyed, single-user, no rollup table
+
+Single-user was the explicit v1 scope ([12](12-auth-users.md)); the
+consequence worth knowing is that this was **not** built as "one seeded
+default user with `user_id` wired through," so multi-user later needs a
+real schema migration (adding `user_id` to `reading_progress` and moving
+per-user `Series` fields like `favorite`/`library_status` off `Series`) —
+not a config flip. A live-computed rollup avoids a denormalized counter that
+could drift from the source rows; at this scale the correlated subqueries
+are fast enough that the extra table wasn't worth the write-path complexity.

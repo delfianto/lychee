@@ -1,49 +1,69 @@
 # 17 — Full-text search tokenizer (FTS5 `trigram`)
 
-**Status:** ✅ Accepted (resolves the open question from [04](04-database-sqlite.md))
+**Status:** Implemented in code — but see [04](04-database-sqlite.md)'s
+"Known gap": the FTS5 table is never actually created outside tests, so
+production search silently runs `LIKE`-only today.
 
-## Context
+## Why `trigram`
 
-[04](04-database-sqlite.md) chose SQLite **FTS5** for search but left one choice open: which **tokenizer** — `trigram` everywhere, or a hybrid `unicode61` + `trigram`. This decides whether **CJK** (Japanese/Chinese/Korean) titles and **substring** search work — the exact wall Komga hit (it dropped FTS5 for Lucene in 2021 because the default tokenizer can't do CJK). Note we only search **short metadata fields** (titles, alt-titles, authors, tags), not book contents.
+FTS5's default `unicode61` tokenizer splits on spaces/punctuation into
+words — useless for Japanese/Chinese, which have no spaces, so a whole
+title becomes one un-searchable blob. `trigram` indexes every run of 3
+characters instead, which gives substring matching *and* CJK support for
+free (3-character windows don't need spaces) — exactly the wall Komga hit
+in 2021 (dropped FTS5 for Lucene because of this) before `trigram` existed
+in SQLite (added in 3.34, Dec 2020).
 
-## Plain-language background (why the tokenizer matters)
+## What's indexed
 
-A *tokenizer* decides how text is chopped into searchable pieces:
+`series_fts` (`backend/src/catalog/search_index.py`) — three columns only:
 
-- **`unicode61`** (FTS5's default) splits on spaces/punctuation into **words**. Great for "Attack on Titan"; **useless for Japanese/Chinese**, which have no spaces — the whole title becomes one un-searchable blob — and it can't match a piece in the middle of a word.
-- **`trigram`** indexes every run of **3 characters**: "Titan" → `Tit`, `ita`, `tan`. That makes **substring** search work (`tita` finds "Titan") and — the important part — **CJK works too**, because 3-character windows don't need spaces. The cost is a larger index and a **3-character minimum** query length.
+```sql
+CREATE VIRTUAL TABLE series_fts USING fts5(
+  series_id UNINDEXED, title, alt_titles, authors,
+  tokenize = 'trigram'
+);
+```
 
-For a library search box over short titles, **"contains" (substring) is exactly what users expect** (type a few characters, see matches), and CJK is a hard requirement for manga. So trigram's tradeoffs are upside here, not a compromise.
+**No `tags`, no `summary`/description column** — those aren't searchable, a
+narrower scope than originally planned. `alt_titles` covers every title
+variant ([18](18-title-variants.md)) concatenated, so a series is findable
+by any of its known names (native/romanized/English) — this, not the
+tokenizer, is what makes multilingual search actually work; `trigram`
+doesn't transliterate.
 
-## Decision
+It's a **standalone/own-content** table, not SQLite's `content=`
+external-content mechanism — it duplicates the indexed text via insert/
+update/delete triggers on `series`, `title_variant`, and `series_credit`,
+rather than referencing the source columns directly.
 
-**Use the FTS5 `trigram` tokenizer everywhere — one search index — case-insensitive and diacritics-folded.**
+## Tokenizer options
 
-- **Indexed unit:** an **external-content FTS5 table mirroring `series`**, columns `title, alt_titles` (all title forms from [18](18-title-variants.md) concatenated)`, authors, tags, summary`, kept in sync by insert/update/delete **triggers** (raw DDL in an Alembic migration, per [04](04-database-sqlite.md)). Series-centric search ([10](10-tagging-content-rating.md)); a book-level FTS table can be added the same way later.
-- **Tokenizer options:** `tokenize = 'trigram case_sensitive 0 remove_diacritics 1'` — so "Pokemon" matches "Pokémon" and case is ignored.
-- **Multilingual is solved by indexing every title variant, not by the tokenizer.** trigram can't transliterate (typing romaji won't match kana). So we index **all known title forms** — `title` + `alt_titles` (MangaDex supplies native + romaji + English, [13](13-metadata-providers.md)/[14](14-metadata-mapping.md)) — so a series is findable by any of its names. **This is the real key to good manga search.**
-- **Query handling:** sanitize input and `MATCH` the trigram index; for **1–2 character** queries (below trigram's floor) fall back to a `LIKE`/prefix query on the raw `title` column, or require ≥3 chars in the search-as-you-type UI.
-- **Ranking:** `bm25()` with column weights (title ≫ alt_titles ≫ authors/tags ≫ summary), optionally boosted app-side by exact-prefix match and popularity/recency. Ranking matters less here than in long-document search (the fields are short).
-- **Behind the search interface** ([04](04-database-sqlite.md)) so the whole thing stays swappable.
+Plain `tokenize = 'trigram'`, no explicit `case_sensitive`/
+`remove_diacritics` options set (FTS5's `trigram` tokenizer defaults
+`case_sensitive` to 0 already; `remove_diacritics` defaults to 0/off — so
+"Pokemon" is not guaranteed to match "Pokémon" the way the original design
+intended).
+
+## Query & ranking
+
+`build_match()` requires ≥3-character whitespace-split terms (trigram's
+minimum); shorter queries return `None` and the caller
+(`catalog/repository.py:search_series`) falls back to a plain `LIKE` title
+match. Ranked via `bm25(series_fts, 0.0, 10.0, 4.0, 1.0)` — title weighted
+highest, then alt-titles, then authors.
 
 ## Portability
 
-`trigram` needs SQLite ≥ 3.34 (2020); the `remove_diacritics` option for trigram needs ≥ 3.45. Python 3.14's bundled SQLite is newer, but to guarantee it on every deploy target we **pin SQLite via `pysqlite3-binary`** (already flagged in [04](04-database-sqlite.md)) and verify the compiled FTS5 options at startup.
+No `pysqlite3-binary` pin exists (`backend/pyproject.toml` has no such
+dependency) — relies on Python 3.14's bundled SQLite as-is, and no startup
+verification of compiled FTS5 options runs. This turned out fine in
+practice since the bundled SQLite is new enough, but it's worth knowing the
+originally-planned safety pin was never added.
 
-## Escape hatches (unchanged from 04)
+## Escape hatches (not built, not needed yet)
 
-- If Latin **word-ranking** quality ever proves insufficient → upgrade to the **hybrid** (add a parallel `unicode61` index for Latin word/prefix search, query both, merge) — additive, no schema change.
-- If we outgrow FTS entirely (typo tolerance, synonyms, heavy CJK analysis, very large scale) → swap the implementation for **Tantivy** or **Meilisearch** behind the same interface.
-
-## Consequences
-
-- **CJK + substring search work out of the box**, with **zero extra runtime dependencies** — the Komga wall is gone.
-- "Contains" search-as-you-type matches user expectation for a title box.
-- Slightly larger index + a 3-char floor — both immaterial at lychee's scale; the floor is covered by a small `LIKE` fallback.
-
-## Alternatives considered
-
-- **`unicode61` only** — rejected: no CJK, no substring (Komga's exact failure mode).
-- **Hybrid `unicode61` + `trigram`** — deferred as the escape hatch: better Latin word-ranking, but two indexes + merge logic; not worth the complexity for short metadata fields up front.
-- **ICU tokenizer** — rejected: needs SQLite compiled with ICU (build/portability burden) and its CJK segmentation is imperfect.
-- **External engine (Tantivy / Meilisearch) now** — rejected: overkill; reserved as the scale escape hatch.
+A hybrid `unicode61` + `trigram` index (better Latin word-ranking) or
+swapping to Tantivy/Meilisearch behind the same `search_series()`/
+`search_ids()` interface remain options if FTS5 trigram ever proves
+insufficient — neither has been started.

@@ -1,81 +1,71 @@
 # 14 — Metadata field mapping & lock-merge rules
 
-**Status:** ✅ Accepted
+**Status:** Implemented — much simpler than originally scoped: two writers,
+one lock check, no embedded-format (ComicInfo/OPF) support.
 
-## Context
+## What actually writes metadata
 
-Several sources want to write series/book metadata: embedded **ComicInfo.xml** (CBZ/CBR), **EPUB OPF**, **PDF info**, the **filename parser** ([06](06-filename-parser.md)), **external providers** ([13](13-metadata-providers.md)), and **manual edits**. We need one deterministic **merge** with a clear precedence and **field locking** — the follow-up flagged in [05](05-domain-model.md) / [07](07-scan-pipeline.md) / [10](10-tagging-content-rating.md). This is Komga's provider → patch → apply-to-unlocked model, made explicit.
+Exactly two call sites, both funneling through the same lock check:
 
-## Decision
+- **`apply_metadata`** (`backend/src/catalog/metadata.py`) — MangaDex
+  provider data. Skips any field present in `series.locked_fields_json`
+  via an `unlocked()` closure.
+- **`_apply_metadata_fields`** (`backend/src/catalog/service.py`) — shared
+  by manual `PATCH /api/series/{id}` (`update_series`) and
+  `apply_lychee_info` ([20](20-lychee-info-metadata.md)'s sidecar apply).
+  Every field it touches gets added to `locked_fields_json` on write —
+  auto-locking, exactly like a manual edit, because `lychee.info` *is*
+  applied through the manual-edit path.
 
-### Every source emits a `MetadataPatch`
-A patch is a **partial** set of fields (only what that source knows) targeting a series and/or book, plus multi-value bundles (tags, authors, alt titles, links). Sources never write the DB directly — they produce patches.
+There is no "5-tier precedence" merge and no `MetadataPatch` object — the
+filename parser ([06](06-filename-parser.md)) only derives `Chapter.number`/
+`volume`/`number_sort` at scan time, it never participates in a
+Series-level merge at all.
 
-### Precedence (highest wins per **unlocked** field)
-1. **Manual user edit** — always wins, and **auto-locks** that field ([05](05-domain-model.md) `locked_fields`).
-2. **Embedded metadata** — ComicInfo.xml, EPUB OPF, PDF info.
-3. **External provider** — MangaDex etc. ([13](13-metadata-providers.md)).
-4. **Filename/path parser** ([06](06-filename-parser.md)).
-5. **Derived defaults** — natural-sort ordinal, folder name.
+## Locking
 
-Default **embedded > provider** (a file's own ComicInfo is usually intentional), with a **per-library toggle to prefer provider** (for raw libraries whose embedded data is absent/stale).
+A single `locked_fields_json` set per `Series` (not one boolean per field).
+A manual edit or `lychee.info` write auto-locks every field it touches; a
+later MangaDex refresh skips locked fields via `apply_metadata`'s
+`unlocked()` check. Locks survive move/rename restore
+([07](07-scan-pipeline.md)) and every re-scan/refresh.
 
-### Merge mechanism
-`apply(entity, patches)`:
-- For each **scalar** field, take the value from the **highest-precedence patch that provides it** — **unless the field is in `locked_fields`**, in which case the stored value is kept untouched.
-- For **multi-value** fields: **union** across sources for `tags` and `authors` (accumulate; de-duplicate by id/name+role); **replace** for scalars and for `alt_titles`/`links` a merge-by-key. (Union-vs-replace is per-field policy, tabled below.)
-- **Locks survive** move/rename restore ([07](07-scan-pipeline.md)) and every re-scan/refresh. A field is locked either by a manual edit (auto) or an explicit lock toggle. (We use a single `locked_fields` set per entity, not Komga's one-bool-per-field — same effect, less schema noise.)
+## Union vs. replace differs by writer, not by field
 
-### Source → schema field mapping
+- **`apply_metadata`** (MangaDex): `tags` — **replaced** wholesale
+  (`reconcile_tags` result assigned directly).
+- **Manual `PATCH`**: `tags` — **replaced** via `_resolve_tags`; credits —
+  replaced per edited role.
+- **`apply_lychee_info`**: `tags` — **unioned** with existing (a partial
+  agent-authored file shouldn't drop tags a provider match already set in
+  groups it doesn't mention); `titles` — always unioned, never locked, per
+  [18](18-title-variants.md).
 
-**ComicInfo.xml** (the interop standard — read on scan, and **written on export/download**):
+## Content rating vs. embedded age rating
 
-| ComicInfo | lychee | notes |
-|---|---|---|
-| `Series` (+`Volume`) | `series.title` | optional "append volume" |
-| `Title` | `book.title` | |
-| `Number` | `book.number` / `number_sort` | decimal-safe |
-| `Count` | series total book count | |
-| `Year`/`Month`/`Day` | `book.release_date` | |
-| `Writer`/`Penciller`/`Inker`/`Colorist`/`Letterer`/`CoverArtist`/`Editor`/`Translator` | `book_author(name, role)` | union |
-| `Publisher` | `series.publisher` | |
-| `Genre` | `series_tag` (genre group) | union → [10](10-tagging-content-rating.md) |
-| `Tags` | series/book tags | union |
-| `LanguageISO` | `series.language` | |
-| `Manga` (`YesAndRightToLeft`) | `series.reading_direction` | |
-| `AgeRating` | → `content_rating` via best-effort table | see below |
-| `SeriesGroup` | collections | |
-| `StoryArc`/`StoryArcNumber`, `AlternateSeries`/`AlternateNumber` | read lists | |
-| `GTIN` | `book.isbn` | validated |
-| `Web` | links | |
+`content_rating` ([10](10-tagging-content-rating.md)) —
+`safe/suggestive/erotica/pornographic` for manga/comic,
+`safe/suggestive/erotica/explicit` for gallery — is the canonical
+explicitness axis; MangaDex's `contentRating` maps onto it 1:1, no renaming.
+A `ComicInfo AgeRating`→`content_rating` mapping table was planned but never
+built — moot anyway, since ComicInfo isn't read at all (see below).
 
-**EPUB OPF (Dublin Core):** `dc:title`→title, `dc:creator`(+role)→author, `dc:description`→summary, `dc:language`→language, `dc:date`→release_date, `dc:identifier`(ISBN)→isbn, `dc:publisher`→publisher, `dc:subject`→tags, calibre `series`/`belongs-to-collection`→series + number.
+## Not built
 
-**MangaDex provider:** full table in [../mangadex-api/README.md](../mangadex-api/README.md) §5 (title/altTitles/description/status/year/contentRating/demographic/tags/authors/cover).
+**No embedded-metadata reading or writing of any kind.**
+`backend/src/ingest/scanner.py`'s own module docstring lists "embedded
+ComicInfo/OPF metadata" under deferred follow-ups. Concretely: no
+ComicInfo.xml reading on scan, no ComicInfo.xml writing on export or
+download (the downloader writes plain numbered AVIF pages into the CBZ, no
+XML sidecar), no EPUB OPF parsing, no PDF info parsing — consistent with
+there being no EPUB/PDF container support at all
+([05](05-domain-model.md)). The role embedded metadata would have played —
+an "escape hatch" source of series-level metadata beyond what the filename
+carries — is instead filled by `lychee.info`
+([20](20-lychee-info-metadata.md)), a sibling YAML file, not an embedded
+format, and via a completely different application path than what this ADR
+originally sketched (it goes through the manual-edit lock mechanism
+directly, not a precedence-ranked patch merge).
 
-**Filename parser ([06](06-filename-parser.md)):** volume, number, number_sort, year, special.
-
-### Content rating vs age rating (two different axes)
-- **`content_rating`** ([10](10-tagging-content-rating.md)) — lychee's `safe/suggestive/erotica/mature` — is the **canonical explicitness axis** (MangaDex's top value `pornographic` maps to `mature`).
-- **ComicInfo `AgeRating`** (`Everyone`, `Teen`, `Mature 17+`, `Adults Only 18+`, …) is mapped into `content_rating` via a **best-effort, configurable table** (e.g. Everyone/Teen→safe/suggestive, Mature→erotica, Adults Only→mature); the raw string may also be retained. This keeps one canonical rating while accepting either source.
-
-### ComicInfo read **and** write
-lychee **reads** ComicInfo on scan and **writes** it on export and on download ([13](13-metadata-providers.md)) — a round-trip serializer — so libraries stay interoperable with Komga/Kavita/Mihon.
-
-## Consequences
-
-- Deterministic, lock-protected metadata: manual edits are sacred; automated sources never clobber them.
-- Multiple sources coexist cleanly via patches + precedence; `union` keeps tags/authors from all sources.
-- ComicInfo read/write makes lychee a good citizen in the existing ecosystem.
-
-## Follow-ups
-
-- The exact **`AgeRating` → `content_rating`** table (and whether to keep a raw `age_rating` field).
-- **Mylar `series.json`** provider (Komga supports it) as another embedded source.
-- Default of the **per-library embedded-vs-provider** precedence toggle.
-
-## Alternatives considered
-
-- **One `*_lock` boolean per field** (Komga) — rejected for a single `locked_fields` set (05): same guarantee, less schema noise.
-- **Provider-authoritative always** — rejected: embedded wins by default, per-library configurable.
-- **Ignoring embedded metadata / parser-only** — rejected: ComicInfo is the interop baseline.
+No per-library "prefer provider over embedded" toggle either — moot, since
+there's no embedded source to prefer over.

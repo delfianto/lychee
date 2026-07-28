@@ -1,4 +1,4 @@
-"""lychee.info sidecar discovered + applied during a library scan (notes/08-metadata.md)."""
+"""lychee.info sidecar discovered + applied during a library scan (notes/decisions/20-lychee-info-metadata.md)."""
 
 from __future__ import annotations
 

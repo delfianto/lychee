@@ -114,7 +114,7 @@ async function removeTax(row: TaxRow): Promise<void> {
 }
 
 // Inline rename — click a name to edit it. Allowed for system rows too (only
-// id/group/deletability are locked there); see notes/09-tag-aliases.md.
+// id/group/deletability are locked there); see notes/decisions/21-tag-aliases.md.
 const editingId = ref<string | null>(null);
 const editValue = ref("");
 const editInput = ref<HTMLInputElement | null>(null);

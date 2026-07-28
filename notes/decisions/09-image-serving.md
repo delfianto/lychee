@@ -1,74 +1,126 @@
 # 09 — Image, thumbnail & page-serving pipeline
 
-**Status:** ✅ Accepted
+**Status:** Implemented for CBZ/ZIP/image-directory content — see "Not built"
+for what the original scope included that didn't ship.
 
-## Context
+## Container abstraction
 
-The last piece of the ingest→serve path: how lychee reads pages out of containers, generates thumbnails, and serves page images to the reader. Builds on [02](02-backend-stack.md) (media libs), [04](04-database-sqlite.md) (thumbnails on the **filesystem**, never DB BLOBs; no page rows), [05](05-domain-model.md) (loose-image books; series-cover selection; cover overrides), [07](07-scan-pipeline.md) (scan enqueues thumbnails), [08](08-task-runner.md) (CPU work → `ProcessPoolExecutor`). Research: [../07-image-decoding.md]. Anti-patterns to avoid, all surfaced there: DB-BLOB thumbnails (Komga/Mango/KamiYomu), whole-archive buffering (KamiYomu), uncached PDF renders (Komga).
+One `BookContainer` ABC (`backend/src/media/containers.py`) with exactly two
+implementations — `ImageDirContainer` (directories, also serves
+`avif_dir` downloads) and `ZipContainer` (CBZ/ZIP via stdlib `zipfile`, no
+`rarfile`/`libarchive-c`/`py7zr`/`pymupdf`/`ebooklib`):
 
-## Decision
-
-### 1. Container abstraction (Strategy)
-One `BookContainer` protocol over every type, chosen by **content-detected** kind (`python-magic`), not extension:
+```python
+class BookContainer(ABC):
+    def page_count(self) -> int: ...
+    def page_name(self, index: int) -> str: ...
+    def read_page(self, index: int) -> bytes: ...
 ```
-list_pages() -> [PageEntry(name, media_type)]     # ordered
-read_page(index) -> (stream, media_type)          # ONE entry, streamed
-page_count() -> int
-```
-Impls: `zipfile` (CBZ/ZIP), `rarfile`|`libarchive-c` (CBR/RAR), `libarchive-c`|`py7zr` (7z), `pymupdf` (PDF — renders pages), `ebooklib`/zip (EPUB), filesystem dir (loose-image `DirEntry`, [05](05-domain-model.md)). Extraction is **always a single streamed entry — never buffer the whole archive** (KamiYomu's `MemoryStream` mistake).
 
-### 2. Page ordering
-Natural sort of image entries, then LANraragi's reordering: **cover to front** (`cover` regex, excluding back/rear/recover), **credits / `999*` to back**; strip macOS junk (`__MACOSX/`, `._*`). Computed once per book and cached (§6). No page rows ([04](04-database-sqlite.md)) — this ordered list is derived, cached, and rebuildable.
+A synchronous byte-return, not a streamed/generator API. Container kind
+comes from a fixed extension map at scan time (`Book.content_kind`), not
+content-sniffing.
 
-### 3. Decode / encode
-**pyvips (libvips)** primary — fast, low-memory, streaming resize (LANraragi's choice); **Pillow (+pillow-heif)** fallback for format coverage (HEIF/AVIF/…). Thumbnails written as **WebP** (JPEG fallback). Full pages are served as their **original bytes by default** (lossless, fast); transcode/resize only on demand (§5). Decode guards (max-pixel limit) protect against decompression bombs.
+## Page ordering
 
-### 4. Thumbnails
-- **What:** a cover thumbnail per book; a **series cover** derived from its selected book's cover (05 selection strategy). **Two sizes** — `cover` (~320 px longest edge, for grids) and `detail` (~640 px). Configurable, deliberately few: the reader loads full pages directly, so we don't need Komga's four sizes.
-- **Storage — filesystem, content-addressed, sharded** (LANraragi layout):
-  ```
-  <thumb_dir>/<id[:2]>/<id>.cover.webp
-  <thumb_dir>/<id[:2]>/<id>.detail.webp
-  ```
-  The path is **derived from the id** — not a DB BLOB, not even a stored path row — so nginx/CDN can serve it and the DB stays small.
-- **Generation:** low-priority, **idempotent** tasks enqueued by the scan ([07](07-scan-pipeline.md)/[08](08-task-runner.md)); CPU work runs in the `ProcessPoolExecutor`. A "regenerate thumbnails" admin task exists.
-- **Fallback (Mango):** if the thumbnail file is missing, serve `thumbnail || first_page` (extract page 1 live) so a cover always renders, even before generation.
-- **Overrides (Komga):** a user-uploaded or sidecar cover sets `cover_source` (`generated | sidecar | user`) on the book/series so regeneration never clobbers a manual/sidecar cover.
+A natural sort of media filenames (`natural_key()`), with covers/junk
+excluded via `is_cover_file` (matches `cover`/`folder` stems). No
+cover-to-front or credits-to-back reordering heuristic, and no macOS-junk
+(`__MACOSX/`, `._*`) stripping.
 
-### 5. Page serving (the reader hot path)
-- `GET /api/books/{id}/pages/{n}` → `read_page(n)` streamed with the correct content-type (`StreamingResponse`).
-- **Caching:** `ETag` (page content hash, or `book.partial_hash` + index + transform params) + `Cache-Control: public, max-age`; return **304** on `If-None-Match` (Mango). Loose-image dirs are mutable → weaker validator (include mtime), shorter cache.
-- **On-the-fly resize/transcode — off by default:** serve originals. If a `?w=` / reader-quality setting is present (LANraragi's `enable_resize` / `readerquality`), resize/recompress via pyvips and **cache the result** on disk.
-- **PDF:** render page *n* via `pymupdf` at a target DPI and **cache the render** — explicitly fixing Komga's uncached-render cost.
-- **Prefetch (optional):** the reader prefetches the next N pages; the server may warm the page cache after a request (LANraragi's `cbw_prefetch`).
+## Encode: AVIF, content-adaptive
 
-### 6. Caches — three, distinct
-1. **Ordered page-list** — in-memory LRU per book (avoids re-listing archives on every page turn).
-2. **Thumbnail store** — filesystem, permanent, sharded (§4).
-3. **Rendered/resized page cache** — filesystem, size-capped/evictable (`diskcache`), **only** for PDF renders and on-demand resizes; originals live on disk and are served directly.
+`backend/src/media/avif.py` — Pillow only (native AVIF via bundled libavif,
+no `pyvips`, no `pillow-heif`). A cheap classifier (`classify()`, per-pixel
+RGB spread + distinct-color density on a 64×64 downsample) picks one of
+three presets before encoding:
+
+| Content class | Preset |
+|---|---|
+| `LINE_ART` (grayscale/mono) | quality 63, no chroma subsampling |
+| `COLOR_ART` | quality 80, 4:4:4 |
+| `PHOTO` | quality 60, 4:2:0 |
+
+`ENCODE_SPEED = 2`. This content-adaptive classify-then-encode design isn't
+just a detail — it's the reason quality holds up across both flat-color
+manga pages and photographic gallery content without a single fixed preset
+being wrong for one or the other.
+
+## Thumbnails
+
+`backend/src/media/thumbnails.py` — `ThumbnailStore`, two variants (`cover`
+320px, `detail` 640px longest edge), sharded content-addressed filesystem
+path `<root>/<id[:2]>/<id>.<variant>.avif`, atomic write (temp file +
+`os.replace`), idempotent unless `overwrite=True`.
+
+## Covers: a separate mechanism from thumbnails
+
+`backend/src/catalog/media.py` maintains a canonical on-disk `Cover.avif`
+beside a series' books for managed (download/import) libraries, or reads a
+`cover.*`/`folder.*` convention for scanned libraries. When no cover exists
+on disk, the fallback chain differs by kind: gallery → first local page;
+manga/comic → provider HTTP `cover_source` (downloaded once and cached) →
+first local page. `Series.cover_source` is a plain nullable URL string, not
+a `generated|sidecar|user` enum. On a thumbnail-store miss, `get_cover`
+materializes both variants from the canonical/provider source on the spot,
+so a cover always renders even before a scan has warmed it — the same
+lazy-generate-on-miss pattern covers gallery item thumbnails.
+
+## Page serving
+
+`GET /api/chapters/{chapter_id}/pages/{n}` (`?w=<width>` for on-demand
+resize) → `media.get_page`. `ETag` is a sha1 hash of the **actual served
+bytes**, computed fresh each response (`_etag`) — not a composite of
+`partial_hash` + index + transform params. `Cache-Control: public,
+max-age=86400`; 304 on a matching `If-None-Match`.
+
+On-the-fly resize (`?w=`) goes through `RenderCache`
+(`backend/src/media/render_cache.py`): clamped 100-3000px, downscale-only
+(Lanczos), re-encoded as AVIF, disk-cached keyed
+`<root>/<book_id[:2]>/<book_id>-<index>-<width>.avif`. **No eviction, no
+size cap** — it was originally scoped as `diskcache`-backed and
+size-capped/evictable; the shipped version grows unbounded on disk as plain
+files.
+
+## Caches
+
+1. **Page-list** — `functools.lru_cache(maxsize=512)` keyed on `(path,
+   mtime)`, `ImageDirContainer` only (`ZipContainer` re-sorts its namelist
+   on open — cheap enough not to need caching).
+2. **Thumbnail store** — filesystem, permanent, sharded, as above.
+3. **Render cache** — filesystem, unbounded, as above.
 
 All three are rebuildable — safe to clear at any time.
 
-### 7. Errors (Komga taxonomy)
-A corrupt / encrypted / unsupported container gives the book an **error state** during the scan ([07](07-scan-pipeline.md)); page requests then return a clear error/placeholder, not a 500. Missing index → 404; a single-page decode failure → placeholder + log, not a whole-book failure.
+## Gallery video posters
 
-## Consequences
+`backend/src/media/video.py` (`extract_poster_png`, `ffmpeg`-based) — poster
+thumbnails for gallery video items (MP4/M4V/WEBM), entirely outside the
+original scope of this ADR, gallery-specific.
 
-- Thumbnails off the DB → small DB, CDN/nginx-cacheable images.
-- Single-entry streamed extraction → **constant memory regardless of archive size**.
-- PDF renders and resizes are cached → the two expensive paths are paid once.
-- pyvips keeps decode/resize fast and memory-light; Pillow covers the format long tail.
-- Page-list / thumbnail / render layers are all rebuildable caches.
+## Errors
 
-## Follow-ups
+A corrupt CBZ raises `BadRequestError` (caught `zipfile.BadZipFile`); an
+unreadable book during scan is skipped with a logged warning — there's no
+persisted error-state column on `Book` at all, no Komga-style `ERR_`
+taxonomy.
 
-- **Per-page thumbnails** (reader page-grid/strip) — deferred; same sharded layout (`<id>/<page>.webp`), generated on demand.
-- **Spread / webtoon layout hints** need page dimensions — compute on demand or client-side ([04](04-database-sqlite.md) discussion); revisit only if the reader needs them server-side.
-- Exact thumbnail sizes and default reader quality — tune against real content.
+## Not built
 
-## Alternatives considered
+- **RAR/7z/PDF/EPUB support** — not planned; CBZ + image directories cover
+  the common case.
+- **Cover-to-front / credits-to-back page reordering**, macOS-junk stripping.
+- **Prefetch** — neither the backend nor the reader (`frontend/src/views/
+  ReaderView.vue`) prefetches upcoming pages.
+- **Render-cache eviction/size cap** (`diskcache` was the original plan).
+- **Per-page reader thumbnails** (grid/strip view) — confirmed still open in
+  `notes/plan.md`.
 
-- **DB-BLOB thumbnails** (Komga/Mango/KamiYomu) — rejected: DB bloat, no CDN offload.
-- **Whole-archive buffering** (KamiYomu) — rejected: memory blowup on large books.
-- **Per-format hand-rolled decoders / ImageIO SPI** (Komga) — unnecessary in Python; the container libs + pyvips + Pillow cover it.
-- **No render cache** (Komga's PDF path) — rejected: we cache renders and resizes.
+## Why AVIF over WebP, Pillow over pyvips
+
+AVIF gives materially better compression than WebP at comparable quality,
+which matters more here than encode speed since thumbnails/pages are
+generated once and served many times. Pillow's native AVIF support (via
+bundled libavif) covered decode/encode/resize without adding `pyvips` as a
+second image-processing dependency — the content-adaptive presets do the
+work `pyvips`'s speed advantage would have targeted anyway.

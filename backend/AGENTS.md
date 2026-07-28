@@ -93,10 +93,10 @@ write throughput), each job getting its own DB session via a `sessionmaker`
 handed to `queue.configure()`. A route validates, calls `queue.submit(...)`,
 and returns `202` with a task id; the browser follows progress over SSE
 (`/api/events`, `src/tasks/events.py`'s `broker`). Tests point the queue at
-their temp-DB session factory — see `tests/conftest.py`. Note: this is a
-simpler in-process implementation than the persisted SQLite task-table design
-sketched in [ADR 08](../notes/decisions/08-task-runner.md) — read the code
-(`queue.py`, `tracker.py`), not just the ADR, for how it actually behaves.
+their temp-DB session factory — see `tests/conftest.py`. See
+[ADR 08](../notes/decisions/08-task-runner.md) for the full design (an
+in-process, non-persistent queue — deliberately simpler than the persisted
+SQLite task-table design originally scoped for it).
 
 **Secrets at rest** (provider/tracker OAuth tokens) are encrypted via
 `src/core/crypto.py`, keyed by `LYCHEE_SECRET_KEY`. Unset ⇒ connecting an
@@ -189,8 +189,6 @@ generated client and will fail on drift.
 
 Deeper design rationale (data model, scan pipeline, image serving, tagging,
 metadata mapping, tracker sync, search tokenizer, etc.) lives in
-[`../notes/decisions/`](../notes/decisions/) as numbered ADRs — read the
-relevant one before making a structural change in that area. ADRs record
-*decisions*, not always current behavior; where an ADR and the code disagree
-(e.g. the task-runner design, see above), trust the code and note the
-discrepancy rather than "fixing" the code to match a stale doc.
+[`../notes/decisions/`](../notes/decisions/) as numbered ADRs, each grounded
+in the current implementation — read the relevant one before making a
+structural change in that area.
