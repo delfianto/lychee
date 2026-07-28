@@ -192,7 +192,7 @@ export interface RatingLabels {
 /** Live display names for the content_rating/demographic system tags — so a
  * rename in Settings → Content (e.g. "Mature" → "Hentai") actually shows up
  * wherever a rating/demographic badge is rendered. See lib/ratingLabels.ts
- * and notes/09-tag-aliases.md ("Display label editability"). */
+ * and notes/decisions/21-tag-aliases.md ("Display label editability"). */
 export async function fetchRatingLabels(): Promise<RatingLabels> {
   const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
   const items = data?.items ?? [];

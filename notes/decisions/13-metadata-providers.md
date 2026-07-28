@@ -1,70 +1,83 @@
 # 13 — Metadata providers & (optional) downloader
 
-**Status:** ✅ Accepted
+**Status:** Implemented — MangaDex only, no second provider.
 
-## Context
+## Provider interface
 
-Beyond embedded metadata (ComicInfo/OPF), lychee wants **external enrichment** and an **optional downloader**. The [MangaDex research](../mangadex-api/README.md) shows it's the natural first provider (free public API, taxonomy wire-compatible with [10](10-tagging-content-rating.md)). Flagged as a follow-up in [10](10-tagging-content-rating.md) / [05](../05-metadata-tagging.md). The patches produced here are merged by the rules in [14](14-metadata-mapping.md); work runs on the task queue ([08](08-task-runner.md)); downloads feed the scan ([07](07-scan-pipeline.md)).
+Two separate Protocols (`backend/src/downloads/provider.py`), not one
+unified interface with a capability set:
 
-## Decision
+```python
+class Provider(Protocol):        # download-capable
+    def list_chapters(provider_series_id, *, language) -> list[RemoteChapter]: ...
+    def fetch_pages(chapter, *, data_saver, on_page) -> list[bytes]: ...
 
-### Provider interface (native-Python plugin registry)
+class MetadataProvider(Protocol):  # metadata-capable
+    def search(title, *, limit) -> list[MangaMatch]: ...
+    def get_metadata(provider_series_id, *, language) -> SeriesMetadata: ...
+    def list_new_chapters(provider_series_id, *, known, language) -> list[RemoteChapter]: ...
+    def list_tags(*, language) -> list[tuple[str, str]]: ...
 ```
-class MetadataProvider(Protocol):
-    id: str                                      # "mangadex"
-    capabilities: set[metadata | cover | download]
-    def search(q: SeriesQuery) -> list[Match]    # candidates + confidence 0..1
-    def fetch(external_id) -> MetadataPatch      # series/book fields, tags, cover ref
-    # download-capable only:
-    def list_chapters(external_id, lang) -> list[ChapterRef]
-    def fetch_pages(chapter: ChapterRef) -> Iterator[PageBytes]   # rate-limited
-```
-A **registry** of providers; **MangaDex is the first built-in**. Extensible for AniList / MangaUpdates / ComicVine (metadata-only) later. Native Python protocol — **no embedded JS engine** (rejecting Mango/Duktape; per [00-overview](../00-overview.md)); a LANraragi-style plugin discovery model, done in-language.
 
-### External-id mapping (the linchpin)
-```
-external_link(
-  id, entity_type[series|book], entity_id,
-  provider,            -- "mangadex"
-  external_id,         -- manga / chapter uuid
-  url, created_at,
-  UNIQUE(provider, entity_type, entity_id),
-  INDEX(provider, external_id))              -- reverse lookup / dedup
-```
-Enables **idempotent re-sync** (fetch by stored id, no re-matching) and **download dedup** (skip chapters already linked / on disk).
+A registry (`register_provider`/`get_provider`/`get_metadata_provider`).
+**Only MangaDex is implemented** (`backend/src/providers/mangadex.py`) — no
+AniList/MangaUpdates/ComicVine metadata-only provider exists, even as a
+stub.
 
-### Matching flow
-1. `search()` → candidates ranked by **confidence** (title/altTitle similarity + year + language).
-2. **High confidence → auto-link; low → queue for manual confirm** — never silently apply a weak match. A "match / relink" UI action lets the user pick; the chosen `external_id` is stored in `external_link`.
-3. Linked → `fetch(external_id)` → `MetadataPatch`.
+## Linking: plain columns, not a generic join table
 
-### Merge & refresh
-Patches go through [14](14-metadata-mapping.md)'s merge (unlocked fields only, precedence-ordered); provider data never touches locked fields ([05](05-domain-model.md)). Cover images fetched → [09](09-image-serving.md) with `cover_source = provider` (safe from thumbnail regeneration). A `refresh_metadata` task re-fetches on demand/schedule.
+No `external_link` table. Linkage is two columns directly on the entity:
+`Series.provider`/`Series.provider_series_id`, and
+`Chapter.provider`/`Chapter.provider_chapter_id`. `ProviderChapter` caches
+the remote chapter index (so a matched series can show available chapters
+before anything is downloaded) — `download_status` is joined at read time
+from `Chapter`/`DownloadTask`, not stored on the cache row.
 
-### Downloader (optional, capability-gated, off by default)
-- `download_chapter` / `download_series` tasks ([08](08-task-runner.md)), gated by a **per-provider rate limiter** (token bucket sized to the provider — MangaDex: 5 req/s global **and** 40/min on `/at-home/server`).
-- **Output reuses the scan:** fetch pages → write a **CBZ + `ComicInfo.xml`** (populated from the provider metadata, **crediting the scanlation group**) into a **watched library folder** → the normal scan ([07](07-scan-pipeline.md)) ingests it. No separate ingest path.
-- **Link reconciliation:** the downloader records an `external_link` keyed to the file path it wrote; the scan, on creating the book at that path, binds the link to the new `book.id`.
-- **Idempotent:** skip chapters already in `external_link` or already on disk (KamiYomu's `File.Exists` check). Path templating (`{series}/{series} - c{chapter}.cbz`) configurable.
+## Matching
 
-### ToS / good-citizen guardrails (baked in, not optional)
-Real `User-Agent`; exponential **back-off on 429**; MangaDex@Home **report** each page fetch; **credit scanlation groups** (ComicInfo `<Notes>` + UI) and **honor takedown/removal requests**; **no monetization**; obey rate limits. These are hard requirements for any download-capable provider. Metadata-only is the default posture; downloading is opt-in.
+Not confidence-scored. `_auto_match_one` (`backend/src/catalog/matching.py`)
+does an exact normalized-title string match (strip non-alphanumerics,
+lowercase) — binary yes/no, not a ranked 0-1 score. A non-match is simply
+left unmatched; there's no "queue for manual confirm" persisted state — the
+user later calls the manual match/set-match endpoints
+(`match_candidates`/`set_match`) same as any unmatched series.
 
-## Consequences
+## Merge & refresh
 
-- Clean provider extensibility; MangaDex ships first, others slot in behind the same interface.
-- The downloader reuses the entire scan/ingest/thumbnail pipeline instead of duplicating it.
-- `external_link` gives exact re-sync and download dedup.
-- ToS compliance lives in one well-behaved, rate-limited client component.
+Provider data merges through [14](14-metadata-mapping.md)'s lock check
+(`apply_metadata`, skips any field in `series.locked_fields_json`). Cover
+images are fetched via `Series.cover_source` (a raw provider URL), consumed
+by the cover pipeline in [09](09-image-serving.md).
 
-## Follow-ups
+## Downloader
 
-- More providers (AniList / MangaUpdates / ComicVine — some metadata-only); a **login-plugin** pattern for providers needing auth (LANraragi's model).
-- Per-library **preferred language** + **scanlation-group selection** policy (a chapter may exist from many groups/languages).
-- Chapter-level `external_id` granularity for `book` re-sync.
+Writes AVIF-paged CBZs and creates `Book`/`Chapter` rows **directly** —
+`_download_chapter` (`backend/src/downloads/downloader.py`) both writes the
+file to disk *and* `session.add(Book(...))`/`session.add(Chapter(...))` in
+the same function. It does **not** reuse the scan pipeline (the "separate
+download→DB ingest path" that was the original design's rejected
+alternative is exactly what shipped). No ComicInfo.xml is written into the
+CBZ — only numbered `NNN.avif` pages; scanlation group is stored as
+`Chapter.group_name`, not embedded XML. Output path is hardcoded:
+`{Series}/{Vol.XX or "No Volume"}/{Ch.YY - Title}.cbz` — not a configurable
+template (the only configurable filename template in the codebase is for
+*parsing* on local import, [06](06-filename-parser.md), unrelated to
+download output).
 
-## Alternatives considered
+Idempotent: `plan_downloads` dedups by `Chapter.number`/
+`provider_chapter_id` against what's already local or queued.
 
-- **Embedded JS plugin engine** (Mango/Duktape) — rejected: native Python protocol is simpler and safer.
-- **Crawler-first architecture** (KamiYomu) — rejected as the model; lychee is scan-first, the downloader is an optional *add-on that feeds the scanner*.
-- **Separate download→DB ingest path** — rejected in favor of writing CBZ+ComicInfo into a library and reusing the scan.
+## Rate limiting & good-citizen guardrails
+
+Real and matches the original design: `TokenBucket`
+(`backend/src/providers/ratelimit.py`) sized 5 req/s general + 40/min on
+`/at-home/server`, 429/`Retry-After` handling with exponential backoff on
+5xx, a real `User-Agent`, and a mandatory MangaDex@Home usage `report()`
+after every page fetch.
+
+## Not built
+
+- Any second provider (AniList/MangaUpdates/ComicVine metadata-only).
+- A login-plugin pattern for providers needing auth beyond MangaDex's own.
+- Per-library preferred-language / scanlation-group-selection policy.
+- Configurable download output path templating.

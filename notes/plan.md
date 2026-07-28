@@ -23,13 +23,15 @@
   status/read-markers/custom-lists→Collections/metadata with MangaDex as source of truth. No page
   downloads. Plus **no-volume** chapter grouping. A sync, not a client. See PART I below.
 - **PART K — ✅ done:** `lychee.info` — a native YAML metadata sidecar, read on scan and applied
-  through the existing manual-edit lock mechanism (zero new precedence tier). See PART K below;
-  full design in `notes/08-metadata.md`, formalized as [ADR 20](decisions/20-lychee-info-metadata.md).
-  The **writer** side (an LLM agent producing these files) is PART J's MCP server — still not started.
+  through the existing manual-edit lock mechanism (zero new precedence tier). See PART K below and
+  [ADR 20](decisions/20-lychee-info-metadata.md). The **writer** side is a Claude Skill
+  (`cosplay-metadata`) in the separate [`delfianto/lychee-agents`](https://github.com/delfianto/lychee-agents)
+  repo — writes the sidecar directly to disk (read-merge-write, its own schema-strict script),
+  independent of `mcp/`. Already functional.
 - **PART L — ✅ done:** tag aliases — synonym resolution for `reconcile_tags` (fixes MangaDex's
   unrenamed `pornographic` content rating + Yaoi/Yuri-style duplicate tags) plus a renamable
-  display label for the two system taxonomy groups. See PART L below; full design in
-  `notes/09-tag-aliases.md`, formalized as [ADR 21](decisions/21-tag-aliases.md).
+  display label for the two system taxonomy groups. See PART L below and
+  [ADR 21](decisions/21-tag-aliases.md).
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -719,10 +721,11 @@ numbered volumes, and the FE has no label for `volume: null`.
 **Testing (all):** offline — stub the provider (no network), fixtures in `tmp_path`; migrations for
 `Collection.provider/provider_list_id` + `Chapter.provider_chapter_id` (`alembic check` clean).
 
-# PART J — MCP server for agent-assisted library operations — 🟡 proposed, not started
+# PART J — MCP server for agent-assisted library operations — ✅ done
 
-> Discussed 2026-07-27, not yet started. This is an architecture recommendation to
-> decide against before building, not a committed design like PART F–I. Goal: let an
+> Built as `mcp/` — see [`mcp/AGENTS.md`](../mcp/AGENTS.md) for what actually shipped
+> (tool list, layout, conventions); this section is the original architecture
+> recommendation that preceded it, kept for the rationale. Goal: let an
 > LLM agent (local today; possibly cloud-based later) drive the batch/tedious library
 > operations that are annoying to click through one series at a time — bulk tagging,
 > bulk downloads, finding unmatched/untagged series, bulk shelf-status updates.
@@ -813,10 +816,13 @@ numbered volumes, and the FE has no label for `volume: null`.
 
 # PART K — `lychee.info` metadata sidecar — ✅ done
 
-> Design: `notes/08-metadata.md`. Formalized as [ADR 20](decisions/20-lychee-info-metadata.md).
-> This is the **reader** half only — parsing + applying a `lychee.info` file found on
-> scan. The **writer** half (an agent producing these files) is PART J's MCP server,
-> still not started; this backend support is what it will target.
+> See [ADR 20](decisions/20-lychee-info-metadata.md) for the full schema and rationale.
+> This is the **reader** half — parsing + applying a `lychee.info` file found on scan.
+> The **writer** half lives externally: [`delfianto/lychee-agents`](https://github.com/delfianto/lychee-agents)'s
+> `cosplay-metadata` Claude Skill infers franchise/character/content-rating for gallery
+> sets (via folder-name reasoning + web search + viewing sample frames) and writes the
+> sidecar directly to disk through its own schema-strict script — a filesystem writer,
+> not an `mcp/` tool or a backend API client. Already functional; not part of this repo.
 
 - [x] **Schema + parser** (`ingest/lychee_info.py`) — strict Pydantic (`CamelModel`,
       `extra="forbid"`) schema v1 exactly per the design doc; `parse_lychee_info(raw)`
@@ -861,7 +867,7 @@ numbered volumes, and the FE has no label for `volume: null`.
 
 # PART L — Tag aliases — ✅ done
 
-> Design: `notes/09-tag-aliases.md`. Formalized as [ADR 21](decisions/21-tag-aliases.md).
+> See [ADR 21](decisions/21-tag-aliases.md) for the full design and rationale.
 
 - [x] **`TagAlias` model** (`taxonomy/models.py`) — id=slug, `name` display form,
       `tag_id` FK (`ondelete="CASCADE"`), globally unique across every group.
@@ -910,6 +916,37 @@ numbered volumes, and the FE has no label for `volume: null`.
       CRUD + its collision rules, system-tag rename now allowed, 12 cases) +
       `test_taxonomy_api.py` updated for the loosened rename rule. **+12 → 273.**
       Frontend: `bun run typecheck && bun run test && bun run build` clean.
+
+---
+
+# PART M — Content rating: MangaDex-native naming + gallery's own `explicit` tier — ✅ done
+
+> Folded into [ADR 10](decisions/10-tagging-content-rating.md) (content rating) and
+> [ADR 21](decisions/21-tag-aliases.md) (the alias-table change) — no separate ADR.
+
+- [x] **Retired the `mature` rename.** `taxonomy/seed.py`'s `_CONTENT_RATINGS`
+      is now `safe/suggestive/erotica/pornographic/explicit` (5 system rows, was
+      4). MangaDex-synced manga/comic use `pornographic` — MangaDex's own raw
+      value — verbatim; gallery (never MangaDex-synced) gets its own top tier,
+      `explicit`.
+- [x] **Alias table simplified.** The `("Pornographic", "mature")` alias is
+      gone — MangaDex's own value now slugifies straight to a matching `Tag.id`,
+      no resolution needed. `Hentai`/`NSFW` repointed to `pornographic`.
+- [x] **No migration needed** — `content_rating` rows are runtime seed data
+      (`seed_taxonomy()`), not baked into the schema. Local dev DBs with old
+      `mature` rows just need a reset (`rm backend/lychee.db`) to re-seed clean.
+- [x] **Updated in lockstep:** `catalog/models.py`/`service.py` (validation
+      set), `ingest/lychee_info.py` (`Literal`), `dev_seed.py` (6 `mature` →
+      `pornographic`, all manga/comic), frontend `types/index.ts`
+      (`ContentRating` union), `lib/display.ts` (badge class/label maps),
+      `FilterPanel.vue` (all 5, mixed-kind browse), `EditSeriesModal.vue`
+      (kind-conditional: `pornographic` for manga/comic, `explicit` for
+      gallery), mock fixtures (`mocks/data/{taxonomy,series}.ts`).
+- [x] **Tests:** `test_tag_aliases.py`, `test_lychee_info.py`,
+      `test_taxonomy_api.py`, `test_series_api.py`, `test_seed.py` (content
+      rating count 4→5, system row count 8→9) updated for the new values.
+      Backend: `uv run pytest` (273 passed) + `ruff format/check` + `basedpyright`
+      clean. Frontend: `bun run typecheck && bun run test` clean.
 
 ---
 

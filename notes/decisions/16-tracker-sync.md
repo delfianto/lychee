@@ -1,80 +1,71 @@
 # 16 — Read-status tracker sync
 
-**Status:** ✅ Accepted
+**Status:** Implemented — AniList, MyAnimeList, MangaUpdates via a shared
+`Tracker` protocol, outbound-push-only. MangaDex is two-way but wired
+separately, outside that protocol. Kitsu was never built.
 
-## Context
+## List status: plain columns, not a separate table
 
-With the client being webapp-only ([15](15-api-surface.md)), device/OPDS sync is out — but users want their reading status pushed to external **trackers**: **AniList, MyAnimeList, Kitsu, MangaUpdates (Baka-Updates), MangaDex**. This is **outbound list tracking** (like AniList/MAL integration in Mihon), distinct from metadata *fetching* ([13](13-metadata-providers.md), inbound) — but it reuses that ADR's **`external_link`** matching and OAuth patterns. Reading progress ([11](11-reading-progress.md)) is the source of truth to push; work runs on the task queue ([08](08-task-runner.md)); the tracked unit is the **Series** ([10](10-tagging-content-rating.md)).
+No `series_list_status` table. The "shelf state" lives directly on
+`Series`: `library_status` (`none | reading | on_hold | dropped |
+plan_to_read | completed | re_reading`) and `user_rating` (float, 1-10).
+There's no `score`/`started_at`/`finished_at`/`progress_chapters` column
+anywhere — chapter counts pushed to a tracker are computed at push time from
+`ReadingProgress` + `Series.total_chapters`, not stored.
 
-## Decision
+## Tracker abstraction
 
-### A local "list status" per user per series (the thing we push)
-Trackers model a **library entry** (a shelf state) that's richer than raw page progress: status + score + dates. lychee gains its own version — useful as UI shelves independent of any tracker:
+`backend/src/trackers/base.py`'s `Tracker` Protocol: `id`,
+`external_id_key`, `auth_kind` (`"oauth"|"credentials"`), `uses_pkce`,
+`authorize_url`/`exchange_code`/`login`/`account_name`/`push`. A registry
+(`register_tracker`/`get_tracker`). Three real implementations:
 
-```
-series_list_status(
-  user_id → user, series_id → series,
-  status  TEXT,          -- reading | completed | paused | dropped | planning | rereading
-  score   REAL NULL,     -- normalized 0..10 internally
-  progress_chapters INT, -- derived from completed books' number_sort (06/11)
-  started_at, finished_at, updated_at,
-  PRIMARY KEY (user_id, series_id))
-```
+| Tracker | API | Auth | Notes |
+|---|---|---|---|
+| **AniList** | GraphQL | OAuth2 | `SaveMediaListEntry` mutation |
+| **MyAnimeList** | REST v2 | OAuth2 + PKCE | `PATCH /manga/{id}/my_list_status` |
+| **MangaUpdates** | REST v1 | session-token login | list-update via `list_id` 0-4 |
 
-- **Auto-advanced by reading progress** ([11](11-reading-progress.md)): first book read → `reading` + `started_at`; series fully read → `completed` + `finished_at`; `progress_chapters` tracks the max completed chapter number.
-- **User-overridable** for the states progress can't infer (`paused` / `dropped` / `planning`) and `score`.
+**Kitsu was never implemented** — not in the seeded tracker roster, no code
+anywhere references it. **NovelUpdates exists as a seeded-but-unsupported
+row** (`auth_kind: "unsupported"` — no public API, connecting is rejected)
+— present in the roster but not functional, a case the original design
+didn't anticipate either way.
 
-### Tracker abstraction (parallel to the metadata provider)
-```
-class Tracker(Protocol):
-    id: str                                  # "anilist"
-    oauth: OAuth2Config
-    def search(q) -> list[Match]             # find the tracker's entry for a series
-    def get_entry(external_id) -> Entry      # current remote status/progress/score
-    def push(external_id, status: ListStatus) -> None   # update remote
-```
-A registry, like [13](13-metadata-providers.md)'s providers. Several services are **both** metadata provider *and* tracker (MangaDex, AniList, MangaUpdates) — they share the same `external_link` join and OAuth account.
+**MangaDex is not a `Tracker` at all.** It's a separate module,
+`backend/src/providers/mangadex_account.py`, with its own **two-way** sync
+(`sync_account` pulls follows/status/custom-lists/ratings/read-markers with
+MangaDex as source of truth; `push_series` pushes status/read-markers/
+rating outbound) — it lives in the `provider` table, not the `tracker`
+table, and shares no code path with the three `Tracker`-protocol trackers.
 
-### Linking & accounts
-- A series links to a tracker entry via **`external_link`** ([13](13-metadata-providers.md), `provider = "anilist" | "myanimelist" | …`) — the same confidence-matched, **manual-confirm** flow; a series may link to **multiple trackers** at once.
-- Per-user OAuth tokens:
-  ```
-  tracker_account(user_id, tracker, access_token, refresh_token, expires_at,
-                  tracker_username, PRIMARY KEY(user_id, tracker))
-  ```
-  Tokens **encrypted at rest**. Per [12](12-auth-users.md) these attach to the single default user for now; the schema is already user-scoped.
+## Linking & accounts
 
-### Sync trigger & policy (push-first)
-- **Debounced push** via a `tracker_sync` task ([08](08-task-runner.md)) on: book **completion**, **mark series read/unread**, a **status/score change**, or explicit **"sync now"**. Never push per page-turn (binge a volume → one push).
-- **Direction:** v1 is **outbound push** (lychee → tracker). **Inbound pull** (import an existing tracker list to seed `series_list_status`, and reconcile) is an opt-in follow-up; conflicts resolve **last-write-wins by `updated_at`** (or push-wins, configurable).
-- **Status mapping** lychee → tracker enum is per-tracker (they differ slightly); score is normalized 0..10 internally and scaled per tracker (10 / 100 / stars).
+Linking uses `Series.external_ids_json` (a JSON dict keyed `al`/`mal`/`mu`/
+`kt`/`nu`/…, populated from MangaDex's own `links` object on match — note
+`kt`/`nu` keys get harvested even though no Kitsu tracker consumes them and
+NovelUpdates can't connect). No generic `external_link` table.
 
-### Tracker capability matrix (verify per-tracker at implementation)
-| Tracker | API | Auth | Progress unit | Notes |
-|---|---|---|---|---|
-| **AniList** | GraphQL | OAuth2 | chapters + volumes + score + status | `SaveMediaListEntry`; the primary manga tracker |
-| **MyAnimeList** | REST v2 | OAuth2 (PKCE) | chapters + volumes + score + status | `PATCH /manga/{id}/my_list_status` |
-| **Kitsu** | JSON:API | OAuth2 | progress + status + rating | library entries |
-| **MangaUpdates** | REST v1 | session token | reading list + chapter | Baka-Updates; more list-oriented, coarser progress |
-| **MangaDex** | REST | OAuth2 (personal client) | status + chapter read-markers | also a metadata provider ([13](13-metadata-providers.md)) |
+Per-tracker credentials: `Tracker` (`backend/src/integrations/models.py`) —
+`id` (slug PK), `connected`, `sync_on_read`, `account_name`, OAuth
+client/token fields (`client_id`, `client_secret_enc`, `access_token_enc`,
+`refresh_token_enc`, `pkce_verifier`, `state`, `token_expires_at`). **No
+`user_id` column** — a flat single-row-per-tracker table, consistent with
+true single-user, not a forward-compatible per-user schema.
 
-Recommended rollout: **AniList + MyAnimeList + MangaDex** first (most-used; AniList primary), then Kitsu + MangaUpdates.
+## Sync trigger & direction
 
-## Consequences
+Debounced push via a `tracker` task on chapter completion or a status/score
+change — never per page-turn (`trackers/sync.py:enqueue_push`, called from
+`progress/service.py:update_progress` on completion). For the three
+`Tracker`-protocol trackers, direction is **outbound push only** — no
+inbound pull, no conflict resolution needed since lychee is always the
+source of truth pushing out. MangaDex is the one exception, with real
+inbound pull already shipped (`notes/plan.md` PART I).
 
-- Reading in lychee auto-syncs to the user's trackers, across multiple trackers per series.
-- Reuses [13](13-metadata-providers.md)'s `external_link` + OAuth infra; `series_list_status` doubles as native "reading / completed / plan-to-read" shelves — good UX on its own.
-- Push-first keeps v1 simple; pull/2-way is additive later.
+## Not built
 
-## Follow-ups
-
-- **Per-tracker research notes** (like [../mangadex-api/README.md]) when implementing each — exact endpoints, OAuth flow, status enums, score scales.
-- **Inbound pull / 2-way** sync + conflict policy.
-- **Score-scale** normalization table; **status-enum** mapping per tracker.
-- Encrypted token storage ties into the eventual secrets/auth work ([12](12-auth-users.md)).
-
-## Alternatives considered
-
-- **Device / OPDS sync** — out of scope ([15](15-api-surface.md)).
-- **Two-way sync by default** — rejected for v1 (push-first is simpler; pull is opt-in).
-- **Tracking at book/chapter level** — rejected: trackers track a **title**; we push series-level chapter counts derived from book progress.
+- Kitsu (never started).
+- Inbound pull / two-way sync for AniList/MyAnimeList/MangaUpdates.
+- Score-scale normalization beyond what each tracker's own push call does
+  inline.

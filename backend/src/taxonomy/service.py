@@ -4,7 +4,7 @@
 content_rating/demographic from the matching ``Series`` column. System rows
 (content_rating/demographic) can't be deleted and their ``id``/``group`` are
 never editable, but ``name`` can be renamed like any other tag (see
-``notes/09-tag-aliases.md``: the sync key and the display label are separate
+``notes/decisions/21-tag-aliases.md``: the sync key and the display label are separate
 concerns).
 """
 
@@ -120,7 +120,7 @@ def update_taxonomy(session: Session, tag_id: str, data: TaxonomyUpdate) -> Taxo
     if data.name is not None:
         # System rows lock id/group/deletability (below), but the display name
         # is cosmetic and freely renamable like any other tag — see
-        # notes/09-tag-aliases.md's "sync key vs. display label" split.
+        # notes/decisions/21-tag-aliases.md's "sync key vs. display label" split.
         tag.name = data.name
     if data.enabled is not None:
         tag.enabled = data.enabled

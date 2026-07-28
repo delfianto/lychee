@@ -1,38 +1,76 @@
 # 02 — Backend: Python 3.14 + FastAPI + SQLAlchemy + Alembic
 
-**Status:** ✅ Accepted
+**Status:** Implemented.
 
-## Context
+## Stack
 
-lychee is a **scan-and-index media server** (see the three archetypes in [00-overview](../00-overview.md)). The research consensus favors a layered server with an async job mechanism, embedded metadata parsing, and archive/image handling — all well-served by Python. We also want to reuse TBM's house stack and conventions (and its `.claude` hooks — see [01](01-repo-structure-monorepo.md)).
-
-## Decision
-
-Same core stack as TBM:
-
-- **Runtime:** Python 3.14 (managed by `uv`).
-- **Framework:** FastAPI (async, native OpenAPI, SSE for live updates).
-- **Persistence:** SQLAlchemy 2.0 + Alembic migrations (DB engine → [04](04-database-sqlite.md)).
+- **Runtime:** Python 3.14, managed by `uv`.
+- **Framework:** FastAPI (async), served by `uvicorn`.
+- **Persistence:** SQLAlchemy 2.0 (**sync** ORM, not async — the slow path
+  here is media/scan I/O, not DB access) + Alembic migrations, SQLite
+  ([04](04-database-sqlite.md)).
 - **Validation:** Pydantic v2 / pydantic-settings.
-- **Quality gate:** ruff (lint + format) + basedpyright (strict) + pytest — enforced by the shared `.claude` hooks.
-- **Architecture:** modular monolith organized **by domain** (vertical slices), each slice `router.py → service.py → repository.py` + `schemas.py`/`models.py` — TBM's layering.
-- **APIs:** REST (`/api/v1`) + **OPDS 1.2**; SSE for progress/scan events.
+- **Logging:** `structlog` (console dev / JSON prod, `LOG_FORMAT`).
+- **Quality gate:** ruff (lint + format), basedpyright — **`standard` mode**,
+  not strict — pytest.
+- **API:** REST at `/api` (no version segment, no `/v1`). No OPDS
+  ([15](15-api-surface.md) — explicitly out of scope). SSE (`/api/events`)
+  for live scan/download/task progress.
 
-**Media-specific libraries** (to be pinned during implementation, per [07-image-decoding](../07-image-decoding.md)):
-- Archives: `zipfile` (CBZ), `rarfile`/`libarchive-c` (CBR/7z), `pymupdf` (PDF), `ebooklib` (EPUB).
-- Images: `pyvips` (primary decode/resize) + `Pillow`/`pillow-heif` (fallback/coverage).
-- Container sniffing: `python-magic`. Natural sort: `natsort`. Fast hashing: `xxhash`.
+Explicitly **not** present, on purpose: no auth/session layer (single
+implicit "default" user, [12](12-auth-users.md)), no OPDS, no async DB
+driver.
 
-**Background jobs:** a persisted queue is required (scans, thumbnails, imports). Decided in [08](08-task-runner.md): a **custom SQLite-backed queue + APScheduler** (broker-less), with priority + per-series group serialization (Komga's model).
+## Architecture — vertical slices, not horizontal layers
 
-## Consequences
+Each subpackage under `backend/src/` is a domain module, self-contained end
+to end: `router.py` (parse/validate, call service, return schema) →
+`service.py` (business logic, raises `LycheeError`, HTTP-agnostic) →
+`repository.py` (SQLAlchemy queries, only in modules with nontrivial query
+logic) + `models.py` (ORM) + `schema.py` (Pydantic request/response,
+singular — not `schemas.py`) + `deps.py` (FastAPI DI, where needed). Current
+domains: `catalog` (series/chapters/books — the biggest), `library`,
+`collections`, `progress`, `taxonomy`, `tasks`, `downloads`, `integrations`,
+`providers` (MangaDex client), `trackers` (AniList/MyAnimeList/MangaUpdates),
+`ingest` (scan/parse/import), `media` (AVIF encode, thumbnails, container
+handling, render cache), `fs` (server-side path browser), `core`, `health`.
 
-- Inherits TBM conventions, hooks, and developer muscle memory.
-- Async concentrated where it pays (page streaming, scanning); plain sync CRUD elsewhere — the media/scan path is the slow, I/O-bound dependency here (analogous to TBM's provider/LLM path).
-- A clean REST+OPDS API makes the frontend and third-party clients (Tachiyomi/Mihon, KOReader, OPDS readers) all "just clients".
+**Routers never raise `HTTPException` and never touch the ORM directly.**
+Services raise `LycheeError` subclasses (`core/exceptions.py`); one handler
+in `main.py` maps each to its HTTP status. Every error response has the shape
+`{"error": {"code", "message"}}`, including framework 404/405/422. API
+schemas are camelCase-on-wire via `CamelModel` (`core/schema.py`). IDs are
+12-char nanoids (`gen_id()`). List endpoints return `Page[T]` (cursor-based)
+or `OffsetPage[T]` (page/total — used only for the taxonomy admin table).
 
-## Alternatives considered (from research)
+## Media libraries actually in use
 
-- **Kotlin/Spring Boot (Komga):** the most capable reference, but heavyweight and not the house stack.
-- **Crystal/Kemal (Mango), Perl/Mojolicious (LANraragi):** niche runtimes, small ecosystems.
-- **C#/.NET (KamiYomu):** capable but not the house stack; also its LiteDB choice lacks migrations.
+Not the broad format-coverage list originally scoped — CBZ/ZIP + image
+directories cover the common case, and RAR/7z/PDF/EPUB were decided
+**not planned** ([media/containers.py](../../backend/src/media/containers.py)'s
+own module docstring says so directly):
+
+- Archives: stdlib `zipfile` only.
+- Images: `Pillow` only (native AVIF via bundled libavif) — no `pyvips`, no
+  `pillow-heif`.
+- Container-kind detection: fixed extension map, not `python-magic`
+  content-sniffing.
+- Natural sort: a hand-rolled regex (`natural_key()` in `media/containers.py`),
+  not `natsort`.
+- Fast hashing: `xxhash` (`xxh3_128`) — this one was pinned as planned, used
+  for move/restore detection during scans.
+
+## Background jobs
+
+A plain in-process `ThreadPoolExecutor` queue (`tasks/queue.py`), not a
+persisted SQLite task table or APScheduler — see [08](08-task-runner.md) for
+what actually shipped there and why.
+
+## Why this stack over the alternatives researched
+
+FastAPI + SQLAlchemy + Alembic covers async where it pays (page/event
+streaming) without forcing async everywhere, with a mature migration story
+SQLite needs. The Kotlin/Spring Boot, Crystal/Kemal, and C#/LiteDB stacks
+considered from comparable scan-and-index servers were all passed over for
+being either heavier than a solo self-hosted project needs, or (LiteDB)
+lacking real migration tooling.

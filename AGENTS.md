@@ -13,8 +13,9 @@ lychee/
 ├── frontend/   Vue 3 · TypeScript · Vite · Tailwind v4 · DaisyUI 5 · Bun — see frontend/AGENTS.md
 ├── mcp/        MCP server (agent-tool access to the library) — a client of the backend's
 │               REST API, not part of the one deployable — see mcp/AGENTS.md, notes/plan.md PART J
-├── notes/      reference research + architecture decisions (ADRs, notes/decisions/01–18);
-│               also plan.md (build-status tracker) + refactor.md (code-quality backlog)
+├── notes/      architecture decisions (ADRs, notes/decisions/01–21) grounded in the
+│               current implementation; also plan.md (build-status tracker) + refactor.md
+│               (code-quality backlog) + comparative research on adjacent projects
 └── justfile    canonical task runner — one entrypoint for db / backend / frontend / mcp
 ```
 
@@ -66,13 +67,14 @@ Design rationale — why SQLite over Postgres, the domain model and filesystem
 mapping, the scan pipeline, the task runner, image serving, tagging, metadata
 provider/mapping rules, tracker sync, the search tokenizer, title variants —
 is recorded as numbered ADRs in **[`notes/decisions/`](notes/decisions/)**
-(start at its `README.md` for the index). The **reference research** that
-informed those decisions (comparisons against Komga, LANraragi, Mango,
-KamiYomu, etc.) is one level up in `notes/`. Read the relevant ADR before
-making a structural change in that area — and note that an ADR records a
-*decision*, not necessarily current behavior; where an ADR and the code
-disagree, the code wins (backend/AGENTS.md flags one known case: the task
-runner).
+(start at its `README.md` for the index). Each ADR describes the system **as
+actually implemented** — grounded in real file paths and functions, not just
+the reasoning that led there — including calling out where an early design
+didn't survive contact with the codebase. Comparative research on adjacent
+projects (Komga, LANraragi, Mango, KamiYomu, the MangaDex API) that informed
+some of these decisions lives in sibling directories under `notes/`
+(`notes/komga/`, `notes/lanraragi/`, etc.), not in the ADRs themselves. Read
+the relevant ADR before making a structural change in that area.
 
 For **current status** — what's implemented, what's partial, what's
 deliberately not planned — check `notes/plan.md` before assuming a feature is

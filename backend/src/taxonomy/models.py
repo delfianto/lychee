@@ -9,7 +9,7 @@ series via ``series_tag``) **and** the two fixed enum groups
 ids by value.
 
 ``TagAlias`` rows are a pure ingestion/sync-key resolution aid (see
-``notes/09-tag-aliases.md``) — free text (a provider's own naming, slang,
+``notes/decisions/21-tag-aliases.md``) — free text (a provider's own naming, slang,
 abbreviations) that should resolve to an existing ``Tag`` instead of minting a
 duplicate. They're never displayed against a series; only the resolved
 ``Tag.name`` is.

@@ -1,74 +1,98 @@
 # 07 — Library scan pipeline
 
-**Status:** ✅ Accepted
+**Status:** Implemented — manual/on-demand only, no watcher or scheduler.
 
-## Context
+## What this is
 
-The capstone that ties together the hybrid folder→entity resolver ([05](05-domain-model.md)), the filename parser ([06](06-filename-parser.md)), SQLite + no-page-table ([04](04-database-sqlite.md)), and the file-identity / soft-delete strategy ([../03-file-management-sync.md]). Goal: keep `Series → Book` consistent with disk **cheaply** (skip unchanged subtrees) and **safely** (never lose reading progress or metadata when files move/rename).
+`backend/src/ingest/scanner.py`'s `scan_library()`, triggered only via
+`POST /api/libraries/{id}/scan` / `/scan-all` — there's no filesystem
+watcher and no periodic scheduler. Every scan walks the whole library root
+every time; only the **per-book** `mtime`+`size` check
+(`_reconcile_book`/`_same_mtime`, a flat 2-second tolerance) skips reopening
+a container that hasn't changed. There's no series-folder-level
+short-circuit gate.
+
+## Phases
+
+1. **Walk & resolve** (the hybrid model, [05](05-domain-model.md)):
+   `resolve_books()` finds archive files and image-only directories,
+   classifying grouping-vs-book folders. Container kind comes from a fixed
+   extension map (`.cbz`/`.zip`), not content-sniffing — no `python-magic`
+   dependency.
+2. **Filename parsing** ([06](06-filename-parser.md)): `parse()` runs over
+   path segments + filename; `order_chapters()` sorts by
+   `(volume, number_sort)` and assigns the next whole integer to any
+   chapter still missing a `number_sort` (a base-less special).
+3. **Reconcile:** for a new path, first try **restore** — match a
+   soft-deleted `Book` by `(file_size, partial_hash)`
+   (`xxh3_128` of first 64 KiB + last 64 KiB + size); if found, revive it at
+   the new path and re-apply its snapshotted reading progress
+   (`Book.restore_progress_json`, taken before soft-delete, matched back by
+   chapter `number` on restore). Otherwise insert fresh. A path missing from
+   disk gets soft-deleted (`deleted_at`) — **never hard-deleted**; hard
+   delete only happens on an explicit user-triggered purge
+   (`catalog/purge.py`, one chapter at a time, not a scheduled sweep).
+4. **`lychee.info` application** ([20](20-lychee-info-metadata.md)): if
+   present, parsed and applied — gated by a content hash
+   (`Series.metadata_file_hash`) so unchanged files aren't re-applied every
+   scan.
+5. **Post-scan:** covers are warmed for the whole library
+   (`library/service.py:_finish_scan_phases` → `warm_library_covers`); a
+   gallery library additionally enqueues a dedicated `"thumbs"` task
+   (`warm_gallery_item_thumbs`) with its own progress bar. Scan progress is
+   reported over SSE via the generic task lifecycle events
+   (`scan.started`/`.progress`/`.done`/`.failed`) — there's no per-entity
+   "series added" / "book updated" event, just the task's overall percent.
+
+## Gallery libraries: a separate two-level scan
+
+Not covered by the phases above at all — gallery-kind libraries
+(`_ingest_artist`/`_ingest_entry` in `scanner.py`) scan a two-level
+`<Artist>/<Work>/<files>` layout: each work folder becomes its own Series,
+credited to the artist (`SeriesCredit(role="artist")`), auto-grouped into a
+`Collection` named after the artist.
+
+## Identity: `partial_hash` is a restore hint, never the primary key
 
 ```
-trigger ─▶ 1 walk+resolve ─▶ 2 diff ─▶ 3 analyze ─▶ 4 order ─▶ 5 reconcile ─▶ 6 post
-          (hybrid resolver)  (cheap    (new/changed  (series-   (restore /     (thumbs,
-                              gate)     only)         level)     soft-delete)   SSE)
+partial_hash = xxh3_128(first 64 KiB ‖ last 64 KiB ‖ file_size)
 ```
 
-## Decision
+Fast, negligible real-world collision risk, used only to match a moved file
+back to its soft-deleted row. A collision just misses a restore (falls back
+to a clean insert) — it never corrupts identity, since the primary key is
+always the surrogate nanoid.
 
-### Triggers — watcher **and** periodic (both)
+## Concurrency
 
-- **Periodic full scan** per library (interval configurable; on startup; manual via API). The correctness backstop, and the only reliable option on **NFS/SMB** (Komga's documented reason for polling).
-- **Optional filesystem watcher** (`watchfiles`) per library for low-latency pickup on local disks. Debounces event bursts and enqueues a **targeted scan scoped to the affected series folder**, not the whole library.
-- Both funnel into one **idempotent** scan job (scope = whole library | one series subtree). This is LANraragi's Shinobu (watcher) + Minion (queue) split, adapted.
+One global `ThreadPoolExecutor` worker (`tasks/queue.py`, see
+[08](08-task-runner.md)) — every task of every kind (scan, download, sync,
+thumbs, local-import) runs strictly one at a time in submission order.
+There's no per-series serialization concept and no cross-series
+parallelism; it's accidental global serialization from a single worker
+thread, not an intentional per-series group scheme.
 
-### Phases
+## Not built
 
-0. **Trigger** → enqueue a scan job (full or targeted subtree).
-1. **Walk & resolve** (hybrid model, [05](05-domain-model.md)): first folder level = **Series**; recurse each series folder — archive file → **Book**, image-only folder → **loose-image Book**, folders holding archives/sub-folders are **grouping** (feed volume parsing); a book file loose under the root → **one-shot** virtual series. Skip hidden / excluded-pattern / unsupported-extension entries. Collect per book: relative path, size, mtime, container kind, and the **path segments below the series folder** (for the parser).
-2. **Diff (cheap gate → confirm):** a series folder whose signature is unchanged — `file_last_modified` with a **force-modified-time** recompute (`max(dir mtime, child mtimes)` for NFS/SMB) or a contents signature — **short-circuits the whole subtree** (Mango). Per book: `mtime + size` unchanged → skip; changed → compute `partial_hash` to confirm a *real* content change. Classify each as **unchanged / new / changed / missing**.
-3. **Analyze** (new + changed only; enqueued, **serialized per series**): detect the container **by content** (`python-magic`), not extension; read **embedded metadata** (ComicInfo.xml / EPUB OPF / PDF info) → a patch; run the **parser** ([06](06-filename-parser.md)) over path-segments + filename with **series-name subtraction**; list image entries → `page_count` (**no page rows**, [04](04-database-sqlite.md)); compute `partial_hash`. **Precedence:** embedded metadata > parser, applied only to **unlocked** fields (`locked_fields`, [05](05-domain-model.md)).
-4. **Order (series-level):** sort books by `(volume, number_sort)` with Mango's `ChapterSorter` as the tiebreak/fallback; assign decimal `number_sort` to **specials that lacked a base number** ([06](06-filename-parser.md) handoff); recompute `book_count`, choose the series cover, aggregate series metadata.
-5. **Reconcile (transactional):**
-   - **new** path → first try **restore**: match a **soft-deleted** book by `(file_size, partial_hash)`; if found, revive it at the new path, migrating **reading progress, metadata, tags, read-list membership** (Komga `tryRestore`); otherwise **insert**.
-   - **missing** (in DB, not on disk) → **soft-delete** (`deleted_at`), never hard-delete.
-   - **renamed series folder** (no content hash) → reconciled via its now-restored books; series metadata + collection membership restored by matching the stable, lock-respecting series title.
-   - keep the **FTS5** index in sync on every upsert.
-6. **Post:** enqueue **cover thumbnail** generation (async, lower priority); emit **SSE** events (scan progress; series/book added/updated/deleted) so the SPA updates live. **Trash retention** (purge soft-deleted rows older than N days) + an **auto-backup before bulk deletes** run as a separate scheduled job.
+- **No filesystem watcher, no periodic scheduler.** All scans are manual/
+  on-demand via the API — confirmed intentional, not a gap (`notes/plan.md`:
+  "auto-scheduler not planned").
+- **No content-sniffing** (`python-magic`) — container kind is
+  extension-based only.
+- **No embedded-metadata reading** (ComicInfo.xml/EPUB OPF/PDF info) — see
+  [14](14-metadata-mapping.md). `lychee.info` fills a similar role via a
+  sibling file instead of an embedded one.
+- **No explicit per-book error state** for a corrupt/unreadable archive — it
+  logs a warning and is skipped during scan; nothing is persisted on the
+  `Book` row to flag it.
+- **No scheduled trash-retention sweep** of old soft-deleted rows, no
+  auto-backup-before-bulk-delete.
 
-### Identity: `partial_hash` is an advisory restore hint, not the key
+## Why soft-delete + hash-restore over hard-delete or content-hash identity
 
-```
-partial_hash = XXH3-128( first 64 KiB ‖ last 64 KiB ‖ file_size )
-```
-
-Fast, with negligible real-world collision risk. It is used **only** as a move/rename **restore hint** — a rare collision merely misses a restore (falls back to a clean insert), it never corrupts identity. The primary key stays the surrogate id ([05](05-domain-model.md)). (Contrast LANraragi's 512 KB SHA-1 used *as the key* — rejected in [04](04-database-sqlite.md) / [../00-overview.md].)
-
-### Concurrency & transactions ([04](04-database-sqlite.md))
-
-- Scans run as **task-queue jobs, serialized per series via a group id** (Komga) — two scans of one series can't interleave, while different series parallelize up to a worker cap.
-- Writes are **batched per transaction**; SQLite **WAL + `busy_timeout`** absorb the single-writer constraint.
-- Heavy per-book work (metadata read, thumbnails) are **separate lower-priority jobs**, so the reconciliation pass stays fast.
-
-### Ingestion hardening ([../03-file-management-sync.md])
-
-- Watcher-triggered adds **wait until the file is openable and size-stable** before hashing/importing (avoids partial-write races — LANraragi).
-- A **corrupt / encrypted / unsupported** archive gives the book an explicit **error state** (Komga's `ERR_` taxonomy); the scan logs it and continues rather than failing the batch.
-
-## Consequences
-
-- Re-scans are cheap (unchanged subtrees short-circuit); large libraries rescan fast.
-- Reorganizations are safe: soft-delete + `(size, partial_hash)` restore preserve progress/metadata/tags/read-lists.
-- Correct on network shares (periodic + force-modified-time), low-latency on local disks (watcher).
-- The UI stays live via SSE; the scan stays responsive by pushing heavy work to serialized, prioritized jobs.
-
-## Follow-ups
-
-- **Task runner** — decided in [08](08-task-runner.md): custom SQLite-backed queue + APScheduler, providing the priority + per-series group serialization this pipeline assumes.
-- **Thumbnail + image + on-demand page-serving** pipeline (filesystem cache layout, streaming, ETag) → ADR 08.
-- **Metadata field mapping & lock-merge rules** (full ComicInfo/OPF) → [14](14-metadata-mapping.md).
-
-## Alternatives considered
-
-- **Watcher-only** — rejected (misses NFS/SMB, fragile on bursts).
-- **Periodic-only** (Komga, Mango) — good baseline; we add the watcher on top for local-disk latency.
-- **Hard-delete on missing** — rejected; loses reading progress on reorg. Soft-delete + trash instead.
-- **Content-hash as identity** (LANraragi) — rejected as the key; reused only as the advisory restore hint.
+Soft-delete plus `(file_size, partial_hash)` restore means reorganizing
+files on disk (renames, moves between folders) never loses reading progress
+or metadata — a hard-delete-on-missing policy would. Keeping the primary key
+a surrogate id rather than a content hash (contrast LANraragi, which uses a
+hash as the key) means a hash collision degrades to "missed a restore, did
+a clean insert" instead of corrupting identity.

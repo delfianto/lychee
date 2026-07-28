@@ -50,7 +50,7 @@ class ScanSummary:
     books_added: int = 0
     books_updated: int = 0
     books_removed: int = 0
-    # lychee.info sidecar (notes/08-metadata.md): count of newly-(re)applied files, and
+    # lychee.info sidecar (notes/decisions/20-lychee-info-metadata.md): count of newly-(re)applied files, and
     # warnings (kind mismatch, kind-inapplicable field, unknown provider/tracker key,
     # or a parse/validation failure) — surfaced via the scan task's result.
     lychee_info_applied: int = 0
@@ -347,7 +347,7 @@ def _apply_lychee_info_file(
     session: Session, series: Series, path: Path, summary: ScanSummary
 ) -> None:
     """Read a ``lychee.info`` sidecar and apply it, gated on a content hash so an
-    unchanged file costs nothing on repeat scans (notes/08-metadata.md)."""
+    unchanged file costs nothing on repeat scans (notes/decisions/20-lychee-info-metadata.md)."""
     raw = path.read_bytes()
     content_hash = xxhash.xxh3_128(raw).hexdigest()
     if series.metadata_file_hash == content_hash:
