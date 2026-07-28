@@ -16,14 +16,80 @@ provider can match. On scan, the file is parsed, strictly validated (Pydantic,
 `extra="forbid"`), and applied as if it were a manual edit — reusing [14](14-metadata-mapping.md)'s
 lock mechanism as-is.
 
+## Schema (v1, as built)
+
+`backend/src/ingest/lychee_info.py`'s `LycheeInfoFile` — a strict Pydantic model
+(`extra="forbid"` at every level), doubling as the JSON-Schema source a writer can
+validate its own output against before writing:
+
+```yaml
+schema: 1                       # required — only 1 is currently supported
+kind: manga                     # required — manga | comic | gallery
+                                 #   (mismatch vs. the owning library's kind never
+                                 #   reclassifies the series — warns, kind ignored)
+
+title: "Bloodmoon Apothecary"   # overrides the folder-derived name
+titles:                         # additional forms — union-merged by (lang, title),
+  - lang: ja                    #   never locked (ADR 18: titles are always a union)
+    type: native                # native | romanized | english | alt
+    title: "血月の薬局"
+
+description: |
+  A night-shift pharmacist discovers her new clinic sits on a ley line
+  that only the dead can find...
+
+status: ongoing                 # ongoing | completed | hiatus | cancelled
+                                 #   — manga/comic only; warns + skipped on a gallery
+year: 2023
+originCountry: kr               # ISO 3166-1 alpha-2, lowercase (pattern-validated)
+
+contentRating: suggestive       # safe | suggestive | erotica | mature
+demographic: shonen             # shonen | shojo | seinen | josei | none
+                                 #   — manga/comic only; warns + skipped on a gallery
+
+tags:                           # the 4 user-assignable taxonomy groups (ADR 10) —
+  genre: [horror, medical]      #   union-merged into Series.tags, not replaced
+  theme: [supernatural]
+  format: [doujinshi]
+  content: [gore]               # ("content" wasn't in the original design example)
+
+credits:                        # → SeriesCredit; split by role, each role replaced
+  - name: "Ha-eun Park"         #   only if that role has ≥1 entry in the file
+    role: author                # author | artist
+  - name: "Seo-yeon Kang"
+    role: artist
+
+crossovers:                     # only the FIRST entry is applied (see Decision) —
+  - series: "Some Existing Series"  # → Series.source / characters_json
+    characters: [Character A, Character B]
+
+provider:                       # site -> id; seeds a match (catalog.matching.set_match)
+  mangadex: "<provider-series-id>"
+external:                       # tracker -> id -> external_ids_json, by internal key
+  anilist: "<id>"               #   (al / mal / mu — Tracker.external_id_key)
+  myanimelist: "<id>"
+  mangaupdates: "<id>"
+
+generated:                      # provenance of the last write only, no history
+  by: "lychee-mcp"
+  model: "claude-..."
+  at: "2026-07-28T12:00:00Z"    # informational — not parsed into a datetime
+  version: 1                    # → Series.metadata_file_version (audit trail only)
+```
+
+Every field is optional except `schema`/`kind`. Any unknown top-level or nested key,
+a wrong enum value, or an unsupported `schema` version fails the **whole file** —
+strict validation is deliberate (see `08-metadata.md`), so a bad file is skipped
+(logged + counted) rather than partially misapplied.
+
 ## Decision
 
-- **Schema** (`backend/src/ingest/lychee_info.py`, `LycheeInfoFile`): schema v1 exactly
-  as specced in `08-metadata.md` — `schema`/`kind` required, everything else optional.
-  Wire fields are camelCase (`CamelModel`-based, same tool as every other API schema),
-  which happens to line up with the design doc's own YAML examples (`contentRating`,
-  `originCountry`, …) with zero translation needed. `schema_version != 1` and any
-  unknown/hallucinated field both fail the whole file, by design.
+- **Schema** (`backend/src/ingest/lychee_info.py`, `LycheeInfoFile`): schema v1 as
+  above, matching `08-metadata.md`'s spec. Wire fields are camelCase (`CamelModel`-
+  based, same tool as every other API schema), which happens to line up with the
+  design doc's own YAML examples (`contentRating`, `originCountry`, …) with zero
+  translation needed. `schema_version != 1` and any unknown/hallucinated field both
+  fail the whole file, by design.
 - **Enforcement — zero new locking logic.** `catalog.service._apply_metadata_fields` is
   the refactored-out core of the existing `PATCH /api/series/{id}` handler
   (`update_series`); `catalog.service.apply_lychee_info` builds the same
