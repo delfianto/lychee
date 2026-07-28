@@ -10,12 +10,12 @@
 - **Backend:** **feature-complete for the plan's core** — B0 conventions, B2 domain model + Alembic
   migration + seed, B3 AVIF pipeline, the full read API, ingest scan (parser + walk/diff/reconcile),
   synchronous download→AVIF pipeline + MangaDex page provider, reading-progress writes, and the
-  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **175
+  Settings/collections/taxonomy/integrations APIs, and the full MangaDex integration (PART F) + reading trackers. **273
   pytest, ruff + basedpyright clean.**
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
-  (ADR 01–20).
+  (ADR 01–21).
 - **PART H — ✅ done:** on-disk `Cover.avif` storage (canonical source + derived grid) + gallery
   artist/model two-level scan (artist folder → `SeriesCredit` + auto `Collection`). See PART H below.
 - **PART I — ✅ done:** **two-way** MangaDex account sync — local shelf/read edits push to MangaDex
@@ -26,6 +26,10 @@
   through the existing manual-edit lock mechanism (zero new precedence tier). See PART K below;
   full design in `notes/08-metadata.md`, formalized as [ADR 20](decisions/20-lychee-info-metadata.md).
   The **writer** side (an LLM agent producing these files) is PART J's MCP server — still not started.
+- **PART L — ✅ done:** tag aliases — synonym resolution for `reconcile_tags` (fixes MangaDex's
+  unrenamed `pornographic` content rating + Yaoi/Yuri-style duplicate tags) plus a renamable
+  display label for the two system taxonomy groups. See PART L below; full design in
+  `notes/09-tag-aliases.md`, formalized as [ADR 21](decisions/21-tag-aliases.md).
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -840,7 +844,8 @@ numbered volumes, and the FE has no label for `volume: null`.
       `Book.partial_hash`) — unchanged file costs nothing on rescan; a malformed
       file's hash is deliberately not stored, so it re-warns every scan until fixed.
       `Series.metadata_file_version` mirrors the file's `generated.version` (audit
-      trail only). Migration `aeaeff445c44`.
+      trail only). Now part of the single squashed initial-schema migration (see
+      PART L — migrations were re-squashed when tag_alias was added).
 - [x] **Scan wiring:** `ingest/scanner.py` reads `lychee.info` at a series' folder
       (or, for `kind=gallery`, each per-work folder — same level as `Cover.avif`);
       `ScanSummary` gained `lychee_info_applied`/`lychee_info_warnings`, surfaced as
@@ -851,6 +856,60 @@ numbered volumes, and the FE has no label for `volume: null`.
       mapping/locking/warnings, 19 cases) + `test_lychee_info_scan.py` (scan
       discovery, hash-gated re-apply, edited-file re-apply, malformed-file
       resilience, gallery per-work-folder application, 5 cases). **+24 → 261.**
+
+---
+
+# PART L — Tag aliases — ✅ done
+
+> Design: `notes/09-tag-aliases.md`. Formalized as [ADR 21](decisions/21-tag-aliases.md).
+
+- [x] **`TagAlias` model** (`taxonomy/models.py`) — id=slug, `name` display form,
+      `tag_id` FK (`ondelete="CASCADE"`), globally unique across every group.
+      `Tag.aliases` reverse relationship (`cascade="all, delete-orphan"`).
+- [x] **`reconcile_tags()` alias tier** (`catalog/metadata.py`) — matches slug,
+      then name, then alias, before falling back to creating a new tag. Fixes
+      MangaDex sync, the local importer, and `lychee.info`'s `tags:` block at once
+      (no schema change needed there — `tags:` was already free-text).
+- [x] **`resolve_tag_id()` helper** — same idea for the closed `content_rating`/
+      `demographic` enums, except an unresolved value must **not** fall back to
+      creating a row: it warns (structured log) and leaves the field untouched.
+      Wired into `apply_metadata`'s content-rating/demographic assignment,
+      replacing the old bare passthrough — closes the `decisions/10`-documented,
+      never-implemented MangaDex `pornographic`→`mature` rename.
+- [x] **Display label editability, not a new "familiar terms" field** — `Tag.id`
+      (sync key) and `Tag.name` (display label) were already independent.
+      Genre/theme/format/content tags needed **zero backend changes** (already
+      renamable, already rendered live). `content_rating`/`demographic`
+      (`system=True`) needed two fixes: `update_taxonomy()`'s system-row lock now
+      protects only `id`/`group`/deletability, not `name`; and the frontend
+      dropped its hardcoded rating/demographic label maps in favor of
+      `lib/ratingLabels.ts`, which fetches live names from `/api/taxonomy` once
+      per session (`AppShell.vue`, alongside `connectTaskStream`) with a static
+      fallback until loaded.
+- [x] **Settings surface:** `TaxonomyItemOut.aliases: list[AliasOut]`
+      (`{id, name, tagId}`) + `POST`/`DELETE /api/taxonomy/{tag_id}/aliases[/{alias_id}]`
+      (409 on a slug collision with a real tag or a differently-targeted alias;
+      re-adding the same alias→tag pair is a no-op). `ContentPanel.vue` gained
+      inline rename (click a name — the affordance didn't exist before this,
+      even for already-renamable non-system tags) and alias chips with add/remove.
+      MSW mock harness updated in parallel (`mocks/data/taxonomy.ts`, `mocks/handlers.ts`).
+- [x] **Seed data:** Ecchi→suggestive, Hentai/Pornographic/NSFW→mature,
+      Yaoi/BL→boys-love, Yuri/GL→girls-love (`taxonomy/seed.py`). Demographic
+      names updated to macron form (`Shōnen`/`Shōjo`) so the now-DB-driven
+      default doesn't regress vs. the frontend's old hardcoded strings.
+- [x] **Cleanup:** unified `catalog/metadata.py`'s `_slug()` and
+      `taxonomy/service.py`'s `_slugify()` (byte-identical duplicates) into one
+      `taxonomy/slug.py`.
+- [x] **Migrations re-squashed:** still local/pre-production, so the two
+      existing revisions were replaced with one fresh autogenerated initial-schema
+      migration including `tag_alias` — same practice as the earlier squash.
+      `alembic check`: no drift.
+- [x] **Tests:** `test_tag_aliases.py` (alias resolution in `reconcile_tags`,
+      `resolve_tag_id` slug/alias/group-mismatch cases, the MangaDex
+      `pornographic`→`mature` fix, warn-and-skip on an unresolvable rating, alias
+      CRUD + its collision rules, system-tag rename now allowed, 12 cases) +
+      `test_taxonomy_api.py` updated for the loosened rename rule. **+12 → 273.**
+      Frontend: `bun run typecheck && bun run test && bun run build` clean.
 
 ---
 
