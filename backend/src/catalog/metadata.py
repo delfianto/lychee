@@ -8,21 +8,19 @@ collections are just reassigned), and tags into the ``Tag`` taxonomy.
 
 from __future__ import annotations
 
-import re
-
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Series, SeriesCredit, TitleVariant
+from src.core.logging import get_logger
 from src.downloads.provider import SeriesMetadata
-from src.taxonomy.models import Tag
+from src.taxonomy.models import Tag, TagAlias
+from src.taxonomy.slug import slugify
+
+logger = get_logger(__name__)
 
 # MangaDex originalLanguage → ISO-3166 origin country (best-effort).
 _LANG_COUNTRY = {"ja": "jp", "ko": "kr", "zh": "cn", "zh-hk": "hk", "en": "us"}
-
-
-def _slug(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tag"
 
 
 def apply_metadata(
@@ -44,9 +42,19 @@ def apply_metadata(
     if unlocked("year"):
         series.year = meta.year
     if unlocked("content_rating") and meta.content_rating:
-        series.content_rating = meta.content_rating
+        resolved = resolve_tag_id(session, meta.content_rating, "content_rating")
+        if resolved is None:
+            logger.warning(
+                "content_rating_unresolved", series_id=series.id, raw=meta.content_rating
+            )
+        else:
+            series.content_rating = resolved
     if unlocked("demographic") and meta.demographic:
-        series.demographic = meta.demographic
+        resolved = resolve_tag_id(session, meta.demographic, "demographic")
+        if resolved is None:
+            logger.warning("demographic_unresolved", series_id=series.id, raw=meta.demographic)
+        else:
+            series.demographic = resolved
     if unlocked("origin_country") and meta.original_language:
         series.origin_country = _LANG_COUNTRY.get(meta.original_language.lower())
     if unlocked("rating"):
@@ -105,15 +113,16 @@ def _build_credits(series_id: str, meta: SeriesMetadata) -> list[SeriesCredit]:
 
 
 def reconcile_tags(session: Session, tags: list[tuple[str, str]]) -> list[Tag]:
-    """Match each (name, group) to an existing Tag (by slug or name); create if missing."""
+    """Match each (name, group) to an existing Tag (by slug, name, or alias); create if missing."""
     known = list(session.scalars(select(Tag)))
     by_slug = {tag.id: tag for tag in known}
     by_name = {tag.name.lower(): tag for tag in known}
+    by_alias = {alias.id: alias.tag for alias in session.scalars(select(TagAlias))}
     result: list[Tag] = []
     seen: set[str] = set()
     for name, group in tags:
-        slug = _slug(name)
-        tag = by_slug.get(slug) or by_name.get(name.lower())
+        slug = slugify(name)
+        tag = by_slug.get(slug) or by_name.get(name.lower()) or by_alias.get(slug)
         if tag is None:
             tag = Tag(id=slug, name=name, group=group or "genre")
             session.add(tag)
@@ -123,3 +132,20 @@ def reconcile_tags(session: Session, tags: list[tuple[str, str]]) -> list[Tag]:
             seen.add(tag.id)
             result.append(tag)
     return result
+
+
+def resolve_tag_id(session: Session, raw: str, group: str) -> str | None:
+    """Resolve free text to a canonical Tag id in ``group`` (by slug or alias).
+
+    For the closed content_rating/demographic enums: unlike ``reconcile_tags``,
+    an unresolved value must never fall back to creating a new Tag — the caller
+    is expected to warn and skip the field instead of writing an unknown value.
+    """
+    slug = slugify(raw)
+    tag = session.get(Tag, slug)
+    if tag is not None and tag.group == group:
+        return slug
+    alias = session.get(TagAlias, slug)
+    if alias is not None and alias.tag.group == group:
+        return alias.tag_id
+    return None

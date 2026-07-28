@@ -25,10 +25,13 @@ import ActivityIndicator from "../components/ActivityIndicator.vue";
 import Toaster from "../components/Toaster.vue";
 // Side-effect only: applies the persisted font size before first paint (like theme below).
 import "../lib/fontSize";
+import { ensureRatingLabelsLoaded } from "../lib/ratingLabels";
 import { useTheme } from "../lib/theme";
 
 // Open the shared background-task stream once for the whole app.
 onMounted(connectTaskStream);
+// Load live content-rating/demographic display names once for the whole app.
+onMounted(ensureRatingLabelsLoaded);
 
 const router = useRouter();
 const route = useRoute();

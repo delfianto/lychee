@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: da574a33f5a8
+Revision ID: b2b794aa5e67
 Revises: 
-Create Date: 2026-07-27 15:04:43.127668
+Create Date: 2026-07-28 17:02:41.088121
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'da574a33f5a8'
+revision = 'b2b794aa5e67'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -137,6 +137,8 @@ def upgrade() -> None:
     sa.Column('characters_json', sa.JSON(), nullable=True),
     sa.Column('locked_fields_json', sa.JSON(), nullable=True),
     sa.Column('file_last_modified', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('metadata_file_hash', sa.String(length=64), nullable=True),
+    sa.Column('metadata_file_version', sa.Integer(), nullable=True),
     sa.Column('id', sa.String(length=12), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -151,6 +153,18 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_series_library_id'), ['library_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_series_library_status'), ['library_status'], unique=False)
         batch_op.create_index(batch_op.f('ix_series_sort_title'), ['sort_title'], unique=False)
+
+    op.create_table('tag_alias',
+    sa.Column('id', sa.String(length=64), nullable=False),
+    sa.Column('name', sa.String(length=128), nullable=False),
+    sa.Column('tag_id', sa.String(length=64), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['tag_id'], ['tag.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('tag_alias', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_tag_alias_tag_id'), ['tag_id'], unique=False)
 
     op.create_table('book',
     sa.Column('series_id', sa.String(length=12), nullable=False),
@@ -351,6 +365,10 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_book_library_id'))
 
     op.drop_table('book')
+    with op.batch_alter_table('tag_alias', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_tag_alias_tag_id'))
+
+    op.drop_table('tag_alias')
     with op.batch_alter_table('series', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_series_sort_title'))
         batch_op.drop_index(batch_op.f('ix_series_library_status'))

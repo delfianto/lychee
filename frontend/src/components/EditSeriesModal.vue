@@ -4,8 +4,9 @@ import { onMounted, reactive, ref } from "vue";
 
 import { fetchTagGroups, patchSeries, type TagGroup } from "../api/queries";
 import type { SeriesUpdate } from "../api/client";
-import { contentRatingLabel, statusLabel } from "../lib/display";
+import { statusLabel } from "../lib/display";
 import { useFocusTrap } from "../lib/focusTrap";
+import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import { toast } from "../lib/toast";
 import type { ContentRating, Demographic, PublicationStatus, Series } from "../types";
 
@@ -37,14 +38,8 @@ const yearInput = ref(props.series.year?.toString() ?? "");
 
 // Option lists.
 const statuses = Object.keys(statusLabel) as PublicationStatus[];
-const ratings = Object.keys(contentRatingLabel) as ContentRating[];
-const demographics: { value: Demographic; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "shonen", label: "Shōnen" },
-  { value: "shojo", label: "Shōjo" },
-  { value: "seinen", label: "Seinen" },
-  { value: "josei", label: "Josei" },
-];
+const ratings: ContentRating[] = ["safe", "suggestive", "erotica", "mature"];
+const demographics: Demographic[] = ["none", "shonen", "shojo", "seinen", "josei"];
 // Countries limited to the set CountryFlag can render.
 const countries: { value: string; label: string }[] = [
   { value: "jp", label: "Japan" },
@@ -224,13 +219,13 @@ async function save(): Promise<void> {
           <label class="form-control">
             <span class="label-text mb-1 text-xs text-base-content/60">Content rating</span>
             <select v-model="form.contentRating" class="select select-bordered">
-              <option v-for="r in ratings" :key="r" :value="r">{{ contentRatingLabel[r] }}</option>
+              <option v-for="r in ratings" :key="r" :value="r">{{ ratingLabel(r) }}</option>
             </select>
           </label>
           <label v-if="!isGallery" class="form-control">
             <span class="label-text mb-1 text-xs text-base-content/60">Demographic</span>
             <select v-model="form.demographic" class="select select-bordered">
-              <option v-for="d in demographics" :key="d.value" :value="d.value">{{ d.label }}</option>
+              <option v-for="d in demographics" :key="d" :value="d">{{ demographicLabel(d) }}</option>
             </select>
           </label>
         </div>

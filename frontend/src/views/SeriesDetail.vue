@@ -24,7 +24,8 @@ import ErrorState from "../components/ErrorState.vue";
 import MatchSeriesModal from "../components/MatchSeriesModal.vue";
 import SeriesDescription from "../components/SeriesDescription.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
-import { contentRatingClass, contentRatingLabel, statusColor } from "../lib/display";
+import { contentRatingClass, statusColor } from "../lib/display";
+import { ratingLabel } from "../lib/ratingLabels";
 import { createStaleGuard } from "../lib/staleGuard";
 import { toast } from "../lib/toast";
 import type { LibraryStatus, Series, VolumeGroup } from "../types";
@@ -291,7 +292,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 <span class="font-medium text-base-content/80">{{ series.rating.toFixed(2) }}</span>
               </span>
               <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
-                {{ contentRatingLabel[series.contentRating] }}
+                {{ ratingLabel(series.contentRating) }}
               </span>
             </div>
           </div>

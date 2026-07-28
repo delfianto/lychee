@@ -21,7 +21,8 @@ describe("FilterPanel", () => {
   it("emits facet toggles instead of mutating the filters prop", async () => {
     const wrapper = mount(FilterPanel, { props: { filters: emptyFilters() } });
 
-    await wrapper.findAll("button.capitalize")[0]!.trigger("click"); // first content-rating button
+    const safeButton = wrapper.findAll("button").find((b) => b.text() === "Safe");
+    await safeButton!.trigger("click"); // first content-rating button
     expect(wrapper.emitted("toggle-rating")).toEqual([["safe"]]);
     // The component only ever displays what it's given via props — it must not have
     // mutated the filters object it was handed (that's the parent's job, on the event).

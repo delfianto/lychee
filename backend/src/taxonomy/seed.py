@@ -17,7 +17,8 @@ from collections.abc import Iterator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.taxonomy.models import Tag
+from src.taxonomy.models import Tag, TagAlias
+from src.taxonomy.slug import slugify
 
 # (slug, display name)
 _GENRES = [
@@ -107,10 +108,24 @@ _CONTENT_RATINGS = [
     ("mature", "Mature"),
 ]
 _DEMOGRAPHICS = [
-    ("shonen", "Shonen"),
-    ("shojo", "Shojo"),
+    ("shonen", "Shōnen"),
+    ("shojo", "Shōjo"),
     ("seinen", "Seinen"),
     ("josei", "Josei"),
+]
+# Free-text synonyms that resolve to a canonical tag above (see
+# notes/09-tag-aliases.md) — colloquial slang, abbreviations, and MangaDex's
+# own raw content-rating value, which lychee renames to "mature".
+# (display name, canonical tag id)
+_ALIASES = [
+    ("Ecchi", "suggestive"),
+    ("Hentai", "mature"),
+    ("Pornographic", "mature"),  # MangaDex's own raw contentRating value
+    ("NSFW", "mature"),
+    ("Yaoi", "boys-love"),
+    ("BL", "boys-love"),
+    ("Yuri", "girls-love"),
+    ("GL", "girls-love"),
 ]
 
 
@@ -131,12 +146,22 @@ def _rows() -> Iterator[tuple[str, str, str, bool]]:
 
 
 def seed_taxonomy(session: Session) -> int:
-    """Insert any missing taxonomy rows. Returns the number added."""
+    """Insert any missing taxonomy rows (tags, then aliases). Returns the number added."""
     existing = set(session.scalars(select(Tag.id)).all())
     added = 0
     for slug, name, group, system in _rows():
         if slug in existing:
             continue
         session.add(Tag(id=slug, name=name, group=group, system=system, enabled=True))
+        existing.add(slug)
+        added += 1
+
+    existing_aliases = set(session.scalars(select(TagAlias.id)).all())
+    for name, tag_id in _ALIASES:
+        slug = slugify(name)
+        if slug in existing_aliases or slug in existing:
+            continue
+        session.add(TagAlias(id=slug, name=name, tag_id=tag_id))
+        existing_aliases.add(slug)
         added += 1
     return added

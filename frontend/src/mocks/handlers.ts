@@ -30,9 +30,12 @@ import {
 import { downloadsDb, nextDownloadId } from "./data/downloads";
 import { seriesCatalog } from "./data/series";
 import {
+  addAliasToDef,
   addTaxonomyDef,
   buildTaxonomyItems,
+  removeAliasFromDef,
   removeTaxonomyDef,
+  renameTaxonomyDef,
   setTaxonomyEnabled,
   tag as taxonomyTag,
 } from "./data/taxonomy";
@@ -482,9 +485,9 @@ export const handlers = [
   http.post("/api/taxonomy", async ({ request }) => {
     const body = (await request.json()) as components["schemas"]["TaxonomyCreate"];
     const id = `${body.category}-${slugify(body.name)}`;
-    addTaxonomyDef({ id, name: body.name, category: body.category, system: false });
+    addTaxonomyDef({ id, name: body.name, category: body.category, system: false, aliases: [] });
     await delay(150);
-    return HttpResponse.json({ id, name: body.name, category: body.category, uses: 0, enabled: true, system: false }, { status: 201 });
+    return HttpResponse.json({ id, name: body.name, category: body.category, uses: 0, enabled: true, system: false, aliases: [] }, { status: 201 });
   }),
 
   http.post("/api/taxonomy/refresh", async () => {
@@ -495,7 +498,7 @@ export const handlers = [
       result: { newTags: 1 },
       onDone: () => {
         if (!buildTaxonomyItems(seriesCatalog).some((t) => t.id === "theme-urban-fantasy")) {
-          addTaxonomyDef({ id: "theme-urban-fantasy", name: "Urban Fantasy", category: "theme", system: false });
+          addTaxonomyDef({ id: "theme-urban-fantasy", name: "Urban Fantasy", category: "theme", system: false, aliases: [] });
         }
       },
     });
@@ -506,10 +509,27 @@ export const handlers = [
     const id = params.tag_id as string;
     const body = (await request.json()) as components["schemas"]["TaxonomyUpdate"];
     if (body.enabled !== undefined && body.enabled !== null) setTaxonomyEnabled(id, body.enabled);
+    if (body.name !== undefined && body.name !== null) renameTaxonomyDef(id, body.name);
     await delay(100);
     const item = buildTaxonomyItems(seriesCatalog).find((t) => t.id === id);
     if (!item) return apiError(404, "tag_not_found", "Tag not found.");
     return HttpResponse.json(item);
+  }),
+
+  http.post("/api/taxonomy/:tag_id/aliases", async ({ params, request }) => {
+    const tagId = params.tag_id as string;
+    const body = (await request.json()) as components["schemas"]["AliasCreate"];
+    const alias = addAliasToDef(tagId, body.name);
+    if (!alias) return apiError(404, "tag_not_found", "Tag not found.");
+    await delay(100);
+    return HttpResponse.json({ id: alias.id, name: alias.name, tagId }, { status: 201 });
+  }),
+
+  http.delete("/api/taxonomy/:tag_id/aliases/:alias_id", async ({ params }) => {
+    const removed = removeAliasFromDef(params.tag_id as string, params.alias_id as string);
+    if (!removed) return apiError(404, "alias_not_found", "Alias not found.");
+    await delay(100);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.delete("/api/taxonomy/:tag_id", async ({ params }) => {

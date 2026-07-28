@@ -8,7 +8,13 @@ from src.core.persistence.database import DbSession
 from src.core.schema import OffsetPage
 from src.tasks.schema import TaskOut
 from src.taxonomy import service
-from src.taxonomy.schema import TaxonomyCreate, TaxonomyItemOut, TaxonomyUpdate
+from src.taxonomy.schema import (
+    AliasCreate,
+    AliasOut,
+    TaxonomyCreate,
+    TaxonomyItemOut,
+    TaxonomyUpdate,
+)
 
 router = APIRouter(prefix="/api", tags=["taxonomy"])
 
@@ -43,4 +49,15 @@ def update_taxonomy(db: DbSession, tag_id: str, data: TaxonomyUpdate) -> Taxonom
 @router.delete("/taxonomy/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_taxonomy(db: DbSession, tag_id: str) -> Response:
     service.delete_taxonomy(db, tag_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/taxonomy/{tag_id}/aliases", status_code=status.HTTP_201_CREATED)
+def add_alias(db: DbSession, tag_id: str, data: AliasCreate) -> AliasOut:
+    return service.add_alias(db, tag_id, data)
+
+
+@router.delete("/taxonomy/{tag_id}/aliases/{alias_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_alias(db: DbSession, tag_id: str, alias_id: str) -> Response:
+    service.remove_alias(db, tag_id, alias_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

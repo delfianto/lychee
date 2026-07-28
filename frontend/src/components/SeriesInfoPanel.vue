@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { contentRatingClass, contentRatingLabel } from "../lib/display";
+import { contentRatingClass } from "../lib/display";
+import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import type { Series } from "../types";
 
 defineProps<{ series: Series }>();
@@ -27,12 +28,12 @@ const trackers = [
         </div>
         <div>
           <div class="text-xs text-base-content/60">Demographic</div>
-          <span class="badge badge-sm badge-outline capitalize">{{ series.demographic }}</span>
+          <span class="badge badge-sm badge-outline">{{ demographicLabel(series.demographic) }}</span>
         </div>
         <div>
           <div class="text-xs text-base-content/60">Content rating</div>
           <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
-            {{ contentRatingLabel[series.contentRating] }}
+            {{ ratingLabel(series.contentRating) }}
           </span>
         </div>
         <div>
