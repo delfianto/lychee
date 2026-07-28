@@ -26,6 +26,7 @@ Grounded in the reference research one level up ([`../00-overview.md`](../00-ove
 | [18](18-title-variants.md) | Title & name variants — language-tagged titles (native/romanized/English) | ✅ Accepted |
 | [19](19-avif-storage.md) | AVIF as the served image format (`Cover.avif`, content-aware presets) | ✅ Accepted |
 | [20](20-lychee-info-metadata.md) | `lychee.info` — native YAML metadata sidecar (LLM-authored) | ✅ Accepted |
+| [21](21-tag-aliases.md) | Tag aliases — synonym resolution + a renamable display label | ✅ Accepted |
 
 **Status legend:** ✅ Accepted · 🟡 Proposed · ⚪ Superseded
 
