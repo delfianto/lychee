@@ -86,7 +86,7 @@ const FORMATS = [
 ] as const;
 
 const CONTENT = ["gore", "sexual-violence"] as const;
-export const CONTENT_RATINGS = ["safe", "suggestive", "erotica", "mature"] as const;
+export const CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic", "explicit"] as const;
 export const DEMOGRAPHICS = ["shonen", "shojo", "seinen", "josei"] as const;
 
 const DISPLAY_OVERRIDES: Record<string, string> = {

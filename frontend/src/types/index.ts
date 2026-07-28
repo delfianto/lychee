@@ -2,7 +2,11 @@
 // superseded by the generated OpenAPI client (src/api/schema.d.ts) once the
 // backend exposes the endpoints; for now they type the mock data.
 
-export type ContentRating = "safe" | "suggestive" | "erotica" | "mature";
+// The top tier forks by kind: "pornographic" is MangaDex's own term, used
+// verbatim for MangaDex-synced manga/comic; "explicit" is gallery's own top
+// tier (galleries never sync with MangaDex) — see
+// notes/decisions/10-tagging-content-rating.md.
+export type ContentRating = "safe" | "suggestive" | "erotica" | "pornographic" | "explicit";
 export type Demographic = "shonen" | "shojo" | "seinen" | "josei" | "none";
 export type PublicationStatus = "ongoing" | "completed" | "hiatus" | "cancelled";
 

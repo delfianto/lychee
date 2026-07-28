@@ -328,7 +328,7 @@ const FLAGSHIPS: SeriesSeed[] = [
     authors: ["Emi Sato"],
     artists: ["Emi Sato"],
     status: "completed",
-    contentRating: "mature",
+    contentRating: "pornographic",
     demographic: "josei",
     tagIds: ["genre-psychological", "genre-romance", "genre-tragedy"],
     year: 2015,
@@ -479,7 +479,7 @@ const FLAGSHIPS: SeriesSeed[] = [
     authors: ["Jordan Reyes"],
     artists: ["Taylor Voss"],
     status: "completed",
-    contentRating: "mature",
+    contentRating: "pornographic",
     demographic: "none",
     tagIds: ["genre-crime", "genre-thriller"],
     year: 2018,
@@ -555,7 +555,7 @@ const FLAGSHIPS: SeriesSeed[] = [
     authors: ["Various Artists"],
     artists: ["Various Artists"],
     status: "ongoing",
-    contentRating: "mature",
+    contentRating: "explicit",
     demographic: "none",
     tagIds: ["theme-illustration", "theme-fan-art"],
     year: 2023,
@@ -717,7 +717,7 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
     const contentRating = weighted<ContentRating>(rng, [
       [45, "safe"],
       [32, "suggestive"],
-      [15, "mature"],
+      [15, "pornographic"],
       [8, "erotica"],
     ]);
     const demographic: Demographic =
@@ -731,7 +731,7 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
       ...pickN(rng, GENRE_IDS, randInt(rng, 2, 3)),
       ...pickN(rng, THEME_IDS, randInt(rng, 1, 3)),
       ...(chance(rng, 0.3) ? pickN(rng, FORMAT_IDS, 1) : []),
-      ...(chance(rng, 0.25) && (contentRating === "mature" || contentRating === "erotica")
+      ...(chance(rng, 0.25) && (contentRating === "pornographic" || contentRating === "erotica")
         ? pickN(rng, CONTENT_IDS, 1)
         : []),
     ];
@@ -790,7 +790,7 @@ function generateFillerGalleries(count: number, startAt: number, used: Set<strin
     const contentRating = weighted<ContentRating>(rng, [
       [20, "safe"],
       [35, "suggestive"],
-      [25, "mature"],
+      [25, "explicit"],
       [20, "erotica"],
     ]);
     const tagIds = pickN(rng, THEME_IDS.filter((t) => ["theme-illustration", "theme-fan-art", "theme-cosplay", "theme-official"].includes(t)), 1).concat(

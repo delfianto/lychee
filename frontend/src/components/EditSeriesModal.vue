@@ -38,7 +38,11 @@ const yearInput = ref(props.series.year?.toString() ?? "");
 
 // Option lists.
 const statuses = Object.keys(statusLabel) as PublicationStatus[];
-const ratings: ContentRating[] = ["safe", "suggestive", "erotica", "mature"];
+// Top tier follows kind: MangaDex's own term for synced manga/comic, lychee's
+// own "explicit" for galleries (which never sync with MangaDex).
+const ratings: ContentRating[] = isGallery
+  ? ["safe", "suggestive", "erotica", "explicit"]
+  : ["safe", "suggestive", "erotica", "pornographic"];
 const demographics: Demographic[] = ["none", "shonen", "shojo", "seinen", "josei"];
 // Countries limited to the set CountryFlag can render.
 const countries: { value: string; label: string }[] = [

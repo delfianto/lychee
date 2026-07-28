@@ -188,7 +188,7 @@ def test_patch_series_edits_metadata(client: TestClient, db_session: Session) ->
             "originCountry": "JP",
             "year": 1989,
             "status": "hiatus",
-            "contentRating": "mature",
+            "contentRating": "pornographic",
             "demographic": "seinen",
             "tagIds": ["romance"],
         },
@@ -203,7 +203,7 @@ def test_patch_series_edits_metadata(client: TestClient, db_session: Session) ->
     assert got["originCountry"] == "jp"  # normalized to lowercase alpha-2
     assert got["year"] == 1989
     assert got["status"] == "hiatus"
-    assert got["contentRating"] == "mature"
+    assert got["contentRating"] == "pornographic"
     assert got["demographic"] == "seinen"
     assert [t["id"] for t in got["tags"]] == ["romance"]
 
