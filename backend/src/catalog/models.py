@@ -75,7 +75,7 @@ class Series(BaseModel):
 
     # ongoing | completed | hiatus | cancelled
     status: Mapped[str] = mapped_column(String(16), default="ongoing", nullable=False)
-    # safe | suggestive | erotica | mature (system Tag ids)
+    # safe | suggestive | erotica | pornographic (manga/comic) | explicit (gallery) (system Tag ids)
     content_rating: Mapped[str] = mapped_column(
         String(16), default="safe", index=True, nullable=False
     )
@@ -122,7 +122,7 @@ class Series(BaseModel):
         DateTime(timezone=True), nullable=True
     )
 
-    # lychee.info sidecar (notes/08-metadata.md): content hash of the last-applied file,
+    # lychee.info sidecar (notes/decisions/20-lychee-info-metadata.md): content hash of the last-applied file,
     # so a re-scan only re-applies it when the on-disk file actually changed.
     metadata_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # The file's own self-reported ``generated.version`` — an audit trail, not used for

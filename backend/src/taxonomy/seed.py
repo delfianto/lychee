@@ -100,12 +100,16 @@ _CONTENT = [
     ("gore", "Gore"),
     ("sexual-violence", "Sexual Violence"),
 ]
-# Fixed enum groups (system rows).
+# Fixed enum groups (system rows). The top tier forks by kind: MangaDex-synced
+# manga/comic use MangaDex's own term verbatim ("pornographic"); galleries never
+# sync with MangaDex, so they get their own top tier ("explicit") instead of
+# borrowing MangaDex's word for it. See notes/decisions/10-tagging-content-rating.md.
 _CONTENT_RATINGS = [
     ("safe", "Safe"),
     ("suggestive", "Suggestive"),
     ("erotica", "Erotica"),
-    ("mature", "Mature"),
+    ("pornographic", "Pornographic"),
+    ("explicit", "Explicit"),
 ]
 _DEMOGRAPHICS = [
     ("shonen", "Shōnen"),
@@ -114,14 +118,14 @@ _DEMOGRAPHICS = [
     ("josei", "Josei"),
 ]
 # Free-text synonyms that resolve to a canonical tag above (see
-# notes/09-tag-aliases.md) — colloquial slang, abbreviations, and MangaDex's
-# own raw content-rating value, which lychee renames to "mature".
+# notes/decisions/21-tag-aliases.md) — colloquial slang and abbreviations. MangaDex's own
+# raw contentRating value ("pornographic") needs no alias any more: it slugifies
+# straight to the canonical tag id (see notes/decisions/21-tag-aliases.md).
 # (display name, canonical tag id)
 _ALIASES = [
     ("Ecchi", "suggestive"),
-    ("Hentai", "mature"),
-    ("Pornographic", "mature"),  # MangaDex's own raw contentRating value
-    ("NSFW", "mature"),
+    ("Hentai", "pornographic"),
+    ("NSFW", "pornographic"),
     ("Yaoi", "boys-love"),
     ("BL", "boys-love"),
     ("Yuri", "girls-love"),

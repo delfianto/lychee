@@ -1,4 +1,4 @@
-"""lychee.info sidecar: schema/parser validation + apply_lychee_info mapping (notes/08-metadata.md)."""
+"""lychee.info sidecar: schema/parser validation + apply_lychee_info mapping (notes/decisions/20-lychee-info-metadata.md)."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ title: "Real Title"
 description: "desc"
 year: 2020
 status: completed
-contentRating: mature
+contentRating: pornographic
 demographic: seinen
 originCountry: jp
 """)
@@ -121,7 +121,7 @@ originCountry: jp
     assert series.description == "desc"
     assert series.year == 2020
     assert series.status == "completed"
-    assert series.content_rating == "mature"
+    assert series.content_rating == "pornographic"
     assert series.demographic == "seinen"
     assert series.origin_country == "jp"
     locked = set(series.locked_fields_json or [])

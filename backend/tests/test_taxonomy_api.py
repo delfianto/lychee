@@ -8,7 +8,7 @@ from tests.support import make_series
 
 def test_list_includes_system_and_filters(client: TestClient) -> None:
     page = client.get("/api/taxonomy", params={"type": "content_rating"}).json()
-    assert page["total"] == 4
+    assert page["total"] == 5
     assert all(item["category"] == "content_rating" for item in page["items"])
     assert all(item["system"] for item in page["items"])
 
@@ -17,7 +17,7 @@ def test_list_includes_system_and_filters(client: TestClient) -> None:
 
 
 def test_uses_count(client: TestClient, db_session: Session) -> None:
-    make_series(db_session, title="A", tag_ids=["action"], content_rating="mature")
+    make_series(db_session, title="A", tag_ids=["action"], content_rating="pornographic")
     make_series(db_session, title="B", tag_ids=["action"], content_rating="safe")
     db_session.commit()
 
@@ -25,7 +25,7 @@ def test_uses_count(client: TestClient, db_session: Session) -> None:
         i["id"]: i for i in client.get("/api/taxonomy", params={"pageSize": 100}).json()["items"]
     }
     assert by_id["action"]["uses"] == 2
-    assert by_id["mature"]["uses"] == 1
+    assert by_id["pornographic"]["uses"] == 1
 
 
 def test_create_update_delete(client: TestClient) -> None:
@@ -42,7 +42,7 @@ def test_create_update_delete(client: TestClient) -> None:
 
 
 def test_system_rows_are_protected(client: TestClient) -> None:
-    # id/deletability are locked; the display name is not — see notes/09-tag-aliases.md
+    # id/deletability are locked; the display name is not — see notes/decisions/21-tag-aliases.md
     # (sync key vs. display label) and test_tag_aliases.py for the rename case in detail.
     assert client.delete("/api/taxonomy/safe").status_code == 400
     # enabling/disabling a system row is allowed

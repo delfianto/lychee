@@ -1,6 +1,6 @@
 """``lychee.info`` — the native YAML metadata sidecar format (schema v1).
 
-Design doc: ``notes/08-metadata.md``. Written by an LLM agent (``mcp/``), read on
+Design doc: ``notes/decisions/20-lychee-info-metadata.md``. Written by an LLM agent (``mcp/``), read on
 scan. This module owns the strict schema (the same Pydantic tool used everywhere
 else in the backend — it doubles as a JSON-Schema source for whatever writes
 these files) and pure YAML parsing/validation. Applying a parsed file onto a
@@ -81,7 +81,7 @@ class SidecarTags(_Strict):
 
 
 class LycheeInfoFile(_Strict):
-    """Schema v1 of ``lychee.info`` — see ``notes/08-metadata.md`` for the full spec."""
+    """Schema v1 of ``lychee.info`` — see ``notes/decisions/20-lychee-info-metadata.md`` for the full spec."""
 
     schema_version: int = Field(alias="schema")
     kind: Literal["manga", "comic", "gallery"]
@@ -94,7 +94,9 @@ class LycheeInfoFile(_Strict):
     year: int | None = None
     origin_country: str | None = Field(default=None, pattern=r"^[a-z]{2}$")
 
-    content_rating: Literal["safe", "suggestive", "erotica", "mature"] | None = None
+    content_rating: Literal["safe", "suggestive", "erotica", "pornographic", "explicit"] | None = (
+        None
+    )
     demographic: Literal["shonen", "shojo", "seinen", "josei", "none"] | None = None
 
     tags: SidecarTags | None = None

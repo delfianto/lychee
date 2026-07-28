@@ -16,7 +16,9 @@ const emit = defineEmits<{
   "toggle-read-state": [value: string];
 }>();
 
-const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "mature"];
+// All five: manga/comic use "pornographic" (MangaDex's own term), galleries use
+// their own "explicit" top tier — a mixed-kind browse view can show either.
+const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "pornographic", "explicit"];
 const demographicOptions: Demographic[] = ["shonen", "shojo", "seinen", "josei"];
 const statusOptions: PublicationStatus[] = ["ongoing", "completed", "hiatus", "cancelled"];
 const readStateOptions: { value: string; label: string }[] = [

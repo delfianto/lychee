@@ -30,9 +30,9 @@ def test_seed_populates_expected_rows(tmp_path: Path) -> None:
         session.commit()
 
         # Fixed enum groups are exact and flagged system.
-        assert _count(session, Tag, Tag.group == "content_rating") == 4
+        assert _count(session, Tag, Tag.group == "content_rating") == 5
         assert _count(session, Tag, Tag.group == "demographic") == 4
-        assert _count(session, Tag, Tag.system.is_(True)) == 8
+        assert _count(session, Tag, Tag.system.is_(True)) == 9
         # The four series-linked groups are all seeded.
         for group in ("genre", "theme", "format", "content"):
             assert _count(session, Tag, Tag.group == group) > 0

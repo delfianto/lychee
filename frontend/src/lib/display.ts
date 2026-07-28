@@ -24,12 +24,14 @@ export const contentRatingClass: Record<ContentRating, string> = {
   safe: "badge-ghost",
   suggestive: "badge-warning",
   erotica: "badge-accent",
-  mature: "badge-error",
+  pornographic: "badge-error",
+  explicit: "badge-error",
 };
 
 export const contentRatingLabel: Record<ContentRating, string> = {
   safe: "Safe",
   suggestive: "Suggestive",
   erotica: "Erotica",
-  mature: "Mature",
+  pornographic: "Pornographic",
+  explicit: "Explicit",
 };

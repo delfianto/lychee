@@ -1,8 +1,8 @@
 // Reactive content-rating/demographic display labels, sourced from the live
 // taxonomy so a rename in Settings → Content (e.g. "Mature" → "Hentai") shows
 // up everywhere a rating/demographic badge is rendered — not just once the
-// page happens to reload. See notes/09-tag-aliases.md ("Display label
-// editability"): the sync key (Tag.id, e.g. "mature") never changes; only the
+// page happens to reload. See notes/decisions/21-tag-aliases.md ("Display label
+// editability"): the sync key (Tag.id, e.g. "pornographic") never changes; only the
 // display label does, and that's what this module resolves.
 //
 // Falls back to the static defaults in display.ts until the fetch resolves

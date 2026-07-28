@@ -54,7 +54,7 @@ _LIBRARY_STATUSES = {
 
 # Allowed values for the enum-like metadata fields (mirrors the model comments).
 _PUB_STATUSES = {"ongoing", "completed", "hiatus", "cancelled"}
-_CONTENT_RATINGS = {"safe", "suggestive", "erotica", "mature"}
+_CONTENT_RATINGS = {"safe", "suggestive", "erotica", "pornographic", "explicit"}
 _DEMOGRAPHICS = {"shonen", "shojo", "seinen", "josei", "none"}
 
 _MAX_LIMIT = 100
@@ -324,7 +324,7 @@ _EXTERNAL_TRACKER_KEYS = {"anilist": "al", "myanimelist": "mal", "mangaupdates":
 
 
 def apply_lychee_info(session: Session, series: Series, info: LycheeInfoFile) -> list[str]:
-    """Apply a parsed ``lychee.info`` sidecar (notes/08-metadata.md) to ``series``.
+    """Apply a parsed ``lychee.info`` sidecar (notes/decisions/20-lychee-info-metadata.md) to ``series``.
 
     Builds a ``SeriesUpdate``-shaped ``fields`` dict for the scalar/credit/title
     fields and runs it through the same ``_apply_metadata_fields`` the
