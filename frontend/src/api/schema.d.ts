@@ -1732,6 +1732,8 @@ export interface components {
             artists?: string[] | null;
             /** Tagids */
             tagIds?: string[] | null;
+            /** Titles */
+            titles?: components["schemas"]["TitleVariantIn"][] | null;
             /** Source */
             source?: string | null;
             /** Characters */
@@ -1804,6 +1806,18 @@ export interface components {
             name?: string | null;
             /** Enabled */
             enabled?: boolean | null;
+        };
+        /**
+         * TitleVariantIn
+         * @description An additional title form (ADR 18) — language-tagged, e.g. native/romanized.
+         */
+        TitleVariantIn: {
+            /** Language */
+            language: string;
+            /** Varianttype */
+            variantType: string;
+            /** Title */
+            title: string;
         };
         /** TrackerAuthUrl */
         TrackerAuthUrl: {

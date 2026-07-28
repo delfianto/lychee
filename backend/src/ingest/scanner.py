@@ -17,7 +17,7 @@ planned — CBZ + image directories cover the common cases.)
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,10 +26,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from src.catalog.models import Book, Chapter, Library, Series, SeriesCredit
+from src.catalog.service import apply_lychee_info
 from src.collections.models import Collection, CollectionSeries
 from src.core.exceptions import BadRequestError, LycheeError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
+from src.ingest.lychee_info import LYCHEE_INFO_FILENAME, LycheeInfoParseError, parse_lychee_info
 from src.ingest.parser import parse
 from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
@@ -48,6 +50,11 @@ class ScanSummary:
     books_added: int = 0
     books_updated: int = 0
     books_removed: int = 0
+    # lychee.info sidecar (notes/08-metadata.md): count of newly-(re)applied files, and
+    # warnings (kind mismatch, kind-inapplicable field, unknown provider/tracker key,
+    # or a parse/validation failure) — surfaced via the scan task's result.
+    lychee_info_applied: int = 0
+    lychee_info_warnings: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -243,6 +250,7 @@ def _ingest_entry(
         seen=seen,
         summary=summary,
         artist=artist,
+        series_dir=entry if entry.is_dir() else None,
     )
 
 
@@ -281,6 +289,7 @@ def _ingest_series(
     seen: set[str],
     summary: ScanSummary,
     artist: str | None = None,
+    series_dir: Path | None = None,
 ) -> None:
     kind = _series_kind(library)
     # Match on the folder-derived path (stable identity), not the title — provider
@@ -312,6 +321,11 @@ def _ingest_series(
             series.title = title
             series.sort_title = title.casefold()
 
+    if series_dir is not None:
+        info_path = series_dir / LYCHEE_INFO_FILENAME
+        if info_path.is_file():
+            _apply_lychee_info_file(session, series, info_path, summary)
+
     chapters: list[Chapter] = []
     for candidate in candidates:
         book = _reconcile_book(session, library, series, candidate, existing, seen, summary)
@@ -327,6 +341,30 @@ def _ingest_series(
 
     if artist:
         _credit_artist(session, series, artist)
+
+
+def _apply_lychee_info_file(
+    session: Session, series: Series, path: Path, summary: ScanSummary
+) -> None:
+    """Read a ``lychee.info`` sidecar and apply it, gated on a content hash so an
+    unchanged file costs nothing on repeat scans (notes/08-metadata.md)."""
+    raw = path.read_bytes()
+    content_hash = xxhash.xxh3_128(raw).hexdigest()
+    if series.metadata_file_hash == content_hash:
+        return
+    try:
+        info = parse_lychee_info(raw)
+    except LycheeInfoParseError as exc:
+        logger.warning("lychee_info_invalid", path=str(path), error=str(exc))
+        summary.lychee_info_warnings.append({"path": str(path), "reason": str(exc)})
+        return  # don't store the hash — retry (and re-warn) every scan until fixed
+
+    warnings = apply_lychee_info(session, series, info)
+    series.metadata_file_hash = content_hash
+    summary.lychee_info_applied += 1
+    for reason in warnings:
+        logger.warning("lychee_info_warning", path=str(path), reason=reason)
+        summary.lychee_info_warnings.append({"path": str(path), "reason": reason})
 
 
 def _credit_artist(session: Session, series: Series, artist: str) -> None:

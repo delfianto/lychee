@@ -83,7 +83,14 @@ def test_scan_is_idempotent(client: TestClient, tmp_path: Path) -> None:
     library_id, _ = _create_and_scan(client, root)
 
     again = _scan(client, library_id)
-    assert again == {"seriesAdded": 0, "booksAdded": 0, "booksUpdated": 0, "booksRemoved": 0}
+    assert again == {
+        "seriesAdded": 0,
+        "booksAdded": 0,
+        "booksUpdated": 0,
+        "booksRemoved": 0,
+        "lycheeInfoApplied": 0,
+        "lycheeInfoWarnings": [],
+    }
 
 
 def test_scan_soft_deletes_missing(client: TestClient, tmp_path: Path) -> None:

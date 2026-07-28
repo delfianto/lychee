@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -78,12 +79,14 @@ def delete_library(session: Session, library_id: str) -> None:
     session.commit()
 
 
-def _summary_dict(summary: ScanSummary) -> dict[str, int]:
+def _summary_dict(summary: ScanSummary) -> dict[str, Any]:
     return {
         "seriesAdded": summary.series_added,
         "booksAdded": summary.books_added,
         "booksUpdated": summary.books_updated,
         "booksRemoved": summary.books_removed,
+        "lycheeInfoApplied": summary.lychee_info_applied,
+        "lycheeInfoWarnings": summary.lychee_info_warnings,
     }
 
 
@@ -142,7 +145,7 @@ def _finish_scan_phases(
 
 
 def _scan_one_work(library_id: str, storage_root: Path) -> Work:
-    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, Any]:
         library = _get(session, library_id)
         summary = scan_library(session, library, on_progress=on_progress)
         _finish_scan_phases(session, library, storage_root, on_progress)
@@ -152,7 +155,7 @@ def _scan_one_work(library_id: str, storage_root: Path) -> Work:
 
 
 def _scan_all_work(storage_root: Path) -> Work:
-    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
+    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, Any]:
         total = ScanSummary()
         libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
         for index, library in enumerate(libraries, start=1):
@@ -161,6 +164,8 @@ def _scan_all_work(storage_root: Path) -> Work:
             total.books_added += summary.books_added
             total.books_updated += summary.books_updated
             total.books_removed += summary.books_removed
+            total.lychee_info_applied += summary.lychee_info_applied
+            total.lychee_info_warnings.extend(summary.lychee_info_warnings)
             _finish_scan_phases(session, library, storage_root)
             on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
         return _summary_dict(total)

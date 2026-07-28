@@ -24,6 +24,8 @@ Grounded in the reference research one level up ([`../00-overview.md`](../00-ove
 | [16](16-tracker-sync.md) | Read-status tracker sync (AniList/MAL/Kitsu/MangaUpdates/MangaDex) | ✅ Accepted |
 | [17](17-search-fts.md) | Full-text search tokenizer — FTS5 `trigram` (CJK + substring) | ✅ Accepted |
 | [18](18-title-variants.md) | Title & name variants — language-tagged titles (native/romanized/English) | ✅ Accepted |
+| [19](19-avif-storage.md) | AVIF as the served image format (`Cover.avif`, content-aware presets) | ✅ Accepted |
+| [20](20-lychee-info-metadata.md) | `lychee.info` — native YAML metadata sidecar (LLM-authored) | ✅ Accepted |
 
 **Status legend:** ✅ Accepted · 🟡 Proposed · ⚪ Superseded
 

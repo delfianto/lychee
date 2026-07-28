@@ -122,6 +122,13 @@ class Series(BaseModel):
         DateTime(timezone=True), nullable=True
     )
 
+    # lychee.info sidecar (notes/08-metadata.md): content hash of the last-applied file,
+    # so a re-scan only re-applies it when the on-disk file actually changed.
+    metadata_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The file's own self-reported ``generated.version`` — an audit trail, not used for
+    # re-apply gating (that's metadata_file_hash).
+    metadata_file_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     library: Mapped[Library] = relationship(back_populates="series")
     credits: Mapped[list[SeriesCredit]] = relationship(
         back_populates="series",

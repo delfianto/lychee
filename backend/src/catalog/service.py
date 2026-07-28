@@ -6,11 +6,15 @@ Provider matching + metadata refresh live in ``catalog.matching``.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.catalog import matching as catalog_matching
 from src.catalog import repository as repo
-from src.catalog.models import ProviderChapter, Series, SeriesCredit
+from src.catalog.metadata import reconcile_tags
+from src.catalog.models import ProviderChapter, Series, SeriesCredit, TitleVariant
 from src.catalog.remote_chapters import (
     download_status_map,
     ensure_chapter_index,
@@ -33,6 +37,7 @@ from src.catalog.schema import (
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
+from src.ingest.lychee_info import LycheeInfoFile
 from src.progress.models import ReadingProgress
 from src.taxonomy.models import Tag
 from src.trackers.sync import enqueue_push
@@ -183,16 +188,9 @@ def _resolve_tags(session: Session, tag_ids: list[str]) -> list[Tag]:
     return tags
 
 
-def update_series(session: Session, series_id: str, data: SeriesUpdate) -> SeriesOut:
-    """Apply series edits: per-user action-row state (favorite / shelf status / personal
-    rating) and manual metadata (title, credits, tags, …). Each edited metadata field is
-    added to ``locked_fields_json`` so a later provider refresh won't clobber it."""
-    series = session.get(Series, series_id)
-    if series is None:
-        raise NotFoundError(f"series {series_id!r} not found")
-    fields = data.model_dump(exclude_unset=True)
-
-    # --- per-user action-row state ---
+def _apply_action_state(series: Series, fields: dict[str, Any]) -> tuple[bool, bool]:
+    """Per-user action-row state: favorite / shelf status / personal rating. Returns
+    (shelf_changed, rating_changed) so the caller knows whether to push to trackers."""
     if "favorite" in fields:
         series.favorite = bool(fields["favorite"])
     shelf_changed = False
@@ -213,8 +211,21 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
                 raise BadRequestError("rating must be between 1 and 10 (or null)")
             series.user_rating = score
         rating_changed = True
+    return shelf_changed, rating_changed
 
-    # --- manual metadata (locks each edited field against provider refresh) ---
+
+def _apply_metadata_fields(session: Session, series: Series, fields: dict[str, Any]) -> None:
+    """Manual metadata edits, shared by the ``PATCH /api/series/{id}`` handler
+    (``update_series``) and the ``lychee.info`` sidecar apply path
+    (``apply_lychee_info``) — both build the same ``SeriesUpdate``-shaped ``fields``
+    dict, so this is the *one* place metadata actually gets written + locked.
+
+    Each edited scalar/collection field is added to ``locked_fields_json`` so a later
+    provider refresh won't clobber it — except ``titles``, which is a pure additive
+    union (ADR 18: every source contributes titles as a union; nothing here ever
+    replaces or needs to lock the collection), and the gallery-only extras below,
+    which no provider populates.
+    """
     locked = set(series.locked_fields_json or [])
     if "title" in fields:
         title = (fields["title"] or "").strip()
@@ -223,6 +234,20 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
         series.title = title
         series.sort_title = title.lower()
         locked.add("title")
+    if "titles" in fields:
+        existing_keys = {(tv.language, tv.title) for tv in series.title_variants}
+        for variant in fields["titles"] or []:
+            key = (variant["language"], variant["title"])
+            if key not in existing_keys:
+                series.title_variants.append(
+                    TitleVariant(
+                        series_id=series.id,
+                        title=variant["title"],
+                        language=variant["language"],
+                        variant_type=variant["variant_type"],
+                    )
+                )
+                existing_keys.add(key)
     if "description" in fields:
         series.description = fields["description"] or None
         locked.add("description")
@@ -273,6 +298,19 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
 
     series.locked_fields_json = sorted(locked) or None
 
+
+def update_series(session: Session, series_id: str, data: SeriesUpdate) -> SeriesOut:
+    """Apply series edits: per-user action-row state (favorite / shelf status / personal
+    rating) and manual metadata (title, credits, tags, …). Each edited metadata field is
+    added to ``locked_fields_json`` so a later provider refresh won't clobber it."""
+    series = session.get(Series, series_id)
+    if series is None:
+        raise NotFoundError(f"series {series_id!r} not found")
+    fields = data.model_dump(exclude_unset=True)
+
+    shelf_changed, rating_changed = _apply_action_state(series, fields)
+    _apply_metadata_fields(session, series, fields)
+
     session.commit()
     # Shelf or personal rating → push to connected sinks (trackers + MangaDex), best-effort.
     if shelf_changed or rating_changed:
@@ -280,6 +318,123 @@ def update_series(session: Session, series_id: str, data: SeriesUpdate) -> Serie
     row = repo.get_series(session, series_id)
     assert row is not None  # just updated
     return to_series_out(row)
+
+
+_EXTERNAL_TRACKER_KEYS = {"anilist": "al", "myanimelist": "mal", "mangaupdates": "mu"}
+
+
+def apply_lychee_info(session: Session, series: Series, info: LycheeInfoFile) -> list[str]:
+    """Apply a parsed ``lychee.info`` sidecar (notes/08-metadata.md) to ``series``.
+
+    Builds a ``SeriesUpdate``-shaped ``fields`` dict for the scalar/credit/title
+    fields and runs it through the same ``_apply_metadata_fields`` the
+    ``PATCH /api/series/{id}`` handler uses — applying the file auto-locks every
+    field it touches, with zero new locking logic. Tags/external ids/provider match
+    aren't part of ``SeriesUpdate`` (not user-facing manual-edit concepts) and are
+    applied directly here instead. Returns human-readable warnings (kind mismatch,
+    kind-inapplicable fields, unknown provider/tracker keys, unsupported multi-
+    crossover) for the caller (the scanner) to log and surface on the scan result.
+    """
+    warnings: list[str] = []
+    gallery = series.kind == "gallery"
+
+    if info.kind != series.kind:
+        warnings.append(
+            f"kind {info.kind!r} in lychee.info does not match the series' library "
+            f"kind {series.kind!r} — kind field ignored"
+        )
+    if gallery and info.status is not None:
+        warnings.append("status is manga/comic-only — ignored for a gallery series")
+    if gallery and info.demographic is not None:
+        warnings.append("demographic is manga/comic-only — ignored for a gallery series")
+
+    fields: dict[str, Any] = {}
+    if info.title is not None:
+        fields["title"] = info.title
+    if info.titles is not None:
+        fields["titles"] = [
+            {"language": t.lang, "variant_type": t.type, "title": t.title} for t in info.titles
+        ]
+    if info.description is not None:
+        fields["description"] = info.description
+    if info.year is not None:
+        fields["year"] = info.year
+    if info.status is not None and not gallery:
+        fields["status"] = info.status
+    if info.content_rating is not None:
+        fields["content_rating"] = info.content_rating
+    if info.demographic is not None and not gallery:
+        fields["demographic"] = info.demographic
+    if info.origin_country is not None:
+        fields["origin_country"] = info.origin_country
+
+    if info.credits:
+        authors = [c.name for c in info.credits if c.role == "author"]
+        artists = [c.name for c in info.credits if c.role == "artist"]
+        if authors:
+            fields["authors"] = authors
+        if artists:
+            fields["artists"] = artists
+
+    if info.crossovers:
+        first = info.crossovers[0]
+        if first.series is not None:
+            fields["source"] = first.series
+        if first.characters:
+            fields["characters"] = first.characters
+        if len(info.crossovers) > 1:
+            warnings.append(
+                "multiple crossovers found; only the first is applied "
+                "(multi-franchise crossovers aren't fully supported yet)"
+            )
+
+    if fields:
+        _apply_metadata_fields(session, series, fields)
+
+    if info.tags is not None:
+        pairs = [
+            (name, group)
+            for group in ("genre", "theme", "format", "content")
+            for name in getattr(info.tags, group)
+        ]
+        if pairs:
+            # Union, not replace — a partial file shouldn't drop tags another source
+            # (e.g. a provider match) already set in groups it doesn't mention.
+            new_tags = reconcile_tags(session, pairs)
+            existing_ids = {t.id for t in series.tags}
+            for tag in new_tags:
+                if tag.id not in existing_ids:
+                    series.tags.append(tag)
+                    existing_ids.add(tag.id)
+
+    if info.external:
+        current = dict(series.external_ids_json or {})
+        for name, value in info.external.items():
+            key = _EXTERNAL_TRACKER_KEYS.get(name)
+            if key is None:
+                warnings.append(f"unknown external tracker {name!r} ignored")
+                continue
+            current[key] = value
+        series.external_ids_json = current or None
+
+    if info.provider:
+        for provider_id, provider_series_id in info.provider.items():
+            if series.provider == provider_id and series.provider_series_id == provider_series_id:
+                continue  # already matched to this id — nothing to do
+            try:
+                _ = catalog_matching.set_match(
+                    session,
+                    series.id,
+                    provider_id=provider_id,
+                    provider_series_id=provider_series_id,
+                )
+            except BadRequestError as exc:
+                warnings.append(f"provider {provider_id!r}: {exc.message}")
+
+    series.metadata_file_version = info.generated.version if info.generated else None
+
+    session.flush()
+    return warnings
 
 
 def to_chapter_out(row: ChapterRow) -> ChapterOut:
