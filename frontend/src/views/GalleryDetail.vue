@@ -9,7 +9,8 @@ import CoverImage from "../components/CoverImage.vue";
 import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
 import Lightbox from "../components/Lightbox.vue";
-import { contentRatingClass, contentRatingLabel } from "../lib/display";
+import { contentRatingClass } from "../lib/display";
+import { ratingLabel } from "../lib/ratingLabels";
 import { createStaleGuard } from "../lib/staleGuard";
 import type { GalleryMediaItem, Series } from "../types";
 
@@ -88,7 +89,7 @@ function thumbSrc(item: GalleryMediaItem): string {
               </span>
               <span v-if="gallery.year">· {{ gallery.year }}</span>
               <span class="badge badge-sm" :class="contentRatingClass[gallery.contentRating]">
-                {{ contentRatingLabel[gallery.contentRating] }}
+                {{ ratingLabel(gallery.contentRating) }}
               </span>
             </div>
           </div>

@@ -4,7 +4,8 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
 import { synopsisOnly } from "../lib/description";
-import { contentRatingClass, contentRatingLabel, statusColor, statusLabel } from "../lib/display";
+import { contentRatingClass, statusColor, statusLabel } from "../lib/display";
+import { ratingLabel } from "../lib/ratingLabels";
 import type { Series } from "../types";
 import AddToListMenu from "./AddToListMenu.vue";
 import CountryFlag from "./CountryFlag.vue";
@@ -64,7 +65,7 @@ const blurb = computed(() => synopsisOnly(props.series.description));
         <!-- Content rating + genre tags -->
         <div class="flex flex-wrap items-center gap-1">
           <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
-            {{ contentRatingLabel[series.contentRating] }}
+            {{ ratingLabel(series.contentRating) }}
           </span>
           <span v-for="tg in shownTags" :key="tg.id" class="badge badge-outline badge-sm">
             {{ tg.name }}

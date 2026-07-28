@@ -9,6 +9,7 @@ import SegmentedToggle from "../components/SegmentedToggle.vue";
 import ErrorState from "../components/ErrorState.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { type Density, useDensity } from "../lib/density";
+import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import { toast } from "../lib/toast";
 import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
 
@@ -94,8 +95,8 @@ const activeChips = computed(() => {
   if (filters.query) chips.push({ key: "q", label: `“${filters.query}”`, remove: () => (filters.query = "") });
   for (const [id, state] of Object.entries(filters.tags))
     chips.push({ key: `t-${id}`, label: `${state === "exclude" ? "−" : "+"} ${tagName(id)}`, remove: () => delete filters.tags[id] });
-  for (const r of filters.ratings) chips.push({ key: `r-${r}`, label: r, remove: () => filters.ratings.delete(r) });
-  for (const d of filters.demographics) chips.push({ key: `d-${d}`, label: d, remove: () => filters.demographics.delete(d) });
+  for (const r of filters.ratings) chips.push({ key: `r-${r}`, label: ratingLabel(r), remove: () => filters.ratings.delete(r) });
+  for (const d of filters.demographics) chips.push({ key: `d-${d}`, label: demographicLabel(d), remove: () => filters.demographics.delete(d) });
   for (const s of filters.statuses) chips.push({ key: `s-${s}`, label: s, remove: () => filters.statuses.delete(s) });
   for (const rs of filters.readStates) chips.push({ key: `rs-${rs}`, label: rs, remove: () => filters.readStates.delete(rs) });
   return chips;

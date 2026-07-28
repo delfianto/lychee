@@ -184,6 +184,27 @@ export async function fetchTagGroups(): Promise<TagGroup[]> {
   })).filter((g) => g.tags.length > 0);
 }
 
+export interface RatingLabels {
+  contentRating: Record<string, string>;
+  demographic: Record<string, string>;
+}
+
+/** Live display names for the content_rating/demographic system tags — so a
+ * rename in Settings → Content (e.g. "Mature" → "Hentai") actually shows up
+ * wherever a rating/demographic badge is rendered. See lib/ratingLabels.ts
+ * and notes/09-tag-aliases.md ("Display label editability"). */
+export async function fetchRatingLabels(): Promise<RatingLabels> {
+  const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
+  const items = data?.items ?? [];
+  const contentRating: Record<string, string> = {};
+  const demographic: Record<string, string> = {};
+  for (const item of items) {
+    if (item.category === "content_rating") contentRating[item.id] = item.name;
+    else if (item.category === "demographic") demographic[item.id] = item.name;
+  }
+  return { contentRating, demographic };
+}
+
 /** A random series id (for the navbar dice), or null if the library is empty. */
 export async function randomSeriesId(): Promise<string | null> {
   const { data } = await api.GET("/api/series", { params: { query: { limit: 50 } } });

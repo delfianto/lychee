@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TagGroup } from "../api/queries";
+import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import type { BrowseFilters, ContentRating, Demographic, PublicationStatus } from "../types";
 
 const props = withDefaults(
@@ -56,16 +57,16 @@ function tagClass(id: string): string {
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Content rating</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="r in ratingOptions" :key="r" class="btn btn-xs capitalize" :class="filters.ratings.has(r) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-rating', r)">
-            {{ r }}
+          <button v-for="r in ratingOptions" :key="r" class="btn btn-xs" :class="filters.ratings.has(r) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-rating', r)">
+            {{ ratingLabel(r) }}
           </button>
         </div>
       </div>
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Demographic</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="d in demographicOptions" :key="d" class="btn btn-xs capitalize" :class="filters.demographics.has(d) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-demographic', d)">
-            {{ d }}
+          <button v-for="d in demographicOptions" :key="d" class="btn btn-xs" :class="filters.demographics.has(d) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-demographic', d)">
+            {{ demographicLabel(d) }}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@
 // panel, Content settings tab, and per-series tags all agree on the same ids.
 
 import type { components } from "../../api/schema";
+import { slugify } from "../utils";
 
 type TaxonomyItem = components["schemas"]["TaxonomyItemOut"];
 type Tag = components["schemas"]["TagOut"];
@@ -100,15 +101,26 @@ function humanize(slug: string): string {
   return DISPLAY_OVERRIDES[slug] ?? slug.split("-").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" ");
 }
 
+interface DefAlias {
+  id: string;
+  name: string;
+}
 interface Def {
   id: string;
   name: string;
   category: string;
   system: boolean;
+  aliases: DefAlias[];
 }
 
 function defs(slugs: readonly string[], category: string, system = false): Def[] {
-  return slugs.map((slug) => ({ id: `${category}-${slug}`, name: humanize(slug), category, system }));
+  return slugs.map((slug) => ({
+    id: `${category}-${slug}`,
+    name: humanize(slug),
+    category,
+    system,
+    aliases: [],
+  }));
 }
 
 const ALL_DEFS: Def[] = [
@@ -155,6 +167,29 @@ export function removeTaxonomyDef(id: string): boolean {
   return extraTags.length !== before;
 }
 
+export function renameTaxonomyDef(id: string, name: string): boolean {
+  const d = BY_ID.get(id);
+  if (!d) return false;
+  d.name = name;
+  return true;
+}
+
+export function addAliasToDef(tagId: string, name: string): DefAlias | null {
+  const d = BY_ID.get(tagId);
+  if (!d) return null;
+  const alias: DefAlias = { id: slugify(name), name };
+  if (!d.aliases.some((a) => a.id === alias.id)) d.aliases.push(alias);
+  return alias;
+}
+
+export function removeAliasFromDef(tagId: string, aliasId: string): boolean {
+  const d = BY_ID.get(tagId);
+  if (!d) return false;
+  const before = d.aliases.length;
+  d.aliases = d.aliases.filter((a) => a.id !== aliasId);
+  return d.aliases.length !== before;
+}
+
 const disabledIds = new Set(DISABLED_AT_SEED);
 export function setTaxonomyEnabled(id: string, enabled: boolean): void {
   if (enabled) disabledIds.delete(id);
@@ -180,5 +215,6 @@ export function buildTaxonomyItems(seriesList: readonly SeriesOut[]): TaxonomyIt
     uses: uses.get(d.id) ?? 0,
     enabled: isTaxonomyEnabled(d.id),
     system: d.system,
+    aliases: d.aliases.map((a) => ({ id: a.id, name: a.name, tagId: d.id })),
   }));
 }

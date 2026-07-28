@@ -872,6 +872,40 @@ export interface paths {
         patch: operations["update_taxonomy_api_taxonomy__tag_id__patch"];
         trace?: never;
     };
+    "/api/taxonomy/{tag_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Alias */
+        post: operations["add_alias_api_taxonomy__tag_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/{tag_id}/aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Alias */
+        delete: operations["remove_alias_api_taxonomy__tag_id__aliases__alias_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/collections": {
         parameters: {
             query?: never;
@@ -1175,6 +1209,20 @@ export interface components {
             started: string;
             /** Uptimeseconds */
             uptimeSeconds: number;
+        };
+        /** AliasCreate */
+        AliasCreate: {
+            /** Name */
+            name: string;
+        };
+        /** AliasOut */
+        AliasOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Tagid */
+            tagId: string;
         };
         /** Body_upload_import_api_import_upload_post */
         Body_upload_import_api_import_upload_post: {
@@ -1799,6 +1847,11 @@ export interface components {
             enabled: boolean;
             /** System */
             system: boolean;
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: components["schemas"]["AliasOut"][];
         };
         /** TaxonomyUpdate */
         TaxonomyUpdate: {
@@ -3526,6 +3579,71 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaxonomyItemOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_alias_api_taxonomy__tag_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AliasCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AliasOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_alias_api_taxonomy__tag_id__aliases__alias_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

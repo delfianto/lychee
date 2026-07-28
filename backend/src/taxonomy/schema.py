@@ -5,6 +5,12 @@ from __future__ import annotations
 from src.core.schema import CamelModel
 
 
+class AliasOut(CamelModel):
+    id: str
+    name: str
+    tag_id: str
+
+
 class TaxonomyItemOut(CamelModel):
     id: str
     name: str
@@ -12,6 +18,7 @@ class TaxonomyItemOut(CamelModel):
     uses: int
     enabled: bool
     system: bool
+    aliases: list[AliasOut] = []
 
 
 class TaxonomyCreate(CamelModel):
@@ -22,3 +29,7 @@ class TaxonomyCreate(CamelModel):
 class TaxonomyUpdate(CamelModel):
     name: str | None = None
     enabled: bool | None = None
+
+
+class AliasCreate(CamelModel):
+    name: str

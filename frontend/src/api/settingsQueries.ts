@@ -178,6 +178,15 @@ export async function setTaxonomyEnabled(id: string, enabled: boolean): Promise<
   await api.PATCH("/api/taxonomy/{tag_id}", { params: { path: { tag_id: id } }, body: { enabled } });
 }
 
+/** Renames a tag's display label — allowed for system rows too (id/group stay fixed). */
+export async function renameTaxonomyTag(id: string, name: string): Promise<void> {
+  const { error } = await api.PATCH("/api/taxonomy/{tag_id}", {
+    params: { path: { tag_id: id } },
+    body: { name },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't rename tag"));
+}
+
 export async function createTaxonomyTag(name: string, category: string): Promise<TaxonomyItem> {
   const { data, error } = await api.POST("/api/taxonomy", { body: { name, category } });
   if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't add tag"));
@@ -192,6 +201,21 @@ export async function deleteTaxonomyTag(id: string): Promise<void> {
 export async function refreshTaxonomy(): Promise<void> {
   const { error } = await api.POST("/api/taxonomy/refresh");
   if (error) throw new Error(apiErrorMessage(error, "Refresh failed"));
+}
+
+export async function addTaxonomyAlias(tagId: string, name: string): Promise<void> {
+  const { error } = await api.POST("/api/taxonomy/{tag_id}/aliases", {
+    params: { path: { tag_id: tagId } },
+    body: { name },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't add alias"));
+}
+
+export async function deleteTaxonomyAlias(tagId: string, aliasId: string): Promise<void> {
+  const { error } = await api.DELETE("/api/taxonomy/{tag_id}/aliases/{alias_id}", {
+    params: { path: { tag_id: tagId, alias_id: aliasId } },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't remove alias"));
 }
 
 // --- downloads + sync --------------------------------------------------------------
