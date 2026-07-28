@@ -1,5 +1,13 @@
 # Overview 8 — lychee.info: A Native Metadata Sidecar Format
 
+> **Status: implemented.** The reader half (parse + apply on scan) is built and
+> formalized as [ADR 20](decisions/20-lychee-info-metadata.md) — read that first for
+> what actually shipped (a few specifics were refined during implementation: only
+> the first `crossovers` entry applies, tags union rather than replace, `titles`
+> never locks). This doc remains the deep design rationale; the **writer** half (an
+> LLM agent producing these files, e.g. via `mcp/`) is still not built — see
+> `plan.md` PART J.
+
 Unlike 00–07, this isn't cross-project comparison research — it's lychee's own
 design, arrived at by deliberately rejecting ComicInfo.xml (XML, Western-comic-
 shaped, "never really a standard" per the discussion that produced this doc) in
@@ -209,7 +217,7 @@ it would for any other field today.
 
 ## Promotion path
 
-This doc is the design; it isn't yet an accepted ADR. If/when this gets
-built, formalize it as a numbered decision in `decisions/` (the natural next
-slot, following the same design-doc-then-ADR sequence [ADR 19](decisions/19-avif-storage.md)
-followed for `Cover.avif`) rather than leaving the real spec living only here.
+Done — formalized as [ADR 20](decisions/20-lychee-info-metadata.md), following the
+same design-doc-then-ADR sequence [ADR 19](decisions/19-avif-storage.md) followed
+for `Cover.avif`. That ADR is now the authoritative record of what shipped; this
+doc stays as the deeper design rationale it references.
