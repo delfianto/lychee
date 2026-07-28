@@ -15,13 +15,17 @@
 - **How to run:** `cd backend && uv run uvicorn src.main:app --reload` (auto-migrates + seeds) then
   `uv run python -m src.dev_seed` for a demo library; `cd frontend && bun run dev`.
 - **Branch:** `docs/research-and-decisions` (local only, not pushed). Architecture: `notes/decisions/`
-  (ADR 01–19).
+  (ADR 01–20).
 - **PART H — ✅ done:** on-disk `Cover.avif` storage (canonical source + derived grid) + gallery
   artist/model two-level scan (artist folder → `SeriesCredit` + auto `Collection`). See PART H below.
 - **PART I — ✅ done:** **two-way** MangaDex account sync — local shelf/read edits push to MangaDex
   per-action (threaded into the tracker sync-on-read machinery); a re-runnable Sync pulls
   status/read-markers/custom-lists→Collections/metadata with MangaDex as source of truth. No page
   downloads. Plus **no-volume** chapter grouping. A sync, not a client. See PART I below.
+- **PART K — ✅ done:** `lychee.info` — a native YAML metadata sidecar, read on scan and applied
+  through the existing manual-edit lock mechanism (zero new precedence tier). See PART K below;
+  full design in `notes/08-metadata.md`, formalized as [ADR 20](decisions/20-lychee-info-metadata.md).
+  The **writer** side (an LLM agent producing these files) is PART J's MCP server — still not started.
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
@@ -802,6 +806,51 @@ numbered volumes, and the FE has no label for `volume: null`.
 - Whether this warrants its own ADR once scope firms up — plan.md tracks it as a
   proposal for now; an ADR would be the place to formally record the "second REST
   client" decision if/when this actually gets built.
+
+# PART K — `lychee.info` metadata sidecar — ✅ done
+
+> Design: `notes/08-metadata.md`. Formalized as [ADR 20](decisions/20-lychee-info-metadata.md).
+> This is the **reader** half only — parsing + applying a `lychee.info` file found on
+> scan. The **writer** half (an agent producing these files) is PART J's MCP server,
+> still not started; this backend support is what it will target.
+
+- [x] **Schema + parser** (`ingest/lychee_info.py`) — strict Pydantic (`CamelModel`,
+      `extra="forbid"`) schema v1 exactly per the design doc; `parse_lychee_info(raw)`
+      raises `LycheeInfoParseError` on bad YAML, a non-mapping, a hallucinated field,
+      a bad enum, or an unsupported `schema` version.
+- [x] **Apply via the exact same lock mechanism `PATCH /api/series/{id}` uses** —
+      `catalog.service._apply_metadata_fields` was extracted from `update_series` as
+      the shared core; `apply_lychee_info` builds the same `SeriesUpdate`-shaped
+      fields dict from a parsed file and calls it — zero new locking logic.
+      `SeriesUpdate` gained a `titles` field (→ `TitleVariant`, union-merged by
+      `(language, title)`, never locked — ADR 18's stated merge policy) so the file
+      has a path to set title variants at all.
+- [x] **Tags:** union-merged (not replaced) via the existing
+      `catalog.metadata.reconcile_tags` — unknown tag names auto-create, no new
+      "create tag" path.
+- [x] **`provider:`** seeds a match via the existing `catalog.matching.set_match`
+      (same path the manual match-picker uses) — triggers the normal
+      match/refresh flow. **`external:`** merges into `external_ids_json`, mapping
+      friendly tracker names to their `Tracker.external_id_key` (`anilist`→`al`, …).
+- [x] **`crossovers`:** only the first entry applies (→ `source`/`characters_json`);
+      2+ entries warn (multi-franchise would need a new junction table — not built).
+- [x] **Kind handling:** a `kind` mismatch is warn-only (`series.kind` is never set
+      from the file); `status`/`demographic` on a `kind=gallery` file warn + skip.
+- [x] **Re-apply gating:** `Series.metadata_file_hash` (xxh3-128, mirrors
+      `Book.partial_hash`) — unchanged file costs nothing on rescan; a malformed
+      file's hash is deliberately not stored, so it re-warns every scan until fixed.
+      `Series.metadata_file_version` mirrors the file's `generated.version` (audit
+      trail only). Migration `aeaeff445c44`.
+- [x] **Scan wiring:** `ingest/scanner.py` reads `lychee.info` at a series' folder
+      (or, for `kind=gallery`, each per-work folder — same level as `Cover.avif`);
+      `ScanSummary` gained `lychee_info_applied`/`lychee_info_warnings`, surfaced as
+      `lycheeInfoApplied`/`lycheeInfoWarnings` on the scan task's `TaskOut.result`
+      (same slot `thumbsGenerated` already uses). No container/exclusion-logic
+      changes needed — `.info` was already outside every media extension allowlist.
+- [x] **Tests:** `test_lychee_info.py` (schema validation + `apply_lychee_info`
+      mapping/locking/warnings, 19 cases) + `test_lychee_info_scan.py` (scan
+      discovery, hash-gated re-apply, edited-file re-apply, malformed-file
+      resilience, gallery per-work-folder application, 5 cases). **+24 → 261.**
 
 ---
 

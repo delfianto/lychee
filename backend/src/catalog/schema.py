@@ -48,6 +48,14 @@ class SeriesOut(CamelModel):
     chapters_synced_at: UtcDatetime | None = None
 
 
+class TitleVariantIn(CamelModel):
+    """An additional title form (ADR 18) — language-tagged, e.g. native/romanized."""
+
+    language: str
+    variant_type: str  # native | romanized | english | alt
+    title: str
+
+
 class SeriesUpdate(CamelModel):
     """Series edits — action-row state and manual metadata. All fields optional;
     absent fields are left unchanged. Editing a metadata field *locks* it, so a
@@ -69,6 +77,9 @@ class SeriesUpdate(CamelModel):
     authors: list[str] | None = None
     artists: list[str] | None = None
     tag_ids: list[str] | None = None  # ids from the existing taxonomy
+    # Additional title forms — merged in by (language, title) key, never replaces or
+    # locks (ADR 18: every source contributes titles as a union).
+    titles: list[TitleVariantIn] | None = None
     # Gallery-only extras (no provider populates these, so they aren't locked).
     source: str | None = None  # the franchise the art depicts ("Series" row)
     characters: list[str] | None = None
