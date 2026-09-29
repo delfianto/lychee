@@ -6,15 +6,15 @@ requires-python = ">=3.14"
 
 dependencies = [
     # Web framework
-    "fastapi==0.139.2",
-    "uvicorn[standard]==0.51.0",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.54.0",
     # Persistence
-    "sqlalchemy==2.0.51",
-    "alembic==1.18.5",
+    "sqlalchemy==2.1.1",
+    "alembic==1.20.0",
     # Validation / settings
-    "pydantic==2.13.4",
-    "pydantic-settings==2.14.2",
-    "python-dotenv==1.2.2",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    "python-dotenv==1.2.3",
     # Logging
     "structlog==26.1.0",
     # ID generation
@@ -37,8 +37,8 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
-    "ruff==0.15.22",
-    "basedpyright==1.39.9",
+    "ruff==0.16.9",
+    "basedpyright==1.40.1",
 ]
 
 # This is an application, not a distributable package — uv manages the env + deps,
