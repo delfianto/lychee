@@ -224,8 +224,12 @@ it("requires confirmation to cancel, handles bulk rejection, and throttles progr
 });
 
 it("persists import preferences and saves, overwrites, applies, and deletes filename presets", async () => {
+  api.db.importConfig.quality = 90;
   const { wrapper } = await renderView(ImportPanel);
   expect(api.writes()).toEqual([]);
+  expect(wrapper.get<HTMLSelectElement>('[aria-label="Import image quality"]').element.value).toBe(
+    "75",
+  );
   await input(wrapper, "input[type=checkbox]", false);
   expect(wrapper.text()).toContain("Enable local import to use this");
   await input(wrapper, "input[type=checkbox]", true);

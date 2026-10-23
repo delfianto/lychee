@@ -23,7 +23,7 @@ export function buildAbout(): AboutOut {
 
 export const importConfig: ImportConfigOut = {
   enabled: true,
-  quality: 90,
+  quality: 75,
   filenamePattern: "{title} - c{chapter} ({group})",
   patternPresets: [
     { name: "Standard", pattern: "{title} - c{chapter} ({group})" },
@@ -39,7 +39,48 @@ export const syncState: SyncOut = {
   syncing: false,
   paused: false,
   parallelSyncs: 2,
-  jobs: [],
+  jobs: [
+    {
+      id: "sync-job-1",
+      kind: "sync",
+      title: "Nightfall Requiem",
+      source: "MangaDex",
+      status: "running",
+      progress: 65,
+      detail: "Pulling chapters for Nightfall Requiem from MangaDex (13/20)",
+      error: null,
+    },
+    {
+      id: "sync-job-2",
+      kind: "scan",
+      title: "Wraith of the Nine Tails",
+      source: "/data/manga",
+      status: "queued",
+      progress: 0,
+      detail: "Queued for indexing in /data/manga",
+      error: null,
+    },
+    {
+      id: "sync-job-3",
+      kind: "scan",
+      title: "Corrupt Vol.04.cbz",
+      source: "/data/manga/Bloodmoon Apothecary",
+      status: "failed",
+      progress: 0,
+      detail: "Unreadable file while indexing Corrupt Vol.04.cbz",
+      error: "Archive is not a valid ZIP/CBZ container",
+    },
+    {
+      id: "sync-job-4",
+      kind: "import",
+      title: "MangaDex Account",
+      source: "MangaDex",
+      status: "done",
+      progress: 100,
+      detail: "Synced 18 manga from MangaDex",
+      error: null,
+    },
+  ],
 };
 
 // --- filesystem browser (AddLibraryModal / ImportPanel path picker) --------

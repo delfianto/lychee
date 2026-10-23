@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ChevronDown, Clock, HardDrive } from "@lucide/vue";
+import { ChevronDown, Clock, Folder, GalleryThumbnails, HardDrive, Images } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { fetchThumbnailStorage, saveThumbnailStorage } from "../../api/settingsQueries";
 import ServerPathField from "../../components/ServerPathField.vue";
-import { RECENTLY_ADDED_OPTIONS, useRecentlyAddedKinds } from "../../lib/density";
+import { RECENTLY_ADDED_OPTIONS, useMainBarIcons, useRecentlyAddedKinds } from "../../lib/density";
 import { toast } from "../../lib/toast";
 
 const { recentlyAddedKinds, toggleRecentlyAddedKind } = useRecentlyAddedKinds();
+const { mainBarIcons } = useMainBarIcons();
 const selectedKindsLabel = computed(() => {
   const labels = RECENTLY_ADDED_OPTIONS.filter((opt) =>
     recentlyAddedKinds.value.includes(opt.value),
@@ -25,6 +26,10 @@ const ready = ref(false);
 const dirty = computed(
   () => (mode.value === "custom" ? path.value.trim() : null) !== savedPath.value,
 );
+const displayedPath = computed(() => (mode.value === "custom" ? path.value : defaultPath.value));
+function onPathUpdate(nextPath: string): void {
+  if (mode.value === "custom") path.value = nextPath;
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -107,13 +112,53 @@ onMounted(load);
               </ul>
             </div>
           </div>
-          <p class="text-xs text-base-content/50">
+          <p class="pl-8 text-xs text-base-content/50">
             Choose which libraries appear in the Recently added rail and feed.
           </p>
+
+          <div class="mt-2 flex flex-col gap-3 border-t border-base-content/10 pt-3">
+            <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">
+              Main bar icons
+            </div>
+            <label class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <Images class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Show Comics icon</div>
+                  <div class="text-xs text-base-content/50">
+                    Display Comics in the main navigation bar
+                  </div>
+                </div>
+              </div>
+              <input
+                v-model="mainBarIcons.comics"
+                type="checkbox"
+                aria-label="Show Comics icon"
+                class="toggle toggle-primary toggle-sm"
+              />
+            </label>
+            <label class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <GalleryThumbnails class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Show Gallery icon</div>
+                  <div class="text-xs text-base-content/50">
+                    Display Gallery in the main navigation bar
+                  </div>
+                </div>
+              </div>
+              <input
+                v-model="mainBarIcons.gallery"
+                type="checkbox"
+                aria-label="Show Gallery icon"
+                class="toggle toggle-primary toggle-sm"
+              />
+            </label>
+          </div>
         </div>
 
         <form
-          class="flex flex-col gap-2 border-t border-base-content/10 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+          class="flex flex-col gap-3 border-t border-base-content/10 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
           @submit.prevent="save"
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -141,20 +186,26 @@ onMounted(load);
             Loading storage settings…
           </p>
           <template v-if="ready">
-            <ServerPathField
-              v-if="mode === 'custom'"
-              v-model="path"
-              label="Thumbnail folder (absolute path on the server)"
-              placeholder="/data/thumbnails"
-              browser-title="Choose thumbnail folder"
-              :disabled="saving"
-            />
-            <p v-else class="break-all font-mono text-xs text-base-content/50">
-              {{ defaultPath }}
-            </p>
-            <p v-if="dirty" class="text-xs text-base-content/50">
-              Existing thumbnails stay in place; missing ones regenerate here.
-            </p>
+            <div class="mt-2 flex flex-col gap-2 border-t border-base-content/10 pt-3">
+              <div class="flex items-start gap-3">
+                <Folder class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Thumbnail folder</div>
+                  <div class="text-xs text-base-content/50">Absolute path on the server</div>
+                </div>
+              </div>
+              <ServerPathField
+                :model-value="displayedPath"
+                label=""
+                placeholder="/data/thumbnails"
+                browser-title="Choose thumbnail folder"
+                :disabled="saving || mode === 'default'"
+                @update:model-value="onPathUpdate"
+              />
+              <p v-if="dirty" class="text-xs text-base-content/50">
+                Existing thumbnails stay in place; missing ones regenerate here.
+              </p>
+            </div>
           </template>
           <p v-if="error" class="text-xs text-error" role="alert">{{ error }}</p>
           <button

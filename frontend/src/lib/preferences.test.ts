@@ -61,6 +61,24 @@ describe("shared display preferences", () => {
       );
     },
   );
+
+  it.each([
+    [null, { comics: true, gallery: true }],
+    ['{"comics":false,"gallery":true}', { comics: false, gallery: true }],
+    ['{"comics":"bad"}', { comics: true, gallery: true }],
+    ["invalid", { comics: true, gallery: true }],
+  ])("loads mainBarIcons %s and persists changes", async (stored, expected) => {
+    if (stored !== null) localStorage.setItem("lychee.mainBarIcons", stored);
+    const { useMainBarIcons } = await import("./density");
+    const { mainBarIcons } = useMainBarIcons();
+    expect(mainBarIcons.value).toEqual(expected);
+    mainBarIcons.value.comics = false;
+    await nextTick();
+    expect(JSON.parse(localStorage.getItem("lychee.mainBarIcons") ?? "{}")).toEqual({
+      comics: false,
+      gallery: expected.gallery,
+    });
+  });
 });
 
 describe("font size", () => {

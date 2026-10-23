@@ -25,6 +25,7 @@ import ActivityIndicator from "../components/ActivityIndicator.vue";
 import Toaster from "../components/Toaster.vue";
 // Side-effect only: applies the persisted font size before first paint (like theme below).
 import "../lib/fontSize";
+import { useMainBarIcons } from "../lib/density";
 import { ensureRatingLabelsLoaded } from "../lib/ratingLabels";
 import { useTheme } from "../lib/theme";
 
@@ -60,18 +61,21 @@ function goSearch(): void {
 interface NavItem {
   label: string;
   icon: Component;
-  to?: string; // items without a route yet render as disabled placeholders
+  to: string;
 }
 
-const nav: NavItem[] = [
+const { mainBarIcons } = useMainBarIcons();
+const nav = computed<NavItem[]>(() => [
   { label: "Home", icon: House, to: "/" },
   { label: "Reading", icon: BookOpen, to: "/reading" },
   { label: "Favorites", icon: Heart, to: "/favorites" },
   { label: "Manga", icon: Book, to: "/manga" },
-  { label: "Comics", icon: Images, to: "/comics" },
-  { label: "Gallery", icon: GalleryThumbnails, to: "/gallery" },
+  ...(mainBarIcons.value.comics ? [{ label: "Comics", icon: Images, to: "/comics" }] : []),
+  ...(mainBarIcons.value.gallery
+    ? [{ label: "Gallery", icon: GalleryThumbnails, to: "/gallery" }]
+    : []),
   { label: "Lists", icon: Layers, to: "/lists" },
-];
+]);
 </script>
 
 <template>
@@ -100,26 +104,20 @@ const nav: NavItem[] = [
           </div>
           <!-- Desktop nav links -->
           <nav class="ml-1 hidden items-center gap-0.5 lg:flex">
-            <template v-for="item in nav" :key="item.label">
-              <RouterLink
-                v-if="item.to"
-                :to="item.to"
-                class="btn btn-ghost btn-sm gap-1.5"
-                active-class="btn-active"
-                :exact-active-class="item.to === '/' ? 'btn-active' : undefined"
-                :title="item.label"
-                :aria-label="item.label"
-              >
-                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{
-                  item.label
-                }}</span>
-              </RouterLink>
-              <span v-else class="btn btn-ghost btn-sm gap-1.5 opacity-40">
-                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{
-                  item.label
-                }}</span>
-              </span>
-            </template>
+            <RouterLink
+              v-for="item in nav"
+              :key="item.label"
+              :to="item.to"
+              class="btn btn-ghost btn-sm gap-1.5"
+              active-class="btn-active"
+              :exact-active-class="item.to === '/' ? 'btn-active' : undefined"
+              :title="item.label"
+              :aria-label="item.label"
+            >
+              <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{
+                item.label
+              }}</span>
+            </RouterLink>
           </nav>
         </div>
 
@@ -202,7 +200,6 @@ const nav: NavItem[] = [
         <ul class="menu w-full gap-0.5">
           <li v-for="item in nav" :key="item.label">
             <RouterLink
-              v-if="item.to"
               :to="item.to"
               active-class="menu-active"
               :exact-active-class="item.to === '/' ? 'menu-active' : undefined"
@@ -210,9 +207,6 @@ const nav: NavItem[] = [
             >
               <component :is="item.icon" class="size-5 shrink-0" />{{ item.label }}
             </RouterLink>
-            <a v-else class="opacity-40">
-              <component :is="item.icon" class="size-5 shrink-0" />{{ item.label }}
-            </a>
           </li>
         </ul>
       </aside>

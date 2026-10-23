@@ -42,7 +42,7 @@ async function loadConfig(): Promise<void> {
   const data = await fetchImportConfig();
   if (data) {
     config.enabled = data.enabled;
-    config.quality = data.quality;
+    config.quality = qualityTiers.some((t) => t.value === data.quality) ? data.quality : 75;
     config.filenamePattern = data.filenamePattern;
     presets.value = data.patternPresets;
   }

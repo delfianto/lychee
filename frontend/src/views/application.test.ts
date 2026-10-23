@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import { expect, it, vi } from "vite-plus/test";
 import App from "../App.vue";
+import { useMainBarIcons } from "../lib/density";
 import { router as configuredRouter } from "../router";
 import { useAppApi } from "../test/appApi";
 import { renderComponent, click, input } from "../test/views";
@@ -29,7 +30,19 @@ async function renderApp(path = "/") {
 }
 
 it("uses the real app routes for settings, navigation, themes, search, and random series", async () => {
+  useMainBarIcons().mainBarIcons.value = { comics: true, gallery: true };
   const { wrapper, router } = await renderApp();
+  expect(wrapper.find("header a[href='/comics']").exists()).toBe(true);
+  expect(wrapper.find("header a[href='/gallery']").exists()).toBe(true);
+  useMainBarIcons().mainBarIcons.value.comics = false;
+  useMainBarIcons().mainBarIcons.value.gallery = false;
+  await flushPromises();
+  expect(wrapper.find("header a[href='/comics']").exists()).toBe(false);
+  expect(wrapper.find("header a[href='/gallery']").exists()).toBe(false);
+  expect(wrapper.find(".drawer-side a[href='/comics']").exists()).toBe(false);
+  expect(wrapper.find(".drawer-side a[href='/gallery']").exists()).toBe(false);
+  useMainBarIcons().mainBarIcons.value = { comics: true, gallery: true };
+  await flushPromises();
   expect(wrapper.find("main h1").exists() || wrapper.find("main h2").exists()).toBe(true);
   await wrapper.get('[aria-label="Settings"]').trigger("click");
   await flushPromises();
