@@ -5,6 +5,7 @@ from __future__ import annotations
 import platform
 from datetime import UTC, datetime
 
+from src.core.version import VERSION
 from src.integrations.schema import AboutOut
 
 _STARTED = datetime.now(UTC)
@@ -13,7 +14,7 @@ _STARTED = datetime.now(UTC)
 def info() -> AboutOut:
     now = datetime.now(UTC)
     return AboutOut(
-        version="0.0.1",
+        version=VERSION,
         platform=platform.platform(),
         database="SQLite",
         started=_STARTED,

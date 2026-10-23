@@ -26,6 +26,7 @@ from src.core.config import settings
 from src.core.exceptions import BadRequestError, LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
+from src.core.version import USER_AGENT
 from src.media.artifacts import artifact_lock
 from src.media.avif import ContentClass
 from src.media.containers import ImageDirContainer, is_cover_file, media_kind, open_container
@@ -40,7 +41,7 @@ logger = get_logger(__name__)
 
 # Downloading a provider cover once (then serving it as a local AVIF thumbnail),
 # rather than hotlinking. A non-spoofed UA keeps MangaDex's CDN happy.
-_COVER_UA = "lychee/0.0.1 (self-hosted manga server)"
+_COVER_UA = USER_AGENT
 
 _MIME = {
     ".avif": "image/avif",

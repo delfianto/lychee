@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import httpx
 
+from src.core.version import USER_AGENT
 from src.trackers.base import TokenPair
 
 API = "https://api.mangaupdates.com/v1"
@@ -33,7 +34,7 @@ class MangaUpdatesTracker:
     uses_pkce = False
 
     def __init__(self, client: httpx.Client | None = None) -> None:
-        self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "lychee/0.0.1"})
+        self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT})
 
     def authorize_url(
         self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None

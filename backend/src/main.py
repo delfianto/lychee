@@ -16,6 +16,7 @@ from src.collections.router import router as collections_router
 from src.core.config import settings
 from src.core.exceptions import LycheeError
 from src.core.logging import configure_logging, get_logger
+from src.core.version import VERSION
 from src.downloads.provider import register_provider
 from src.downloads.router import router as downloads_router
 from src.fs.router import router as fs_router
@@ -56,7 +57,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(
     title="lychee",
     description="Self-hosted manga/comic/ebook media server",
-    version="0.0.1",
+    version=VERSION,
     lifespan=lifespan,
 )
 

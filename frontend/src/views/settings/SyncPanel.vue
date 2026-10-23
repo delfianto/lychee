@@ -166,7 +166,7 @@ onMounted(() => {
         Sync configuration
       </h3>
       <div class="card bg-base-100">
-        <div class="card-body gap-3 p-4">
+        <div class="card-body grid gap-3 p-4 xl:grid-cols-2 xl:gap-6">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-start gap-3">
               <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -187,7 +187,7 @@ onMounted(() => {
           </div>
 
           <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-base-content/10 pt-3"
+            class="flex flex-wrap items-center justify-between gap-3 border-t border-base-content/10 pt-3 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6"
           >
             <div class="flex items-start gap-3">
               <Gauge class="mt-0.5 size-5 shrink-0 text-primary" />

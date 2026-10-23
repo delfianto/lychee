@@ -21,6 +21,7 @@ from collections.abc import Callable
 import httpx
 
 from src.core.logging import get_logger
+from src.core.version import USER_AGENT
 from src.providers.ratelimit import TokenBucket
 from src.tasks.context import checkpoint, cooperative_wait
 
@@ -28,7 +29,6 @@ logger = get_logger(__name__)
 
 API_BASE = "https://api.mangadex.org"
 REPORT_URL = "https://api.mangadex.network/report"
-USER_AGENT = "lychee/0.0.1 (self-hosted manga server)"
 
 _RETRY_STATUSES = {429, 502, 503, 504}
 _MAX_RETRIES = 3

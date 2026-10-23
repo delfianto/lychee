@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from src.core.version import USER_AGENT
 from src.trackers.base import TokenPair
 
 AUTHORIZE_URL = "https://anilist.co/api/v2/oauth/authorize"
@@ -44,7 +45,7 @@ class AniListTracker:
         raise NotImplementedError("AniList uses OAuth")
 
     def __init__(self, client: httpx.Client | None = None) -> None:
-        self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "lychee/0.0.1"})
+        self._client = client or httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT})
 
     def authorize_url(
         self, *, client_id: str, redirect_uri: str, state: str, code_challenge: str | None = None
