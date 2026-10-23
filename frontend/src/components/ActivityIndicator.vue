@@ -3,6 +3,7 @@
 // while tasks run it shows a spinning badge that opens a live progress list,
 // fed by the shared SSE task stream.
 import { Loader2, Square } from "@lucide/vue";
+import { RouterLink } from "vue-router";
 
 import { activeTasks } from "../api/events";
 import { api } from "../api/client";
@@ -14,6 +15,10 @@ async function cancelTask(id: string): Promise<void> {
     params: { path: { task_id: id } },
   });
   if (error) toast("Couldn't cancel operation", "error");
+}
+
+function closeDropdown(): void {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 }
 
 function kindLabel(kind: string): string {
@@ -40,7 +45,7 @@ function kindLabel(kind: string): string {
     </div>
     <div
       tabindex="0"
-      class="dropdown-content z-30 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg"
+      class="dropdown-content z-30 mt-2 max-h-96 w-72 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-3 shadow-lg max-sm:fixed max-sm:inset-x-2 max-sm:top-16 max-sm:w-auto"
     >
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Background tasks</p>
       <ul class="space-y-3">
@@ -56,22 +61,39 @@ function kindLabel(kind: string): string {
           </div>
           <div class="mt-1 flex items-center justify-between gap-2 text-xs">
             <span class="capitalize">{{ task.status }}</span>
-            <button
-              class="btn btn-ghost btn-xs"
-              :disabled="task.status === 'cancelling'"
-              :aria-label="`Cancel ${task.label}`"
-              @click="cancelTask(task.id)"
-            >
-              <Square class="size-3" /> Cancel
-            </button>
+            <div class="flex items-center gap-2">
+              <RouterLink
+                class="link link-hover"
+                :to="{
+                  path: '/settings',
+                  query: { section: task.kind === 'download' ? 'downloads' : 'sync' },
+                }"
+                @click="closeDropdown"
+                >View {{ task.kind === "download" ? "downloads" : "sync" }}</RouterLink
+              >
+              <button
+                class="btn btn-ghost btn-xs"
+                :disabled="task.status === 'cancelling'"
+                :aria-label="`Cancel ${task.label}`"
+                @click="cancelTask(task.id)"
+              >
+                <Square class="size-3" /> Cancel
+              </button>
+            </div>
           </div>
           <PhaseProgress :phases="task.phases ?? {}" />
-          <progress
-            class="progress progress-primary mt-1 h-1.5 w-full"
-            :value="task.progress"
-            max="100"
-          />
-          <p v-if="task.detail" class="truncate text-xs opacity-50">{{ task.detail }}</p>
+          <div class="mt-1.5 text-xs">
+            <div class="flex justify-between gap-3 text-base-content/60">
+              <span class="min-w-0 truncate">{{ task.detail ?? "Overall" }}</span>
+              <span class="shrink-0 tabular-nums">{{ task.progress }}%</span>
+            </div>
+            <progress
+              class="progress progress-primary h-1 w-full"
+              aria-label="Overall progress"
+              :value="task.progress"
+              max="100"
+            />
+          </div>
         </li>
       </ul>
     </div>

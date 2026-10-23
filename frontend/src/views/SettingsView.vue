@@ -2,7 +2,8 @@
 // Settings shell: the section rail + the active tab. Each tab's concerns live in
 // its own panel under views/settings/ (each owns its state, loads, and SSE wiring).
 import { Download, Info, Library, RefreshCw, SlidersHorizontal, Tag } from "@lucide/vue";
-import { type Component, ref } from "vue";
+import { type Component, computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import AboutPanel from "./settings/AboutPanel.vue";
 import AccountsPanel from "./settings/AccountsPanel.vue";
@@ -22,7 +23,19 @@ const sections: { key: string; label: string; icon: Component }[] = [
   { key: "sync", label: "Sync", icon: RefreshCw },
   { key: "about", label: "About", icon: Info },
 ];
-const active = ref("general");
+const route = useRoute();
+const router = useRouter();
+const active = computed({
+  get: () => {
+    const section = route.query.section;
+    return typeof section === "string" && sections.some((item) => item.key === section)
+      ? section
+      : "general";
+  },
+  set: (section: string) => {
+    void router.push({ query: { ...route.query, section } });
+  },
+});
 </script>
 
 <template>

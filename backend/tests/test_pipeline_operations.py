@@ -333,3 +333,128 @@ def test_rate_limit_and_retry_waits_stop_promptly_on_operation_cancellation(
     finally:
         context.current_operation.reset(token)
     assert sleeps == [0.1, 0.1]
+
+
+def test_active_mangadex_fetch_grows_from_one_to_five_before_first_file_finishes(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    provider = MangaDexProvider()
+    monkeypatch.setattr(
+        provider,
+        "_at_home",
+        lambda _: {
+            "baseUrl": "https://node",
+            "chapter": {"hash": "hash", "data": list("12345")},
+        },
+    )
+    first_started = threading.Event()
+    five_started = threading.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+    started = []
+
+    def fetch(_chapter, base, _quality, _hash, filename):
+        with lock:
+            started.append(filename)
+            first_started.set()
+            if len(started) == 5:
+                five_started.set()
+        assert release.wait(5)
+        return filename.encode(), base
+
+    monkeypatch.setattr(provider, "_fetch_page", fetch)
+    with ThreadPoolExecutor(max_workers=1) as consumer:
+        result = consumer.submit(
+            provider.fetch_pages_to, RemoteChapter("id", "1", 1, None, "en"), tmp_path
+        )
+        try:
+            assert first_started.wait(3)
+            assert started == ["1"]
+            assert (
+                client.patch("/api/downloads/config", json={"parallelDownloads": 5}).status_code
+                == 200
+            )
+            assert five_started.wait(3), (
+                "new file requests must start before the first request returns"
+            )
+        finally:
+            release.set()
+        assert [path.read_bytes() for path in result.result(timeout=3)] == [
+            b"1",
+            b"2",
+            b"3",
+            b"4",
+            b"5",
+        ]
+
+
+def test_active_chapter_dispatch_grows_and_reduction_limits_next_claims(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    import time
+
+    first_started = threading.Event()
+    five_started = threading.Event()
+    gates = {str(index): threading.Event() for index in range(1, 7)}
+    starts = {key: threading.Event() for key in gates}
+    lock = threading.Lock()
+    started = set()
+
+    class LiveProvider:
+        id = "live-resize-test"
+
+        def list_chapters(self, provider_series_id: str, *, language: str = "en"):
+            return [RemoteChapter(key, key, 1, None, language) for key in gates]
+
+        def fetch_pages(self, chapter: RemoteChapter, *, data_saver=False, on_page=None):
+            key = chapter.provider_chapter_id
+            with lock:
+                started.add(key)
+                starts[key].set()
+                first_started.set()
+                if len(started) == 5:
+                    five_started.set()
+            assert gates[key].wait(5)
+            return [png()]
+
+    register_provider(LiveProvider())
+    ensure_manga_library(db_session, tmp_path / "manga")
+    series = make_series(db_session, title="Live concurrency", kind="manga")
+    series.provider = "live-resize-test"
+    series.provider_series_id = "remote"
+    db_session.commit()
+    response = client.post("/api/downloads", json={"seriesId": series.id})
+    assert response.status_code == 202
+    try:
+        assert first_started.wait(3)
+        assert len(started) == 1
+        assert (
+            client.patch("/api/downloads/config", json={"parallelDownloads": 5}).status_code == 200
+        )
+        assert five_started.wait(3), (
+            "active dispatch must expand without completing the first chapter"
+        )
+        rows = client.get("/api/downloads").json()
+        assert sum(row["status"] == "downloading" for row in rows) == 5
+        assert (
+            client.patch("/api/downloads/config", json={"parallelDownloads": 1}).status_code == 200
+        )
+        held = next(iter(started))
+        waiting = next(key for key in gates if key not in started)
+        for key in started - {held}:
+            gates[key].set()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            rows = client.get("/api/downloads").json()
+            if sum(row["status"] == "done" for row in rows) == 4:
+                break
+            threading.Event().wait(0.01)
+        assert sum(row["status"] == "done" for row in rows) == 4
+        assert not starts[waiting].wait(0.1), "lowered limit must prevent another chapter claim"
+    finally:
+        for gate in gates.values():
+            gate.set()
+    queue.wait_idle()
+    assert all(row["status"] == "done" for row in client.get("/api/downloads").json())

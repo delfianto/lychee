@@ -19,7 +19,7 @@ from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadConfigOut, DownloadConfigUpdate, DownloadTaskOut
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.concurrency import parallel_map
-from src.tasks.queue import Work, queue
+from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
 _BULK_ACTIONS = frozenset({"pause-all", "cancel-all", "resume-all"})
@@ -102,10 +102,12 @@ def _drain_parallel(
         on_progress(min(99, round(average or 0)), detail)
 
     def drain(_: int) -> int:
-        with queue.chapter_limit.slot(), factory() as worker_session:
+        with factory() as worker_session:
             return _drain_queue(worker_session, series_id, storage_root, progress)
 
-    return sum(parallel_map(drain, range(queue.download_workers), workers=queue.download_workers))
+    return sum(
+        parallel_map(drain, range(MAX_WORKERS), workers=MAX_WORKERS, limit=queue.chapter_limit)
+    )
 
 
 def _download_work(

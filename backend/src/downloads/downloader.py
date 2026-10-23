@@ -46,6 +46,7 @@ from src.media.staging import workspace
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.context import OperationCancelled, current_operation, report_phase
+from src.tasks.queue import queue
 
 logger = get_logger(__name__)
 _CLAIM_LOCK = threading.Lock()
@@ -438,73 +439,74 @@ def run_download_queue(
     while True:
         if is_cancelled(series_id):
             break
-        with _CLAIM_LOCK:
-            row = session.scalar(
-                select(DownloadTask)
-                .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
-                .order_by(DownloadTask.created_at)
-            )
-            if row is None:
+        with queue.chapter_limit.slot():
+            with _CLAIM_LOCK:
+                row = session.scalar(
+                    select(DownloadTask)
+                    .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
+                    .order_by(DownloadTask.created_at)
+                )
+                if row is None:
+                    break
+                row.status = "downloading"
+                row.progress = 0
+                row.phase = "fetching"
+                row.detail = None
+                row.error = None
+                session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
+            row_id = row.id
+            try:
+                if not row.remote_json:
+                    raise ValueError("queued download is missing chapter data")
+                remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
+                if row.chapter_id is None:
+                    _download_chapter(
+                        session,
+                        series=series,
+                        library=library,
+                        remote=remote,
+                        provider=provider,
+                        task=row,
+                        data_saver=data_saver,
+                        on_progress=on_progress,
+                    )
+                _phase(session, row, "thumbnails", 0, 1)
+                _ = write_series_cover(session, series_id, series_dir)
+                check_cancelled(series_id)
+                _ = generate_series_cover(session, store, series_id)
+                _phase(session, row, "thumbnails", 1, 1)
+                row.status = "done"
+                row.progress = 100
+                row.phase = None
+                row.detail = None
+            except OperationCancelled:
+                # DELETE may have removed the active row already. An UPDATE tolerates
+                # that race while ORM flushing a deleted instance would fail.
+                session.rollback()
+                session.execute(
+                    update(DownloadTask)
+                    .where(DownloadTask.id == row_id)
+                    .values(
+                        status="cancelled",
+                        error="cancelled",
+                        phase=None,
+                        detail=None,
+                    )
+                )
+                session.commit()
+                raise
+            except Exception as exc:  # noqa: BLE001 - record failure on the row, keep draining
+                row.status = "failed"
+                row.error = str(exc)
+                row.phase = None
+                row.detail = None
+            session.commit()  # persist the row's final status so the table settles
+            if row.status == "done":
+                processed += 1
+                if on_progress is not None:
+                    on_progress(100, row.chapter_label)
+            if is_cancelled(series_id):
                 break
-            row.status = "downloading"
-            row.progress = 0
-            row.phase = "fetching"
-            row.detail = None
-            row.error = None
-            session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
-        row_id = row.id
-        try:
-            if not row.remote_json:
-                raise ValueError("queued download is missing chapter data")
-            remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
-            if row.chapter_id is None:
-                _download_chapter(
-                    session,
-                    series=series,
-                    library=library,
-                    remote=remote,
-                    provider=provider,
-                    task=row,
-                    data_saver=data_saver,
-                    on_progress=on_progress,
-                )
-            _phase(session, row, "thumbnails", 0, 1)
-            _ = write_series_cover(session, series_id, series_dir)
-            check_cancelled(series_id)
-            _ = generate_series_cover(session, store, series_id)
-            _phase(session, row, "thumbnails", 1, 1)
-            row.status = "done"
-            row.progress = 100
-            row.phase = None
-            row.detail = None
-        except OperationCancelled:
-            # DELETE may have removed the active row already. An UPDATE tolerates
-            # that race while ORM flushing a deleted instance would fail.
-            session.rollback()
-            session.execute(
-                update(DownloadTask)
-                .where(DownloadTask.id == row_id)
-                .values(
-                    status="cancelled",
-                    error="cancelled",
-                    phase=None,
-                    detail=None,
-                )
-            )
-            session.commit()
-            raise
-        except Exception as exc:  # noqa: BLE001 - record failure on the row, keep draining
-            row.status = "failed"
-            row.error = str(exc)
-            row.phase = None
-            row.detail = None
-        session.commit()  # persist the row's final status so the table settles
-        if row.status == "done":
-            processed += 1
-            if on_progress is not None:
-                on_progress(100, row.chapter_label)
-        if is_cancelled(series_id):
-            break
     if is_cancelled(series_id):
         raise DownloadCancelled(f"download cancelled for series {series_id}")
     return processed

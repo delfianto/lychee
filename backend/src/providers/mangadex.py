@@ -26,7 +26,7 @@ from src.providers.mangadex_client import MangaDexClient
 from src.providers.mangadex_lists import MangaDexLists
 from src.tasks.concurrency import parallel_map
 from src.tasks.context import checkpoint
-from src.tasks.queue import queue
+from src.tasks.queue import MAX_WORKERS, queue
 
 _CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
@@ -487,7 +487,7 @@ class MangaDexProvider:
                 return item[0], content
 
         results = parallel_map(
-            fetch, enumerate(files, 1), workers=queue.download_workers, ordered=True
+            fetch, enumerate(files, 1), workers=MAX_WORKERS, ordered=True, limit=queue.file_limit
         )
         try:
             for index, content in results:

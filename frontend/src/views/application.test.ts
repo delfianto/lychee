@@ -130,3 +130,16 @@ it("disables server path controls and emits typed changes separately from browse
   expect(wrapper.emitted("update:modelValue")).toEqual([["/other"]]);
   expect(wrapper.emitted("pick")).toBeUndefined();
 });
+
+it("deep links to Settings sections and follows section changes without remounting the route", async () => {
+  const { wrapper, router } = await renderApp("/settings?section=downloads");
+  expect(wrapper.get("main").text()).toContain("Parallel downloads");
+  await router.push("/settings?section=sync");
+  await flushPromises();
+  expect(wrapper.get("main").text()).toContain("Parallel sync jobs");
+  await click(wrapper, "Libraries");
+  expect(router.currentRoute.value.query.section).toBe("libraries");
+  await router.push("/settings?section=unknown");
+  await flushPromises();
+  expect(wrapper.get("main").text()).toContain("Metadata providers");
+});

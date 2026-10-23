@@ -50,7 +50,10 @@ poster extraction polls the operation state and kills/reaps ffmpeg on cancellati
 - Download operation and chapter limits use `parallelDownloads`. A separate global
   file-request limiter of the same size bounds actual MangaDex file requests
   across chapter workers. Pages are fetched concurrently and fed to conversion
-  in source order, with bounded buffering.
+  in source order, with bounded buffering. Chapter and file dispatchers recheck
+  the live limit while waiting, so increasing it expands an active download.
+  Reducing it stops new chapter claims until active chapters drain below the
+  new limit; running chapters are not interrupted.
 - Sync operation and provider-item limits use `parallelSyncs`; filesystem/container
   inspection uses bounded workers too. Database reconciliation stays on its owner
   thread, with short commits before CPU work.
