@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import atexit
 import multiprocessing as mp
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from threading import Lock
@@ -49,7 +49,7 @@ def shutdown() -> None:
             _pool = None
 
 
-def encode_pages(raws: list[bytes], *, quality: int | None = None) -> Iterator[bytes]:
+def encode_pages(raws: Iterable[bytes], *, quality: int | None = None) -> Iterator[bytes]:
     """Encode each page's raw bytes to AVIF, yielded **in page order**. Fans out across the
     process pool when enabled; otherwise encodes serially in-process. Encoding is
     deterministic, so the parallel and serial results are identical."""
@@ -57,4 +57,4 @@ def encode_pages(raws: list[bytes], *, quality: int | None = None) -> Iterator[b
     pool = _get_pool()
     if pool is None:
         return (encode(raw) for raw in raws)
-    return pool.map(encode, raws)
+    return pool.map(encode, raws, buffersize=max(settings.encode_workers * 2, 1))

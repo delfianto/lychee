@@ -6,7 +6,9 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { fetchCollection } from "../api/queries";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import SeriesCoverCard from "../components/SeriesCoverCard.vue";
-import type { Series } from "../types";
+import MangaDexListActions from "../components/MangaDexListActions.vue";
+import { toast } from "../lib/toast";
+import type { Series, Collection } from "../types";
 import { useCollections } from "../stores/collections";
 
 const route = useRoute();
@@ -16,6 +18,9 @@ const collections = useCollections();
 const listId = ref(String(route.params.id));
 const name = ref("");
 const works = ref<Series[]>([]);
+const metadata = ref<Collection | null>(null);
+const busy = ref(false);
+const remoteDelete = ref(false);
 const loading = ref(true);
 const notFound = ref(false);
 
@@ -29,6 +34,7 @@ async function load(id: string): Promise<void> {
     works.value = [];
     name.value = "";
   } else {
+    metadata.value = detail;
     name.value = detail.name;
     works.value = detail.series;
   }
@@ -46,25 +52,50 @@ function startRename(): void {
   editName.value = name.value;
   editing.value = true;
 }
-function saveRename(): void {
-  if (editName.value.trim()) {
-    void collections.renameList(listId.value, editName.value);
-    name.value = editName.value.trim();
+async function saveRename(): Promise<void> {
+  if (!editName.value.trim()) {
+    editing.value = false;
+    return;
   }
-  editing.value = false;
+  busy.value = true;
+  try {
+    await collections.renameList(listId.value, editName.value);
+    name.value = editName.value.trim();
+    editing.value = false;
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't rename list", "error");
+  } finally {
+    busy.value = false;
+  }
 }
-function removeWork(seriesId: string): void {
-  void collections.removeSeries(listId.value, seriesId);
-  works.value = works.value.filter((s) => s.id !== seriesId);
+async function removeWork(seriesId: string): Promise<void> {
+  try {
+    await collections.removeSeries(listId.value, seriesId);
+    works.value = works.value.filter((s) => s.id !== seriesId);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't remove from list", "error");
+  }
+}
+async function changed(): Promise<void> {
+  await collections.refresh();
+  await load(listId.value);
 }
 const deleteOpen = ref(false);
-function del(): void {
+function del(remote = false): void {
+  remoteDelete.value = remote;
   deleteOpen.value = true;
 }
-function confirmDeleteList(): void {
-  deleteOpen.value = false;
-  void collections.deleteList(listId.value);
-  void router.push("/lists");
+async function confirmDeleteList(): Promise<void> {
+  busy.value = true;
+  try {
+    await collections.deleteList(listId.value, remoteDelete.value);
+    deleteOpen.value = false;
+    await router.push("/lists");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't delete list", "error");
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
 
@@ -97,7 +128,7 @@ function confirmDeleteList(): void {
               <template v-else>{{ name }}</template>
             </h1>
             <button
-              v-if="!loading"
+              v-if="!loading && metadata?.editable !== false"
               class="btn btn-circle btn-ghost btn-sm"
               aria-label="Rename list"
               @click="startRename"
@@ -110,11 +141,24 @@ function confirmDeleteList(): void {
             <template v-else>{{ works.length }} works</template>
           </p>
         </div>
-        <button v-if="!loading" class="btn btn-ghost btn-sm gap-1.5 text-error" @click="del">
-          <Trash2 class="size-4" />Delete list
+        <button v-if="!loading" class="btn btn-ghost btn-sm gap-1.5 text-error" @click="del(false)">
+          <Trash2 class="size-4" />{{ metadata?.provider ? "Remove from Lychee" : "Delete list" }}
         </button>
       </div>
 
+      <MangaDexListActions
+        v-if="!loading && metadata?.provider === 'mangadex'"
+        :key="listId"
+        :collection="metadata"
+        @changed="changed"
+      />
+      <button
+        v-if="!loading && metadata?.owned"
+        class="btn btn-ghost btn-sm self-start text-error"
+        @click="del(true)"
+      >
+        Delete from MangaDex
+      </button>
       <!-- Skeleton while the collection is in flight (never flash “No works yet”) -->
       <div
         v-if="loading"
@@ -133,7 +177,7 @@ function confirmDeleteList(): void {
           v-for="s in works"
           :key="s.id"
           :series="s"
-          removable
+          :removable="metadata?.editable !== false"
           @remove="removeWork(s.id)"
         />
       </div>
@@ -141,9 +185,28 @@ function confirmDeleteList(): void {
 
     <ConfirmDialog
       :open="deleteOpen"
-      title="Delete list?"
-      :message="`Delete the list “${name}”? This cannot be undone.`"
-      confirm-label="Delete list"
+      :title="
+        remoteDelete
+          ? 'Delete from MangaDex?'
+          : metadata?.provider
+            ? 'Remove from Lychee?'
+            : 'Delete list?'
+      "
+      :message="
+        remoteDelete
+          ? `Permanently delete “${name}” on MangaDex and remove its local list? Manga files are kept.`
+          : metadata?.provider
+            ? 'Remove this local copy only? The MangaDex list is kept and may return on account sync.'
+            : `Delete the list “${name}”? This cannot be undone.`
+      "
+      :confirm-label="
+        remoteDelete
+          ? 'Delete from MangaDex'
+          : metadata?.provider
+            ? 'Remove from Lychee'
+            : 'Delete list'
+      "
+      :busy="busy"
       danger
       @confirm="confirmDeleteList"
       @cancel="deleteOpen = false"

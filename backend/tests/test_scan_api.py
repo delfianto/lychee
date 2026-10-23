@@ -238,3 +238,16 @@ def test_library_list_reports_series_count(client: TestClient, tmp_path: Path) -
     libraries = {lib["id"]: lib for lib in client.get("/api/libraries").json()}
     assert libraries[library_id]["seriesCount"] == 2
     assert libraries[library_id]["lastScan"] is not None
+
+
+def test_scan_ignores_reserved_temp_workspace(client: TestClient, tmp_path: Path) -> None:
+    root = tmp_path / "library"
+    _cbz(root / "Actual series" / "Chapter 1.cbz", 2)
+    _cbz(root / "temp" / "download-in-progress" / "chapter.cbz", 2)
+    _cbz(root / "Actual series" / "temp" / "import-in-progress" / "book.cbz", 2)
+    _, summary = _create_and_scan(client, root)
+    assert summary["seriesAdded"] == 1
+    assert summary["booksAdded"] == 1
+    assert [series["title"] for series in client.get("/api/series").json()["items"]] == [
+        "Actual series"
+    ]

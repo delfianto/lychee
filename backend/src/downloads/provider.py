@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Protocol, cast
+from pathlib import Path
+from typing import Protocol, cast, runtime_checkable
 
 # Called as on_page(done, total) while pages are fetched from the provider.
 PageProgress = Callable[[int, int], None]
@@ -24,6 +25,33 @@ class RemoteChapter:
     language: str
     group_name: str | None = None
     published_at: str | None = None  # ISO 8601 from the provider (→ source_uploaded_at)
+
+
+@dataclass
+class ChapterListing:
+    chapters: list[RemoteChapter]
+    status: str = "ready"
+    available_languages: list[str] = field(default_factory=list)
+    total_count: int = 0
+
+
+@runtime_checkable
+class ChapterIndexProvider(Protocol):
+    def inspect_chapters(
+        self, provider_series_id: str, *, language: str = "en"
+    ) -> ChapterListing: ...
+
+
+@runtime_checkable
+class DiskDownloadProvider(Protocol):
+    def fetch_pages_to(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        data_saver: bool = False,
+        on_page: PageProgress | None = None,
+    ) -> list[Path]: ...
 
 
 class Provider(Protocol):
@@ -87,6 +115,11 @@ class CustomList:
     provider_list_id: str
     name: str
     manga_ids: list[str] = field(default_factory=list)
+    owner_id: str | None = None
+    visibility: str = "public"
+    version: int = 1
+    owned: bool = False
+    followed: bool = False
 
 
 class MetadataProvider(Protocol):

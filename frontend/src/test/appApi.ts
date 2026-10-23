@@ -274,6 +274,14 @@ export function useAppApi() {
       const done = () => new HttpResponse(null, { status: 204 });
       const task = () =>
         json({ id: "task", kind: "scan", label: "Test task", status: "running", progress: 0 });
+      if (path.endsWith("/chapter-availability"))
+        return json({
+          status: "ready",
+          language: "en",
+          availableLanguages: ["en"],
+          availableCount: 2,
+          totalCount: 2,
+        });
       if (path === "/api/dashboard")
         return json({
           stats: { series: db.series.length, unreadChapters: 2, reading: 1 },

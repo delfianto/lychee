@@ -3,6 +3,8 @@ import { ChevronDown, Download, Loader2, MessageSquare, Trash2 } from "@lucide/v
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import type { ChapterAvailability } from "../api/queries";
+import ChapterAvailabilityNotice from "./ChapterAvailabilityNotice.vue";
 import type { Chapter, Series, VolumeGroup } from "../types";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import SeriesRail from "./SeriesRail.vue";
@@ -18,7 +20,9 @@ const props = withDefaults(
     /** True once the provider's chapter feed has been fetched at least once — lets the
      *  empty state say "the provider has none" instead of "not synced yet". */
     synced?: boolean;
-    /** Current language filter ("" = all languages) and chapter sort order — both are
+    availability?: ChapterAvailability;
+    checking?: boolean;
+    /** Current language filter ("" = preferred language) and chapter sort order — both are
      *  server-side (`GET .../chapters?language=&order=`), so changes must round-trip
      *  through the parent rather than being applied client-side to the loaded volumes. */
     language?: string;
@@ -40,6 +44,7 @@ const emit = defineEmits<{
   download: [providerChapterId: string, done: () => void];
   downloadAll: [done: () => void];
   deleteChapter: [chapterId: string, done: () => void];
+  retry: [];
   "update:language": [language: string];
   "update:order": [order: "asc" | "desc"];
 }>();
@@ -199,7 +204,14 @@ const statusLabel: Record<string, string> = {
           @change="emit('update:language', ($event.target as HTMLSelectElement).value)"
         >
           <option value="en">English</option>
-          <option value="">All languages</option>
+          <option value="">Preferred language</option>
+          <option
+            v-for="code in (availability?.availableLanguages ?? []).filter((code) => code !== 'en')"
+            :key="code"
+            :value="code"
+          >
+            {{ code.toUpperCase() }}
+          </option>
         </select>
         <button
           v-if="seriesId && hasAvailable()"
@@ -216,13 +228,16 @@ const statusLabel: Record<string, string> = {
         </button>
       </div>
 
-      <div v-if="!hasAny()" class="py-10 text-center text-sm text-base-content/60">
-        <template v-if="matched && synced">
-          MangaDex lists no chapters for this title — it may have been removed or isn't available in
-          your selected language.
-        </template>
-        <template v-else-if="matched"
-          >No chapters listed yet — try refreshing metadata or sync.</template
+      <ChapterAvailabilityNotice
+        v-if="availability && (!hasAny() || availability.status === 'error')"
+        :availability="availability"
+        :checking="checking"
+        @retry="emit('retry')"
+      />
+      <div v-else-if="!hasAny()" class="py-10 text-center text-sm text-base-content/60">
+        <template v-if="matched"
+          >Chapter availability has not been checked yet. Refresh the chapter list to check
+          MangaDex.</template
         >
         <template v-else>No chapters in the library for this series.</template>
       </div>
@@ -250,7 +265,9 @@ const statusLabel: Record<string, string> = {
                 class="h-2 w-2 shrink-0 rounded-full"
                 :class="c.read || c.status !== 'downloaded' ? 'bg-base-300' : 'bg-primary'"
               />
-              <span class="w-16 shrink-0 text-sm font-medium">Ch. {{ c.number }}</span>
+              <span class="w-16 shrink-0 text-sm font-medium">{{
+                c.number === "Oneshot" ? "Oneshot" : `Ch. ${c.number}`
+              }}</span>
               <span class="min-w-0 grow truncate text-sm">{{ c.title }}</span>
               <span class="hidden text-xs text-base-content/60 sm:inline">{{ c.group }}</span>
               <span class="badge badge-ghost badge-sm uppercase">{{ c.language }}</span>

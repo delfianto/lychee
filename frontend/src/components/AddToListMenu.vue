@@ -13,10 +13,17 @@ const props = withDefaults(defineProps<{ seriesId: string; triggerClass?: string
 });
 const collections = useCollections();
 
-function toggleList(list: Collection): void {
-  const wasIn = collections.hasSeries(list.id, props.seriesId);
-  collections.toggleSeries(list.id, props.seriesId);
-  toast(wasIn ? `Removed from ${list.name}` : `Added to ${list.name}`, wasIn ? "info" : "success");
+async function toggleList(list: Collection): Promise<void> {
+  try {
+    const wasIn = collections.hasSeries(list.id, props.seriesId);
+    await collections.toggleSeries(list.id, props.seriesId);
+    toast(
+      wasIn ? `Removed from ${list.name}` : `Added to ${list.name}`,
+      wasIn ? "info" : "success",
+    );
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't update list", "error");
+  }
 }
 </script>
 
@@ -30,7 +37,7 @@ function toggleList(list: Collection): void {
       class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow"
     >
       <li class="menu-title">Add to list</li>
-      <li v-for="l in collections.lists" :key="l.id">
+      <li v-for="l in collections.lists.filter((l) => l.editable !== false)" :key="l.id">
         <a @click.stop.prevent="toggleList(l)">
           <Check
             class="size-4"

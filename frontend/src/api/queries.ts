@@ -417,12 +417,17 @@ export async function fetchArt(id: string): Promise<string[]> {
 /** All gallery-kind series (few enough to filter client-side + derive facets). */
 export async function fetchCollection(
   id: string,
-): Promise<{ name: string; series: Series[] } | null> {
+): Promise<(import("../types").Collection & { series: Series[] }) | null> {
   const { data, error } = await api.GET("/api/collections/{collection_id}", {
     params: { path: { collection_id: id } },
   });
   if (error || !data) return null;
-  return { name: data.name, series: data.series.map(toSeries) };
+  return {
+    ...data,
+    description: data.description ?? undefined,
+    seriesIds: data.series.map((s) => s.id),
+    series: data.series.map(toSeries),
+  };
 }
 
 export async function fetchGalleries(): Promise<Series[]> {
@@ -493,4 +498,26 @@ export function buildLibraryQuery(
   if (f.readStates.size === 1) q.readState = [...f.readStates][0];
   q.sort = SORT_MAP[opts.sort] ?? "recentlyAdded";
   return q;
+}
+
+export type ChapterAvailability =
+  import("./schema").components["schemas"]["ChapterAvailabilityOut"];
+export async function fetchChapterAvailability(
+  id: string,
+  language?: string,
+  refresh = false,
+): Promise<ChapterAvailability> {
+  const { data, error } = await api.GET("/api/series/{series_id}/chapter-availability", {
+    params: { path: { series_id: id }, query: { ...(language ? { language } : {}), refresh } },
+  });
+  if (error || !data)
+    return {
+      status: "error",
+      language: language || "en",
+      availableLanguages: [],
+      availableCount: 0,
+      totalCount: 0,
+      message: apiErrorMessage(error, "Could not check chapter availability. Retry the check."),
+    };
+  return data;
 }

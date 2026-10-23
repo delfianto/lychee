@@ -6,6 +6,7 @@ import { RouterLink } from "vue-router";
 import { type ListsTab, useListsDefaultTab } from "../lib/density";
 import { toast } from "../lib/toast";
 import { useCollections } from "../stores/collections";
+import MangaDexListImport from "../components/MangaDexListImport.vue";
 import type { Collection } from "../types";
 
 defineOptions({ name: "ListsView" });
@@ -13,6 +14,9 @@ defineOptions({ name: "ListsView" });
 const collections = useCollections();
 const creating = ref(false);
 const newName = ref("");
+const location = ref("local");
+const visibility = ref<"public" | "private">("private");
+const busy = ref(false);
 
 // --- Kind tabs (mirrors LibraryView's shelf-status tabs) -----------------
 const { listsDefaultTab } = useListsDefaultTab();
@@ -40,13 +44,32 @@ const activeTabLabel = computed(
 async function create(): Promise<void> {
   const name = newName.value.trim();
   if (!name) return;
-  await collections.createList(name);
-  toast(`Created “${name}”`);
-  newName.value = "";
-  creating.value = false;
-  // A brand-new list has no series yet, so it has no kind — jump to "All" so it
-  // doesn't silently vanish from whichever kind tab was active.
-  activeTab.value = "all";
+  busy.value = true;
+  try {
+    await collections.createList(
+      name,
+      location.value === "mangadex"
+        ? { provider: "mangadex", visibility: visibility.value }
+        : undefined,
+    );
+    toast(`Created “${name}”`);
+    newName.value = "";
+    creating.value = false;
+    // A brand-new list has no series yet, so it has no kind — jump to "All" so it
+    // doesn't silently vanish from whichever kind tab was active.
+    activeTab.value = "all";
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't create list", "error");
+  } finally {
+    busy.value = false;
+  }
+}
+async function removeList(id: string) {
+  try {
+    await collections.deleteList(id);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't delete list", "error");
+  }
 }
 function covers(seriesIds: string[]): string[] {
   return seriesIds.slice(0, 4).map((id) => `/api/series/${id}/cover`);
@@ -65,6 +88,7 @@ function covers(seriesIds: string[]): string[] {
       </button>
     </div>
 
+    <MangaDexListImport />
     <!-- Kind tabs -->
     <div role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
       <button
@@ -92,7 +116,24 @@ function covers(seriesIds: string[]): string[] {
         class="input input-bordered input-sm max-w-xs"
         @keyup.enter="create"
       />
-      <button class="btn btn-primary btn-sm" :disabled="!newName.trim()" @click="create">
+      <select
+        v-model="location"
+        class="select select-bordered select-sm"
+        aria-label="List location"
+      >
+        <option value="local">Local list</option>
+        <option value="mangadex">MangaDex list</option>
+      </select>
+      <select
+        v-if="location === 'mangadex'"
+        v-model="visibility"
+        class="select select-bordered select-sm"
+        aria-label="New list visibility"
+      >
+        <option value="private">Private</option>
+        <option value="public">Public</option>
+      </select>
+      <button class="btn btn-primary btn-sm" :disabled="busy || !newName.trim()" @click="create">
         Create
       </button>
       <button class="btn btn-ghost btn-sm" @click="creating = false">Cancel</button>
@@ -128,13 +169,18 @@ function covers(seriesIds: string[]): string[] {
           </div>
           <div class="p-3">
             <h3 class="truncate font-semibold">{{ l.name }}</h3>
+            <span v-if="l.provider === 'mangadex'" class="badge badge-outline badge-xs"
+              >MangaDex · {{ l.owned ? "Owned" : l.followed ? "Followed" : "Imported" }} ·
+              {{ l.visibility }}</span
+            >
             <p class="text-xs text-base-content/60">{{ l.seriesIds.length }} works</p>
           </div>
         </RouterLink>
         <button
+          v-if="!l.provider"
           class="btn btn-circle btn-error btn-xs absolute right-2 top-2 opacity-0 transition group-hover:opacity-100"
           aria-label="Delete list"
-          @click="collections.deleteList(l.id)"
+          @click="removeList(l.id)"
         >
           <Trash2 class="size-3.5" />
         </button>

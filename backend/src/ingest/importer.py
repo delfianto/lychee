@@ -25,6 +25,7 @@ from src.ingest.parser import PatternResult, parse_pattern
 from src.ingest.scanner import Candidate, order_chapters, resolve_books, sync_chapter
 from src.media.containers import open_container, write_cbz
 from src.media.encode_pool import encode_pages
+from src.media.staging import workspace
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
@@ -151,16 +152,26 @@ def _import_book(
     )
     if already is not None:
         return None  # already imported — nothing to do this run
-    try:
-        with open_container(candidate.path, candidate.kind) as container:
-            raws = [container.read_page(index) for index in range(container.page_count())]
-    except LycheeError as exc:
-        logger.warning("import_skip_unreadable", path=str(candidate.path), error=str(exc))
-        return None
-    # transcode to AVIF at the configured quality (possibly across the encode pool) and
-    # pack the pages into a stored CBZ
-    dest = storage_root / "imports" / rel
-    page_count, size = write_cbz(dest, encode_pages(raws, quality=quality))
+    with workspace(Path(library.path), prefix="import") as work:
+        try:
+            with open_container(candidate.path, candidate.kind) as container:
+                if container.page_count() == 0:
+                    raise BadRequestError("Source contains no readable pages")
+                pages = []
+                for index in range(container.page_count()):
+                    path = work / f"{index:04d}.source"
+                    path.write_bytes(container.read_page(index))
+                    pages.append(path)
+        except LycheeError as exc:
+            logger.warning("import_skip_unreadable", path=str(candidate.path), error=str(exc))
+            return None
+        staged = work / "book.cbz"
+        page_count, size = write_cbz(
+            staged, encode_pages((path.read_bytes() for path in pages), quality=quality)
+        )
+        dest = Path(library.path) / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        staged.replace(dest)
     book = Book(
         series_id=series.id,
         library_id=library.id,

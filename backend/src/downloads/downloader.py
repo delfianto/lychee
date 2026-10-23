@@ -32,9 +32,10 @@ from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
 from src.downloads.cancel import DownloadCancelled, check_cancelled, clear_cancel, is_cancelled
 from src.downloads.models import DownloadTask
-from src.downloads.provider import Provider, RemoteChapter, get_provider
+from src.downloads.provider import DiskDownloadProvider, Provider, RemoteChapter, get_provider
 from src.media.containers import write_cbz
 from src.media.encode_pool import encode_pages
+from src.media.staging import workspace
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
@@ -106,7 +107,14 @@ def _series_dir_name(series: Series) -> str:
     # Reuse an existing single-segment human path_rel when it isn't just the bare id.
     if series.path_rel and "/" not in series.path_rel.strip("/"):
         candidate = series.path_rel.strip("/")
-        if candidate and candidate != series.id:
+        virtual_id = candidate == series.provider_series_id
+        # Keep an existing download location stable; fresh provider imports store
+        # the MangaDex UUID as their virtual path, which is not a folder name.
+        root = Path(series.library.path)
+        existing_downloads = (
+            root.is_absolute() and any((root / candidate).rglob("*.cbz")) if virtual_id else False
+        )
+        if candidate and candidate != series.id and (not virtual_id or existing_downloads):
             return _safe_fs_name(candidate, fallback=_safe_fs_name(series.title))
     return _safe_fs_name(series.title, fallback=series.id)
 
@@ -118,7 +126,7 @@ def _volume_dir_name(volume: int | None) -> str:
 
 
 def _chapter_file_name(number: str, title: str | None = None) -> str:
-    base = f"Ch.{number}"
+    base = "Oneshot" if number == "Oneshot" else f"Ch.{_safe_fs_name(number)}"
     if title:
         base = f"{base} - {_safe_fs_name(title)}"
     return f"{base}.cbz"
@@ -130,7 +138,13 @@ def chapter_path_rel(series: Series, remote: RemoteChapter) -> str:
         [
             _series_dir_name(series),
             _volume_dir_name(remote.volume),
-            _chapter_file_name(remote.number, remote.title),
+            _chapter_file_name(remote.number, remote.title).removesuffix(".cbz")
+            + (
+                f" [{_safe_fs_name(remote.provider_chapter_id)[:8]}]"
+                if remote.number == "Oneshot"
+                else ""
+            )
+            + ".cbz",
         ]
     )
 
@@ -140,6 +154,13 @@ def bind_series_to_manga_library(session: Session, series: Series, library: Libr
     folder = _series_dir_name(series)
     if series.library_id != library.id:
         series.library_id = library.id
+    collision = session.scalar(
+        select(Series.id).where(
+            Series.library_id == library.id, Series.path_rel == folder, Series.id != series.id
+        )
+    )
+    if collision is not None:
+        folder = f"{folder} [{series.id}]"
     series.path_rel = folder
     session.flush()
 
@@ -187,29 +208,43 @@ def _download_chapter(
     task.progress = 0
     session.commit()
 
-    pages = provider.fetch_pages(remote, data_saver=data_saver, on_page=_on_fetch)
-    check_cancelled(series.id)
-
     rel = chapter_path_rel(series, remote)
     dest = Path(library.path) / rel
-    total = len(pages) or 1
-
-    def _on_encode(done: int) -> None:
+    with workspace(Path(library.path), prefix="download") as work:
+        if isinstance(provider, DiskDownloadProvider):
+            pages = provider.fetch_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+        else:
+            pages = []
+            for index, data in enumerate(
+                provider.fetch_pages(remote, data_saver=data_saver, on_page=_on_fetch)
+            ):
+                path = work / f"{index:04d}.source"
+                path.write_bytes(data)
+                pages.append(path)
         check_cancelled(series.id)
+        if not pages:
+            raise BadRequestError("The provider returned no readable pages")
+        total = len(pages)
+
+        def _on_encode(done: int) -> None:
+            check_cancelled(series.id)
+            task.phase = "encoding"
+            task.detail = f"{done}/{total}"
+            task.progress = 50 + int(done / total * 50)
+            if on_progress is not None:
+                on_progress(task.progress, f"Encoding {label} ({done}/{total})")
+            session.commit()
+
         task.phase = "encoding"
-        task.detail = f"{done}/{total}"
-        task.progress = 50 + int(done / total * 50)
-        if on_progress is not None:
-            on_progress(task.progress, f"Encoding {label} ({done}/{total})")
+        task.detail = f"0/{total}"
         session.commit()
-
-    task.phase = "encoding"
-    task.detail = f"0/{total}"
-    session.commit()
-
-    # content-aware AVIF (discard original), possibly fanned across the encode pool,
-    # packed into a stored CBZ
-    page_count, size = write_cbz(dest, encode_pages(pages), on_page=_on_encode)
+        staged = work / "chapter.cbz"
+        page_count, size = write_cbz(
+            staged, encode_pages(path.read_bytes() for path in pages), on_page=_on_encode
+        )
+        check_cancelled(series.id)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        staged.replace(dest)  # same library filesystem: publish the complete archive atomically
 
     book = Book(
         series_id=series.id,
@@ -302,7 +337,7 @@ def plan_downloads(
     pending = [
         remote
         for remote in remotes
-        if remote.number not in local
+        if (remote.number == "Oneshot" or remote.number not in local)
         and remote.provider_chapter_id not in local_pids
         and (want is None or remote.provider_chapter_id in want)
     ]
@@ -312,7 +347,9 @@ def plan_downloads(
     queued = 0
     for remote in pending:
         label = f"Ch. {remote.number}"
-        if label in in_flight or remote.provider_chapter_id in in_flight_pids:
+        if (
+            remote.number != "Oneshot" and label in in_flight
+        ) or remote.provider_chapter_id in in_flight_pids:
             continue
         session.add(
             DownloadTask(

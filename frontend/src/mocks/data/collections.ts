@@ -101,6 +101,9 @@ export function kindFor(seriesIds: string[]): string | null {
 }
 
 export const collectionsDb: CollectionOut[] = SEEDS.map((seed) => ({
+  owned: false,
+  followed: false,
+  editable: true,
   id: seed.id,
   name: seed.name,
   description: seed.description,

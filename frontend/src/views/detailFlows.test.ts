@@ -360,3 +360,90 @@ it("keeps the latest rating when an older rejected write finishes afterward", as
   await flushPromises();
   expect(wrapper.text()).toContain("9/10");
 });
+
+it("retries an unsuccessful chapter check and shows an unnumbered readable chapter", async () => {
+  let recovered = false;
+  api.server.use(
+    http.get("http://localhost/api/series/s1/chapters", () =>
+      HttpResponse.json(
+        recovered
+          ? [
+              {
+                volume: null,
+                chapters: [
+                  {
+                    id: null,
+                    number: "Oneshot",
+                    title: "Complete story",
+                    language: "en",
+                    read: false,
+                    comments: 0,
+                    status: "available",
+                    providerChapterId: "oneshot",
+                  },
+                ],
+              },
+            ]
+          : [],
+      ),
+    ),
+    http.get("http://localhost/api/series/s1/chapter-availability", ({ request }) => {
+      if (new URL(request.url).searchParams.get("refresh") === "true") recovered = true;
+      return HttpResponse.json({
+        status: recovered ? "ready" : "error",
+        language: "en",
+        availableLanguages: recovered ? ["en"] : [],
+        availableCount: recovered ? 1 : 0,
+        totalCount: recovered ? 1 : 0,
+        sourceUrl: "https://mangadex.org/title/remote",
+        message: recovered ? null : "Could not check chapters on MangaDex.",
+      });
+    }),
+  );
+  const { wrapper } = await renderView(SeriesDetail, {
+    path: "/series/s1",
+    pattern: "/series/:id",
+  });
+  expect(wrapper.text()).toContain("Could not check chapters on MangaDex");
+  await click(wrapper, "Retry chapter check");
+  await vi.waitFor(() => expect(wrapper.text()).toContain("Complete story"));
+  expect(wrapper.text()).toContain("Oneshot");
+  expect(wrapper.text()).not.toContain("Could not check chapters on MangaDex");
+  expect(recovered).toBe(true);
+});
+
+it("discards a chapter-check retry response after navigating to another manga", async () => {
+  let release: () => void = () => {};
+  let requested = false;
+  api.db.series.push(makeSeries("other", { title: "Other manga" }));
+  api.server.use(
+    http.get("http://localhost/api/series/s1/chapters", () => HttpResponse.json([])),
+    http.get("http://localhost/api/series/s1/chapter-availability", async ({ request }) => {
+      if (new URL(request.url).searchParams.get("refresh") === "true") {
+        requested = true;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return HttpResponse.json({
+        status: "error",
+        language: "en",
+        availableLanguages: [],
+        availableCount: 0,
+        totalCount: 0,
+      });
+    }),
+  );
+  const { wrapper, router } = await renderView(SeriesDetail, {
+    path: "/series/s1",
+    pattern: "/series/:id",
+  });
+  await click(wrapper, "Retry chapter check");
+  await vi.waitFor(() => expect(requested).toBe(true));
+  await router.push("/series/other");
+  await flushPromises();
+  release();
+  await flushPromises();
+  expect(wrapper.get("h1").text()).toBe("Other manga");
+  expect(wrapper.text()).not.toContain("Could not check chapters on MangaDex");
+});

@@ -49,7 +49,8 @@ async function load(): Promise<void> {
 onMounted(load);
 onUnmounted(
   onTaskDone((task) => {
-    if (task.status === "done" && ["import", "scan", "metadata"].includes(task.kind)) void load();
+    if (task.status === "done" && ["import", "scan", "metadata", "mdlist"].includes(task.kind))
+      void load();
   }),
 );
 </script>

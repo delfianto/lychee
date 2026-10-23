@@ -98,6 +98,8 @@ class Series(BaseModel):
     # Remote chapters not yet present locally, from the last sync.
     available_chapters: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # When the provider chapter index was last successfully refreshed (even if empty).
+    chapter_index_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    chapter_availability_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     chapter_index_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

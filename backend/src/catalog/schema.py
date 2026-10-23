@@ -183,3 +183,14 @@ class DashboardOut(CamelModel):
     reading_list: list[SeriesOut]
     recent_updates: list[RecentUpdateOut]
     recently_added: list[SeriesOut]
+
+
+class ChapterAvailabilityOut(CamelModel):
+    status: str
+    language: str
+    available_languages: list[str] = []
+    available_count: int = 0
+    total_count: int = 0
+    checked_at: UtcDatetime | None = None
+    message: str | None = None
+    source_url: str | None = None

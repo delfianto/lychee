@@ -218,3 +218,10 @@ def test_push_read_empty_makes_no_call() -> None:
         raise AssertionError("should not POST for an empty chapter list")
 
     _provider_for(handler).push_read("m1", [])  # no exception = no call
+
+
+def test_fetch_pages_to_streams_source_images_into_library_workspace(tmp_path) -> None:
+    paths = _provider().fetch_pages_to(RemoteChapter("c1", "1", 1, None, "en"), tmp_path)
+    assert len(paths) == 2
+    assert [path.read_bytes() for path in paths] == [b"PAGE", b"PAGE"]
+    assert all(path.parent == tmp_path for path in paths)
