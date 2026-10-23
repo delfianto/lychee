@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { BookMarked, BookOpen, ChevronRight, HardDrive, Library, Settings } from "@lucide/vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import { fetchDashboard, fetchLibrarySummaries, type LibrarySummary } from "../api/queries";
+import { onTaskDone } from "../api/events";
 import ErrorState from "../components/ErrorState.vue";
 import FeaturedCarousel from "../components/FeaturedCarousel.vue";
 import RecentUpdates from "../components/RecentUpdates.vue";
@@ -18,6 +19,7 @@ const totalSeries = ref(0);
 const unreadTotal = ref(0);
 const readingCount = ref(0);
 const continueReading = ref<Series[]>([]);
+const readingList = ref<Series[]>([]);
 const homeUpdates = ref<RecentUpdate[]>([]);
 const recentlyAdded = ref<Series[]>([]);
 // Storage per library — hide empty (0 GB) ones so the strip stays uncluttered.
@@ -34,6 +36,7 @@ async function load(): Promise<void> {
     unreadTotal.value = dashboard.stats.unreadChapters;
     readingCount.value = dashboard.stats.reading;
     continueReading.value = dashboard.continueReading;
+    readingList.value = dashboard.readingList;
     homeUpdates.value = dashboard.recentUpdates;
     recentlyAdded.value = dashboard.recentlyAdded;
     storageLibs.value = summaries.filter((l) => l.sizeGb > 0);
@@ -44,6 +47,11 @@ async function load(): Promise<void> {
   }
 }
 onMounted(load);
+onUnmounted(
+  onTaskDone((task) => {
+    if (task.status === "done" && ["import", "scan", "metadata"].includes(task.kind)) void load();
+  }),
+);
 </script>
 
 <template>
@@ -118,6 +126,21 @@ onMounted(load);
       <section v-if="continueReading.length" class="flex flex-col gap-3">
         <h2 class="text-lg font-semibold">Continue reading</h2>
         <FeaturedCarousel :items="continueReading" />
+      </section>
+
+      <!-- Shelf membership works for synced titles before any pages are downloaded. -->
+      <section v-if="readingList.length" class="flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-lg font-semibold">On your reading list</h2>
+          <RouterLink
+            to="/reading"
+            class="btn btn-circle btn-ghost btn-sm"
+            aria-label="See your full reading list"
+          >
+            <ChevronRight class="size-5" />
+          </RouterLink>
+        </div>
+        <SeriesRail :series="readingList" />
       </section>
 
       <!-- Recent updates — hidden when empty -->

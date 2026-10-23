@@ -626,9 +626,15 @@ def updates(
 def dashboard(session: Session) -> DashboardOut:
     series_count, unread_chapters, reading = repo.dashboard_counts(session)
     recent = updates(session, unread_only=False, cursor=None, limit=12)
+    # A shelf entry needs no local chapters or progress. Alphabetical order keeps
+    # this rail stable while an account sync imports and refreshes metadata.
+    reading_list, _ = repo.list_series(
+        session, repo.SeriesFilters(shelf="reading", sort="title"), limit=12
+    )
     return DashboardOut(
         stats=DashboardStats(series=series_count, unread_chapters=unread_chapters, reading=reading),
         continue_reading=[to_series_out(r) for r in repo.continue_reading(session, limit=6)],
+        reading_list=[to_series_out(r) for r in reading_list],
         recent_updates=recent.items,
         recently_added=[to_series_out(r) for r in repo.recently_added(session, limit=12)],
     )

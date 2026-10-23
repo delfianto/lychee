@@ -70,8 +70,36 @@ def test_dashboard_shape(client: TestClient, db_session: Session) -> None:
     assert data["stats"]["unreadChapters"] == 3
     assert data["stats"]["reading"] == 1
     assert [s["title"] for s in data["continueReading"]] == ["In Progress"]
+    assert [s["title"] for s in data["readingList"]] == ["In Progress"]
     assert len(data["recentUpdates"]) == 10
     assert {s["title"] for s in data["recentlyAdded"]} == {"In Progress", "Gallery"}
+
+
+def test_dashboard_reading_list_without_local_chapters(
+    client: TestClient, db_session: Session
+) -> None:
+    # Account-synced shelf membership needs neither downloaded pages nor progress.
+    for index in reversed(range(15)):
+        series = make_series(db_session, title=f"Reading {index:02}", library_status="reading")
+        series.provider = "mangadex"
+        series.provider_series_id = f"remote-{index}"
+    for status in ("none", "completed", "plan_to_read", "dropped", "on_hold"):
+        make_series(db_session, title=f"Other shelf {status}", library_status=status)
+    db_session.commit()
+
+    data = client.get("/api/dashboard").json()
+    assert data["continueReading"] == []
+    assert data["recentUpdates"] == []
+    assert data["stats"]["reading"] == 15
+    assert [s["title"] for s in data["readingList"]] == [f"Reading {i:02}" for i in range(12)]
+    assert all(s["chapterCount"] == 0 for s in data["readingList"])
+
+
+def test_dashboard_empty_reading_list(client: TestClient, db_session: Session) -> None:
+    assert client.get("/api/dashboard").json()["readingList"] == []
+    make_series(db_session, title="Completed", library_status="completed")
+    db_session.commit()
+    assert client.get("/api/dashboard").json()["readingList"] == []
 
 
 def test_search(client: TestClient, db_session: Session) -> None:

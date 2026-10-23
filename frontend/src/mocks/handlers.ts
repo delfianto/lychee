@@ -460,6 +460,10 @@ export const handlers = [
         reading: continueReading.length,
       },
       continueReading: continueReading.slice(0, 12),
+      readingList: seriesCatalog
+        .filter((s) => s.libraryStatus === "reading")
+        .sort((a, b) => a.title.localeCompare(b.title))
+        .slice(0, 12),
       recentUpdates: recentUpdates(false, 8),
       recentlyAdded: seriesCatalog.slice(0, 12),
     });

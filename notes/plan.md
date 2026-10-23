@@ -94,7 +94,7 @@
 - [x] **Shell/nav** — top-nav `AppShell` (Home · Reading · Favorites · Manga · Comics · Gallery ·
       Lists), icon-only below `xl`, mobile drawer, static brand, search → `/search`, random dice
       (`/api/series`), light/dark toggle, settings↔back, 404 route.
-- [x] **Home dashboard** — stats + per-library storage · continue-reading · recent updates · recently
+- [x] **Home dashboard** — stats + per-library storage · continue-reading · reading-list shelf · recent updates · recently
       added — all from `/api/dashboard` + `/api/libraries/summary`.
 - [x] **Library** (`LibraryView`) — 3 density modes, shelf tabs, search + `FilterPanel` (tags from
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
