@@ -56,6 +56,31 @@ describe("provider configuration", () => {
 });
 
 describe("library registration and scans", () => {
+  it("shows provider libraries as managed without scan or remove actions", async () => {
+    api.db.libraries = [{ ...api.db.libraries[0]!, path: "mangadex://follows", name: "MangaDex" }];
+    const { wrapper } = await renderView(LibrariesPanel);
+    expect(wrapper.text()).toContain("Managed by account sync");
+    const labels = wrapper.findAll("button").map((b) => b.text());
+    expect(labels).not.toContain("Scan");
+    expect(labels).not.toContain("Remove");
+    await click(wrapper, "Scan all");
+    expect(api.writes().map((r) => r.path)).toEqual(["/api/libraries/scan"]);
+  });
+  it("shows server failures for scan and remove without reporting success", async () => {
+    const { wrapper } = await renderView(LibrariesPanel);
+    api.failNext("POST", "/api/libraries/scan");
+    await click(wrapper, "Scan all");
+    api.failNext("POST", "/api/libraries/lib/scan");
+    await click(wrapper, "Scan");
+    api.failNext("DELETE", "/api/libraries/lib");
+    await click(wrapper, "Remove");
+    expect(messages()).toContain("Rejected by server");
+    expect(messages()).not.toContain("Scan started");
+    expect(wrapper.text()).toContain(api.db.libraries[0]!.name);
+    taskEvent("scan", "failed", { detail: "library path not found: /missing" });
+    await flushPromises();
+    expect(messages()).toContain("Scan failed: library path not found: /missing");
+  });
   it("runs scans, handles task outcomes, disables busy actions, and removes a root", async () => {
     api.db.libraries.push({
       ...api.db.libraries[0]!,

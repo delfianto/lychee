@@ -22,7 +22,7 @@ import CoverImage from "../components/CoverImage.vue";
 import EditSeriesModal from "../components/EditSeriesModal.vue";
 import ErrorState from "../components/ErrorState.vue";
 import MatchSeriesModal from "../components/MatchSeriesModal.vue";
-import SeriesDescription from "../components/SeriesDescription.vue";
+import SeriesSynopsis from "../components/SeriesSynopsis.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, statusColor } from "../lib/display";
 import { ratingLabel } from "../lib/ratingLabels";
@@ -40,7 +40,6 @@ const loading = ref(true);
 const chapterLanguage = ref("");
 const chapterOrder = ref<"asc" | "desc">("desc");
 
-const expanded = ref(false);
 const favorite = ref(false);
 const libraryStatus = ref<LibraryStatus>("none");
 // Your personal rating (1–10, integer). The community score is series.rating (decimal).
@@ -298,7 +297,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             :src="series.coverUrl"
             :alt="series.title"
             priority
-            class="cover w-36 shrink-0 rounded-box shadow-lg sm:w-48"
+            class="cover w-36 shrink-0 self-start rounded-box shadow-lg sm:w-48"
           />
           <div class="flex min-w-0 grow flex-col gap-3">
             <div class="flex flex-col gap-1">
@@ -330,19 +329,15 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             </div>
 
             <!-- Synopsis (Markdown + structured Namespace/Tags table from MangaDex) -->
-            <div v-if="series.description">
-              <SeriesDescription
-                :text="series.description"
-                :clamp="!expanded"
-                :show-tag-table="expanded"
-              />
-              <button class="btn btn-ghost btn-xs mt-1" @click="expanded = !expanded">
-                {{ expanded ? "Show less" : "Show more" }}
-              </button>
-            </div>
+            <SeriesSynopsis
+              v-if="series.description"
+              :key="series.id"
+              :text="series.description"
+              :title="series.title"
+            />
 
             <!-- Action row: left tools · right: new-count + track + metadata -->
-            <div class="mt-auto flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <div class="flex flex-wrap items-center gap-2">
                 <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
                   <BookOpen class="size-4" />

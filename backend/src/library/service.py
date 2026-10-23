@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 from src.catalog import matching as catalog_matching
 from src.catalog.media import warm_gallery_item_thumbs, warm_library_covers
 from src.catalog.models import Library, Series
-from src.core.exceptions import BadRequestError, NotFoundError
+from src.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from src.core.logging import get_logger
 from src.ingest.scanner import ScanSummary, scan_library
+from src.library.paths import is_provider_path
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
@@ -24,6 +25,32 @@ from src.tasks.schema import TaskOut
 logger = get_logger(__name__)
 
 _KINDS = {"manga", "comic", "gallery", "mixed"}
+
+
+def _local_path(session: Session, value: str, *, library_id: str | None = None) -> str:
+    value = value.strip()
+    if is_provider_path(value):
+        raise BadRequestError(
+            "Provider libraries are managed by account sync; choose a local folder"
+        )
+    if not value or not Path(value).is_absolute():
+        raise BadRequestError("Library path must be an absolute folder path")
+    path = Path(value).resolve()
+    for existing in session.scalars(select(Library)):
+        if (
+            existing.id != library_id
+            and not is_provider_path(existing.path)
+            and Path(existing.path).resolve() == path
+        ):
+            raise ConflictError(f"Folder is already registered as library {existing.name!r}")
+    return str(path)
+
+
+def _require_local(library: Library) -> None:
+    if is_provider_path(library.path):
+        raise BadRequestError(
+            "Provider libraries are managed by account sync, not filesystem scans"
+        )
 
 
 def _to_out(session: Session, library: Library) -> LibraryOut:
@@ -56,7 +83,7 @@ def list_libraries(session: Session) -> list[LibraryOut]:
 def create_library(session: Session, data: LibraryCreate) -> LibraryOut:
     if data.kind not in _KINDS:
         raise BadRequestError(f"invalid kind: {data.kind!r}")
-    library = Library(name=data.name, path=data.path, kind=data.kind)
+    library = Library(name=data.name, path=_local_path(session, data.path), kind=data.kind)
     session.add(library)
     session.commit()
     session.refresh(library)
@@ -65,10 +92,12 @@ def create_library(session: Session, data: LibraryCreate) -> LibraryOut:
 
 def update_library(session: Session, library_id: str, data: LibraryUpdate) -> LibraryOut:
     library = _get(session, library_id)
+    _require_local(library)
+    path = _local_path(session, data.path, library_id=library_id) if data.path is not None else None
     if data.name is not None:
         library.name = data.name
-    if data.path is not None:
-        library.path = data.path
+    if path is not None:
+        library.path = path
     if data.enabled is not None:
         library.enabled = data.enabled
     session.commit()
@@ -76,7 +105,9 @@ def update_library(session: Session, library_id: str, data: LibraryUpdate) -> Li
 
 
 def delete_library(session: Session, library_id: str) -> None:
-    session.delete(_get(session, library_id))
+    library = _get(session, library_id)
+    _require_local(library)
+    session.delete(library)
     session.commit()
 
 
@@ -158,7 +189,11 @@ def _scan_one_work(library_id: str, storage_root: Path) -> Work:
 def _scan_all_work(storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, Any]:
         total = ScanSummary()
-        libraries = list(session.scalars(select(Library).where(Library.enabled.is_(True))))
+        libraries = [
+            library
+            for library in session.scalars(select(Library).where(Library.enabled.is_(True)))
+            if not is_provider_path(library.path)
+        ]
         for index, library in enumerate(libraries, start=1):
             summary = scan_library(session, library)
             total.series_added += summary.series_added
@@ -177,6 +212,7 @@ def _scan_all_work(storage_root: Path) -> Work:
 def enqueue_scan_one(session: Session, library_id: str, storage_root: Path) -> TaskOut:
     """Validate the library exists (404 here), then run its scan on the task queue."""
     library = _get(session, library_id)
+    _require_local(library)
     return queue.submit_task(
         "scan", f"Scanning {library.name}", _scan_one_work(library_id, storage_root)
     )

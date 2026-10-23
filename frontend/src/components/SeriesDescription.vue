@@ -6,7 +6,7 @@ import { parseMangaDescription } from "../lib/description";
 const props = withDefaults(
   defineProps<{
     text?: string | null;
-    /** When true, clamp the synopsis to a few lines. */
+    /** When true, limit a long synopsis preview to seven lines. */
     clamp?: boolean;
     /** Show the Namespace/Tags table (detail pages). */
     showTagTable?: boolean;
@@ -22,8 +22,8 @@ const parsed = computed(() => parseMangaDescription(props.text));
     <!-- Synopsis: light Markdown (escaped) -->
     <div
       v-if="parsed.synopsis"
-      class="series-desc text-sm text-base-content/80"
-      :class="{ 'line-clamp-3': clamp }"
+      class="series-desc wrap-anywhere text-sm leading-relaxed text-base-content/80"
+      :class="{ 'line-clamp-7': clamp }"
       v-html="parsed.synopsisHtml"
     />
 
@@ -32,7 +32,7 @@ const parsed = computed(() => parseMangaDescription(props.text));
       v-if="showTagTable && parsed.tagGroups.length"
       class="overflow-x-auto rounded-box border border-base-300"
     >
-      <table class="table table-sm">
+      <table class="table table-sm w-full table-fixed">
         <thead>
           <tr class="bg-base-200/60 text-xs uppercase tracking-wide text-base-content/60">
             <th class="w-28">Namespace</th>
@@ -49,7 +49,7 @@ const parsed = computed(() => parseMangaDescription(props.text));
                 <span
                   v-for="tag in g.tags"
                   :key="tag"
-                  class="badge badge-ghost badge-sm font-normal"
+                  class="badge badge-ghost badge-sm h-auto max-w-full whitespace-normal wrap-anywhere font-normal"
                 >
                   {{ tag }}
                 </span>

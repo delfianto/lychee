@@ -137,15 +137,22 @@ export async function fetchLibraryRows(): Promise<LibraryRow[]> {
 }
 
 export async function scanAllLibraries(): Promise<void> {
-  await api.POST("/api/libraries/scan");
+  const { error } = await api.POST("/api/libraries/scan");
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't start scan"));
 }
 
 export async function scanLibrary(id: string): Promise<void> {
-  await api.POST("/api/libraries/{library_id}/scan", { params: { path: { library_id: id } } });
+  const { error } = await api.POST("/api/libraries/{library_id}/scan", {
+    params: { path: { library_id: id } },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't start scan"));
 }
 
 export async function deleteLibrary(id: string): Promise<void> {
-  await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
+  const { error } = await api.DELETE("/api/libraries/{library_id}", {
+    params: { path: { library_id: id } },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't remove library"));
 }
 
 export async function addLibrary(data: {

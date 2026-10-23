@@ -114,7 +114,7 @@ def _access_token(session: Session, config: Provider) -> str:
 
 
 def _mangadex_library(session: Session) -> Library:
-    library = session.scalar(select(Library).where(Library.name == _MANGADEX_LIBRARY))
+    library = session.scalar(select(Library).where(Library.path == "mangadex://follows"))
     if library is None:
         library = Library(name=_MANGADEX_LIBRARY, path="mangadex://follows", kind="mixed")
         session.add(library)

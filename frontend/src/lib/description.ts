@@ -16,8 +16,8 @@ export interface ParsedDescription {
   tagGroups: DescriptionTagGroup[];
 }
 
-/** Match a GFM-ish header row: | Namespace | Tags | (spacing flexible). */
-const TABLE_HEADER = /^\|\s*Namespace\s*\|\s*Tags\s*\|?\s*$/im;
+/** MangaDex also uses a blank namespace heading: ||TAGS|. */
+const TABLE_HEADER = /^\|[\t ]*(?:Namespace)?[\t ]*\|[\t ]*Tags[\t ]*\|?[\t ]*$/im;
 /** Separator row like |:-|:- or | --- | --- | (trailing | optional). */
 const TABLE_SEP = /^\|?[\s:\-|]+\s*$/;
 
@@ -40,9 +40,15 @@ export function parseMangaDescription(raw: string | null | undefined): ParsedDes
     };
   }
 
-  const synopsis = text.slice(0, headerMatch.index).trim();
   const tableBody = text.slice(headerMatch.index + headerMatch[0].length);
-  const tagGroups = parseNamespaceTable(tableBody);
+  const { tagGroups, remainder } = parseNamespaceTable(tableBody);
+  // An incomplete/unrecognized table must not silently eat description text.
+  if (!tagGroups.length) {
+    return { synopsis: text, synopsisHtml: markdownToHtml(text), tagGroups: [] };
+  }
+  const synopsis = [text.slice(0, headerMatch.index).trim(), remainder]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     synopsis,
@@ -56,18 +62,20 @@ export function synopsisOnly(raw: string | null | undefined): string {
   return parseMangaDescription(raw).synopsis;
 }
 
-function parseNamespaceTable(afterHeader: string): DescriptionTagGroup[] {
+function parseNamespaceTable(afterHeader: string): {
+  tagGroups: DescriptionTagGroup[];
+  remainder: string;
+} {
   const lines = afterHeader
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
   const groups: DescriptionTagGroup[] = [];
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (TABLE_SEP.test(line)) continue;
     if (!line.startsWith("|")) {
-      // Trailing free text after the table — stop.
-      break;
+      return { tagGroups: groups, remainder: lines.slice(index).join("\n") };
     }
     // |MALE| facesitting, glory hole, ...
     // or | MALE | a, b, c |
@@ -88,7 +96,7 @@ function parseNamespaceTable(afterHeader: string): DescriptionTagGroup[] {
       .filter(Boolean);
     if (tags.length) groups.push({ namespace, tags });
   }
-  return groups;
+  return { tagGroups: groups, remainder: "" };
 }
 
 function escapeHtml(s: string): string {
