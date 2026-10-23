@@ -15,6 +15,21 @@ interface TaskEvent {
 
 type Listener = (payload: TaskEvent) => void;
 const listeners = new Set<Listener>();
+const tasks = new Map<string, TaskOut>();
+
+export function taskSnapshots(): TaskOut[] {
+  return [...tasks.values()].map((task) => ({ ...task }));
+}
+
+export function cancelTask(id: string): TaskOut[] {
+  const task = tasks.get(id);
+  if (task && task.status === "running") {
+    task.status = "cancelled";
+    task.detail = "Cancelled";
+    emit(`${task.kind}.cancelled`, task);
+  }
+  return taskSnapshots();
+}
 
 export function subscribeTaskStream(fn: Listener): () => void {
   listeners.add(fn);
@@ -59,6 +74,7 @@ export function simulateTask(opts: SimulateTaskOptions): TaskOut {
     detail: null,
     result: null,
   };
+  tasks.set(task.id, task);
   const steps = Math.max(1, opts.steps ?? 4);
   const stepDelay = opts.stepDelayMs ?? 450;
 
@@ -66,6 +82,7 @@ export function simulateTask(opts: SimulateTaskOptions): TaskOut {
 
   let step = 0;
   const tick = (): void => {
+    if (task.status !== "running") return;
     step += 1;
     task.progress = Math.min(99, Math.round((step / steps) * 100));
     task.detail = opts.detailForStep?.(step, task.progress) ?? task.detail;

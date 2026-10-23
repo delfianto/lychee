@@ -17,7 +17,7 @@ import { useReaderSettings } from "../../lib/readerSettings";
 
 vi.mock("../../api/client", async (original) => ({
   ...(await original<typeof import("../../api/client")>()),
-  api: (await import("../../test/appApi")).testClient(),
+  api: (await import("../../test/client")).testClient(),
 }));
 const api = useAppApi();
 const messages = () =>

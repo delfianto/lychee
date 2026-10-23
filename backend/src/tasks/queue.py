@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.logging import get_logger
 from src.core.persistence.database import SessionLocal
+from src.tasks.concurrency import Limiter
+from src.tasks.context import Operation, OperationCancelled, checkpoint, current_operation
 from src.tasks.schema import TaskOut
 from src.tasks.tracker import TaskInfo, tracker
 
@@ -41,6 +43,11 @@ class TaskQueue:
         self._sync_workers = clamp_workers(max_workers)
         self._download_executor: ThreadPoolExecutor | None = None
         self._sync_executor: ThreadPoolExecutor | None = None
+        self.download_limit = Limiter(self._download_workers)
+        self.sync_limit = Limiter(self._sync_workers)
+        self.sync_item_limit = Limiter(self._sync_workers)
+        self.file_limit = Limiter(self._download_workers)
+        self.chapter_limit = Limiter(self._download_workers)
         self._session_factory: sessionmaker[Session] = SessionLocal
         self._futures: set[Future[None]] = set()
         self._lock = threading.Lock()
@@ -55,23 +62,18 @@ class TaskQueue:
 
     def set_download_workers(self, count: int) -> int:
         clamped = clamp_workers(count)
-        with self._lock:
-            if clamped != self._download_workers:
-                self._download_workers = clamped
-                old, self._download_executor = self._download_executor, None
-                if old is not None:
-                    old.shutdown(wait=False)
-        return self._download_workers
+        self._download_workers = clamped
+        self.download_limit.resize(clamped)
+        self.file_limit.resize(clamped)
+        self.chapter_limit.resize(clamped)
+        return clamped
 
     def set_sync_workers(self, count: int) -> int:
         clamped = clamp_workers(count)
-        with self._lock:
-            if clamped != self._sync_workers:
-                self._sync_workers = clamped
-                old, self._sync_executor = self._sync_executor, None
-                if old is not None:
-                    old.shutdown(wait=False)
-        return self._sync_workers
+        self._sync_workers = clamped
+        self.sync_limit.resize(clamped)
+        self.sync_item_limit.resize(clamped)
+        return clamped
 
     def configure(self, session_factory: sessionmaker[Session]) -> None:
         """Bind workers to a session factory (tests point this at their temp engine)."""
@@ -83,12 +85,12 @@ class TaskQueue:
         if kind == "download":
             if self._download_executor is None:
                 self._download_executor = ThreadPoolExecutor(
-                    max_workers=self._download_workers, thread_name_prefix="lychee-dl"
+                    max_workers=MAX_WORKERS, thread_name_prefix="lychee-dl"
                 )
             return self._download_executor
         if self._sync_executor is None:
             self._sync_executor = ThreadPoolExecutor(
-                max_workers=self._sync_workers, thread_name_prefix="lychee-sync"
+                max_workers=MAX_WORKERS, thread_name_prefix="lychee-sync"
             )
         return self._sync_executor
 
@@ -108,22 +110,50 @@ class TaskQueue:
         # expire_on_commit=False: work (esp. downloads) commits repeatedly to expose
         # progress to readers, and must keep using its loaded ORM objects afterward.
         session = self._session_factory(expire_on_commit=False)
+        operation = Operation(
+            task.id,
+            lambda: tracker.checkpoint(task.id),
+            lambda name, done, total, detail: tracker.phase(task, name, done, total, detail),
+        )
+        token = current_operation.set(operation)
         try:
-            result = work(session, lambda pct, detail: tracker.progress(task, pct, detail))
-            session.commit()
-            tracker.finish(task, result=result)
+            limit = self.download_limit if task.kind == "download" else self.sync_limit
+            with limit.slot():
+                checkpoint()
+                task.status = "running"
+                tracker.progress(task, 0)
+                result = work(session, lambda pct, detail: tracker.progress(task, pct, detail))
+                checkpoint()
+                session.commit()
+                for finalize in operation.finalizers:
+                    finalize("done")
+                tracker.finish(task, result=result)
+        except OperationCancelled:
+            session.rollback()
+            for finalize in operation.finalizers:
+                finalize("cancelled")
+            tracker.finish(task, cancelled=True)
         except Exception as exc:  # noqa: BLE001 - record failure on the task, keep the worker alive
             session.rollback()
             logger.exception("task_failed", task_id=task.id, kind=task.kind)
+            for finalize in operation.finalizers:
+                finalize("failed")
             tracker.finish(task, error=str(exc))
         finally:
+            current_operation.reset(token)
             session.close()
 
     def wait_idle(self, timeout: float = 30.0) -> None:
         """Block until in-flight work drains (tests + graceful shutdown)."""
-        with self._lock:
-            pending = list(self._futures)
-        _ = wait(pending, timeout=timeout)
+        import time
+
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                pending = [future for future in self._futures if not future.done()]
+            if not pending or time.monotonic() >= deadline:
+                return
+            _ = wait(pending, timeout=max(0, deadline - time.monotonic()))
 
     def shutdown(self) -> None:
         with self._lock:

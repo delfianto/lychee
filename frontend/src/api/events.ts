@@ -6,6 +6,7 @@
 import { computed, readonly, ref } from "vue";
 
 import type { components } from "./schema";
+import { api } from "./client";
 
 export type Task = components["schemas"]["TaskOut"];
 
@@ -18,15 +19,22 @@ type EventHandler = (event: string, task: Task) => void;
 
 const KEEP = 50;
 const tasks = ref<Task[]>([]);
+let revision = 0;
+const revisions = new Map<string, number>();
 const connected = ref(false);
 const doneHandlers = new Set<DoneHandler>();
 const eventHandlers = new Set<EventHandler>();
 let source: EventSource | null = null;
 
 function upsert(task: Task): void {
+  revisions.set(task.id, ++revision);
   const at = tasks.value.findIndex((t) => t.id === task.id);
   if (at >= 0) tasks.value[at] = task;
-  else tasks.value = [task, ...tasks.value].slice(0, KEEP);
+  else tasks.value = [task, ...tasks.value];
+  let finished = 0;
+  tasks.value = tasks.value.filter(
+    (item) => ["queued", "running", "cancelling"].includes(item.status) || ++finished <= KEEP,
+  );
 }
 
 /** Open the shared event stream (idempotent). Call once at app start. */
@@ -35,6 +43,17 @@ export function connectTaskStream(): void {
   source = new EventSource("/api/events");
   source.onopen = () => {
     connected.value = true;
+    const requestedAt = revision;
+    void api
+      .GET("/api/tasks")
+      .then(({ data }) => {
+        for (const task of data ?? []) {
+          if ((revisions.get(task.id) ?? 0) <= requestedAt) upsert(task);
+        }
+      })
+      .catch(() => {
+        /* The event stream continues; reconnect retries the snapshot. */
+      });
   };
   source.onerror = () => {
     // EventSource reconnects on its own; just reflect the gap.
@@ -49,7 +68,11 @@ export function connectTaskStream(): void {
     }
     upsert(payload.task);
     for (const handler of eventHandlers) handler(payload.event, payload.task);
-    if (payload.event.endsWith(".done") || payload.event.endsWith(".failed")) {
+    if (
+      payload.event.endsWith(".done") ||
+      payload.event.endsWith(".failed") ||
+      payload.event.endsWith(".cancelled")
+    ) {
       for (const handler of doneHandlers) handler(payload.task);
     }
   };
@@ -71,7 +94,9 @@ export function onTaskEvent(handler: EventHandler): () => void {
   };
 }
 
-export const activeTasks = computed(() => tasks.value.filter((t) => t.status === "running"));
+export const activeTasks = computed(() =>
+  tasks.value.filter((t) => ["queued", "running", "cancelling"].includes(t.status)),
+);
 
 export function useTasks() {
   return { tasks: readonly(tasks), activeTasks, connected: readonly(connected) };

@@ -9,12 +9,16 @@ half-written thumbnail can never be served.
 from __future__ import annotations
 
 import os
+import tempfile
 from enum import StrEnum
 from pathlib import Path
 
 from PIL import Image
 
-from src.media.avif import ContentClass, encode, load_image
+from src.media.artifacts import artifact_lock
+from src.media.avif import ContentClass, load_image
+from src.media.encode_pool import encode_thumbnail
+from src.tasks.context import checkpoint
 
 
 class ThumbVariant(StrEnum):
@@ -58,11 +62,13 @@ class ThumbnailStore:
     ) -> Path:
         """Resize + AVIF-encode ``source`` into the store; idempotent unless ``overwrite``."""
         path = self.path_for(thumb_id, variant)
-        if path.is_file() and not overwrite:
+        with artifact_lock(str(path)):
+            if path.is_file() and not overwrite:
+                return path
+            data = encode_thumbnail(source, _MAX_EDGE[variant], content_class, quality)
+            checkpoint()
+            _atomic_write(path, data)
             return path
-        image = _resized(load_image(source), _MAX_EDGE[variant])
-        _atomic_write(path, encode(image, content_class=content_class, quality=quality))
-        return path
 
     def generate_all(
         self,
@@ -86,15 +92,15 @@ class ThumbnailStore:
             )
 
 
-def _resized(image: Image.Image, max_edge: int) -> Image.Image:
-    """Downscale so the longest edge is ``max_edge`` (never upscales)."""
-    resized = image.copy()
-    resized.thumbnail((max_edge, max_edge))
-    return resized
-
-
 def _atomic_write(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp")
-    _ = tmp.write_bytes(data)
-    os.replace(tmp, path)
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent, prefix=f".{path.name}.", delete=False
+    ) as handle:
+        tmp = Path(handle.name)
+        try:
+            handle.write(data)
+            handle.close()
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)

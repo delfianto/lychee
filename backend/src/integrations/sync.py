@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -26,20 +25,22 @@ from src.downloads.provider import RemoteChapter, get_provider
 from src.integrations.models import Provider, SyncState
 from src.integrations.schema import SyncConfigUpdate, SyncControlRequest, SyncJobOut, SyncOut
 from src.integrations.seed import SYNC_STATE_ID
+from src.tasks.concurrency import parallel_map
+from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
+from src.tasks.tracker import tracker
 
 logger = get_logger(__name__)
 _MANGADEX = "mangadex"
 _VALID_ACTIONS = frozenset(
     {"pause", "pause-all", "resume", "resume-all", "cancel", "cancel-all", "clear-completed"}
 )
-_ACTIVE_STATUSES = frozenset({"queued", "running", "paused"})
+_ACTIVE_STATUSES = frozenset({"queued", "running", "paused", "cancelling"})
 _FINISHED_STATUSES = frozenset({"done", "failed", "cancelled"})
 
 
-class SyncCancelled(Exception):
-    """Raised cooperatively when a sync/scan job is cancelled by the operator."""
+SyncCancelled = OperationCancelled
 
 
 @dataclass
@@ -54,6 +55,7 @@ class SyncJob:
     error: str | None = None
     paused_requested: bool = False
     cancel_requested: bool = False
+    task_id: str | None = None
 
 
 class SyncJobManager:
@@ -102,12 +104,28 @@ class SyncJobManager:
                 error=error,
                 paused_requested=self._paused,
             )
+            operation = current_operation.get()
+            if operation is not None:
+                job.task_id = operation.task_id
+                if kind in {"scan", "import"}:
+                    operation.checks.append(lambda: self.check_state(job.id))
+                operation.finalizers.append(lambda status: self.finish_operation(job.id, status))
             self._jobs[job.id] = job
             self._order.append(job.id)
             while len(self._order) > self._max_keep:
                 old_id = self._order.pop(0)
                 self._jobs.pop(old_id, None)
             return job
+
+    def finish_operation(self, job_id: str, status: str) -> None:
+        with self._cond:
+            job = self._jobs.get(job_id)
+            if job is not None and job.status not in {"done", "failed", "cancelled"}:
+                job.status = status
+                if status == "done":
+                    job.progress = 100
+                elif status == "cancelled":
+                    job.detail = "Cancelled"
 
     def update(
         self,
@@ -139,10 +157,12 @@ class SyncJobManager:
             if job is None:
                 return
             while (self._paused or job.paused_requested) and not job.cancel_requested:
+                if job.task_id:
+                    tracker.checkpoint(job.task_id)
                 job.status = "paused"
                 self._cond.wait(timeout=0.5)
             if job.cancel_requested:
-                job.status = "cancelled"
+                job.status = "cancelling" if job.task_id else "cancelled"
                 job.detail = "Cancelled"
                 raise SyncCancelled(f"sync job {job_id} cancelled")
             if job.status in {"queued", "paused"}:
@@ -176,9 +196,11 @@ class SyncJobManager:
                         job.status = "queued"
                 elif action in {"cancel", "cancel-all"}:
                     job.cancel_requested = True
+                    if job.task_id and job.kind in {"scan", "import"}:
+                        tracker.cancel(job.task_id)
                     job.paused_requested = False
                     if job.status in _ACTIVE_STATUSES:
-                        job.status = "cancelled"
+                        job.status = "cancelling" if job.task_id else "cancelled"
                         job.detail = "Cancelled"
                 self._cond.notify_all()
                 return
@@ -200,8 +222,10 @@ class SyncJobManager:
                 for job in self._jobs.values():
                     if job.status in _ACTIVE_STATUSES:
                         job.cancel_requested = True
+                        if job.task_id:
+                            tracker.cancel(job.task_id)
                         job.paused_requested = False
-                        job.status = "cancelled"
+                        job.status = "cancelling" if job.task_id else "cancelled"
                         job.detail = "Cancelled"
             self._cond.notify_all()
 
@@ -217,6 +241,15 @@ class SyncJobManager:
                     progress=self._jobs[jid].progress,
                     detail=self._jobs[jid].detail,
                     error=self._jobs[jid].error,
+                    task_id=self._jobs[jid].task_id,
+                    phases=next(
+                        (
+                            task.phases
+                            for task in tracker.snapshot()
+                            if task.id == self._jobs[jid].task_id
+                        ),
+                        {},
+                    ),
                 )
                 for jid in reversed(self._order)
                 if jid in self._jobs
@@ -241,12 +274,16 @@ def _sync_state(session: Session) -> SyncState:
 
 def _sync_out(state: SyncState) -> SyncOut:
     jobs = sync_jobs.list_jobs()
-    active = any(j.status in {"queued", "running"} for j in jobs)
+    active = any(j.status in _ACTIVE_STATUSES for j in jobs)
     return SyncOut(
         last_sync=state.last_sync_at,
         auto_every_minutes=state.auto_every_minutes,
         new_chapters=state.new_chapters,
-        syncing=state.syncing or active,
+        syncing=active
+        or any(
+            task.kind == "sync" and task.status in {"queued", "running", "cancelling"}
+            for task in tracker.snapshot()
+        ),
         paused=sync_jobs.paused,
         parallel_syncs=queue.sync_workers,
         jobs=jobs,
@@ -264,6 +301,10 @@ def update_sync_config(session: Session, data: SyncConfigUpdate) -> SyncOut:
 
 def control_sync(session: Session, data: SyncControlRequest) -> SyncOut:
     sync_jobs.control(data.action, job_id=data.job_id)
+    if data.action in {"cancel", "cancel-all"} and data.job_id is None:
+        for task in tracker.snapshot():
+            if task.kind in {"scan", "sync", "import", "thumbs", "metadata"}:
+                tracker.cancel(task.id)
     if data.action in {"cancel", "cancel-all"} and not sync_jobs.has_active():
         state = _sync_state(session)
         state.syncing = False
@@ -279,6 +320,7 @@ def _fetch_series_remote_chapters(
     language: str,
 ) -> list[RemoteChapter] | Exception:
     try:
+        checkpoint()
         sync_jobs.check_state(job_id)
     except SyncCancelled as exc:
         return exc
@@ -299,7 +341,9 @@ def _fetch_series_remote_chapters(
         detail=f"Pulling chapters for {title} from {provider_id}",
     )
     try:
-        remotes = provider.list_chapters(provider_series_id, language=language)
+        with queue.sync_item_limit.slot():
+            remotes = provider.list_chapters(provider_series_id, language=language)
+        checkpoint()
         sync_jobs.check_state(job_id)
         return remotes
     except SyncCancelled as exc:
@@ -349,57 +393,68 @@ def _sync_work() -> Work:
         completed = 0
         total = len(planned) or 1
 
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="lychee-sync-item") as pool:
-            futures = [
-                (
-                    series,
-                    job,
-                    source,
-                    pool.submit(
-                        _fetch_series_remote_chapters,
-                        job.id,
-                        series.title,
-                        series.provider or _MANGADEX,
-                        series.provider_series_id or "",
-                        language,
-                    ),
+        report_phase("chapters", 0, len(planned), "Checking chapter availability")
+        requests = [
+            (
+                series.id,
+                job.id,
+                series.title,
+                series.provider or _MANGADEX,
+                series.provider_series_id or "",
+                source,
+            )
+            for series, job, source in planned
+        ]
+        by_id = {series.id: series for series, _, _ in planned}
+
+        def fetch(item: tuple[str, str, str, str, str, str]):
+            series_id, job_id, title, provider_id, provider_series_id, source = item
+            return (
+                series_id,
+                job_id,
+                source,
+                _fetch_series_remote_chapters(
+                    job_id, title, provider_id, provider_series_id, language
+                ),
+            )
+
+        for series_id, job_id, source, outcome in parallel_map(fetch, requests, workers=workers):
+            series = by_id[series_id]
+            job = next(job for _, job, _ in planned if job.id == job_id)
+            completed += 1
+            report_phase("chapters", completed, total, series.title)
+            if isinstance(outcome, SyncCancelled):
+                _ = sync_jobs.update(job.id, status="cancelled", detail="Cancelled")
+                on_progress(round(completed / total * 100), f"Cancelled {series.title}")
+                continue
+            if isinstance(outcome, Exception):
+                on_progress(round(completed / total * 100), f"Error: {series.title}")
+                continue
+            try:
+                sync_jobs.check_state(job.id)
+                _ = upsert_provider_chapters(
+                    session, series, outcome, provider=series.provider or _MANGADEX
                 )
-                for series, job, source in planned
-            ]
-            for series, job, source, fut in futures:
-                outcome = fut.result()
-                completed += 1
-                if isinstance(outcome, SyncCancelled):
-                    on_progress(round(completed / total * 100), f"Cancelled {series.title}")
-                    continue
-                if isinstance(outcome, Exception):
-                    on_progress(round(completed / total * 100), f"Error: {series.title}")
-                    continue
-                try:
-                    sync_jobs.check_state(job.id)
-                    _ = upsert_provider_chapters(
-                        session, series, outcome, provider=series.provider or _MANGADEX
-                    )
-                    session.commit()
-                    total_new += series.available_chapters
-                    _ = sync_jobs.update(
-                        job.id,
-                        status="done",
-                        progress=100,
-                        detail=f"Pulled from {source} · {series.available_chapters} new chapter(s)",
-                    )
-                except SyncCancelled:
-                    session.rollback()
-                except Exception as exc:  # noqa: BLE001
-                    session.rollback()
-                    logger.warning("sync_series_upsert_failed", series=series.title, error=str(exc))
-                    _ = sync_jobs.update(
-                        job.id,
-                        status="failed",
-                        detail=f"Failed indexing chapters for {series.title} from {source}",
-                        error=str(exc),
-                    )
-                on_progress(round(completed / total * 100), series.title)
+                session.commit()
+                total_new += series.available_chapters
+                _ = sync_jobs.update(
+                    job.id,
+                    status="done",
+                    progress=100,
+                    detail=f"Pulled from {source} · {series.available_chapters} new chapter(s)",
+                )
+            except SyncCancelled:
+                session.rollback()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("sync_series_upsert_failed", series=series.title, error=str(exc))
+                _ = sync_jobs.update(
+                    job.id,
+                    status="failed",
+                    detail=f"Failed indexing chapters for {series.title} from {source}",
+                    error=str(exc),
+                )
+            on_progress(round(completed / total * 100), series.title)
 
         state = _sync_state(session)
         state.new_chapters = total_new

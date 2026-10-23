@@ -20,6 +20,7 @@ import {
   runSync,
   updateDownloadConfig,
 } from "../../api/settingsQueries";
+import PhaseProgress from "../../components/PhaseProgress.vue";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 import CoverImage from "../../components/CoverImage.vue";
 import { toast } from "../../lib/toast";
@@ -31,6 +32,7 @@ interface DlRow {
   status: string;
   progress: number;
   phase: string | null;
+  phases: Record<string, Record<string, number>>;
   detail: string | null;
   size: string;
 }
@@ -43,6 +45,7 @@ const dlLabel: Record<string, string> = {
   paused: "Paused",
   done: "Done",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 const dlBadge: Record<string, string> = {
   downloading: "badge-primary",
@@ -50,6 +53,7 @@ const dlBadge: Record<string, string> = {
   paused: "badge-warning",
   done: "badge-success",
   failed: "badge-error",
+  cancelled: "badge-ghost",
 };
 const hasDone = computed(() => dl.value.some((d) => d.status === "done"));
 const hasQueued = computed(() => dl.value.some((d) => d.status === "queued"));
@@ -72,6 +76,7 @@ function mapRows(rows: DownloadTask[] | null | undefined): DlRow[] {
     status: d.status,
     progress: d.progress,
     phase: d.phase ?? null,
+    phases: d.phases ?? {},
     detail: d.detail ?? null,
     size: formatBytes(d.sizeBytes),
   }));
@@ -81,7 +86,13 @@ function mapRows(rows: DownloadTask[] | null | undefined): DlRow[] {
 function progressLabel(d: DlRow): string {
   if (d.status !== "downloading") return dlLabel[d.status] ?? d.status;
   const phase =
-    d.phase === "encoding" ? "Encoding" : d.phase === "fetching" ? "Fetching" : "Downloading";
+    d.phase === "thumbnails"
+      ? "Thumbnails"
+      : d.phase === "encoding"
+        ? "Encoding"
+        : d.phase === "fetching"
+          ? "Fetching"
+          : "Downloading";
   const pages = d.detail ? ` · ${d.detail}` : "";
   return `${phase}${pages} · ${d.progress}%`;
 }
@@ -308,23 +319,7 @@ onMounted(() => {
               </span>
               <span class="text-base-content/50">{{ d.size }}</span>
             </div>
-            <div v-if="d.status === 'downloading'" class="mt-1.5 flex flex-col gap-0.5">
-              <div
-                class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/50"
-              >
-                <span :class="d.phase === 'fetching' ? 'text-primary font-semibold' : ''"
-                  >Fetch</span
-                >
-                <span :class="d.phase === 'encoding' ? 'text-primary font-semibold' : ''"
-                  >Encode</span
-                >
-              </div>
-              <progress
-                class="progress progress-primary h-1.5 w-full"
-                :value="d.progress"
-                max="100"
-              />
-            </div>
+            <PhaseProgress :phases="d.phases" />
           </div>
           <div class="flex shrink-0 items-center gap-1">
             <button

@@ -5,19 +5,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.catalog import repository as catalog_repo
 from src.catalog.models import Series
 from src.catalog.service import to_series_out
 from src.core.exceptions import BadRequestError, NotFoundError
-from src.downloads.cancel import request_cancel, request_cancel_many
+from src.downloads.cancel import clear_cancel, request_cancel, request_cancel_many
 from src.downloads.downloader import plan_downloads, resolve_manga_library, run_download_queue
 from src.downloads.models import DownloadTask
 from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadConfigOut, DownloadConfigUpdate, DownloadTaskOut
 from src.integrations.models import Provider as ProviderConfig
+from src.tasks.concurrency import parallel_map
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -48,6 +49,7 @@ def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskO
                 status=row.status,
                 progress=row.progress,
                 phase=row.phase,
+                phases=row.phases_json or {},
                 detail=row.detail,
                 size_bytes=row.size_bytes,
             )
@@ -77,6 +79,35 @@ def _drain_queue(
     )
 
 
+def _drain_parallel(
+    session: Session, series_id: str, storage_root: Path, on_progress: Callable[[int, str], None]
+) -> int:
+    """All chapter workers belong to one operation and are joined before it finishes."""
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    ids = list(
+        session.scalars(
+            select(DownloadTask.id).where(
+                DownloadTask.series_id == series_id,
+                DownloadTask.status.in_(("queued", "downloading")),
+            )
+        )
+    )
+    session.commit()
+
+    def progress(_pct: int, detail: str) -> None:
+        with factory() as reader:
+            average = reader.scalar(
+                select(func.avg(DownloadTask.progress)).where(DownloadTask.id.in_(ids))
+            )
+        on_progress(min(99, round(average or 0)), detail)
+
+    def drain(_: int) -> int:
+        with queue.chapter_limit.slot(), factory() as worker_session:
+            return _drain_queue(worker_session, series_id, storage_root, progress)
+
+    return sum(parallel_map(drain, range(queue.download_workers), workers=queue.download_workers))
+
+
 def _download_work(
     series_id: str,
     storage_root: Path,
@@ -94,21 +125,14 @@ def _download_work(
             raise BadRequestError(f"provider {series.provider!r} is not available")
         config = session.get(ProviderConfig, series.provider)
         language = config.language if config else "en"
-        queued = plan_downloads(
+        _ = plan_downloads(
             session,
             series,
             provider,
             language=language,
             provider_chapter_ids=provider_chapter_ids,
         )
-        extra = min(max(queue.download_workers - 1, 0), max(queued - 1, 0))
-        for _ in range(extra):
-            _ = queue.submit(
-                "download",
-                f"Downloading {series.title}",
-                _resume_work(series_id, storage_root),
-            )
-        return {"downloaded": _drain_queue(session, series_id, storage_root, on_progress)}
+        return {"downloaded": _drain_parallel(session, series_id, storage_root, on_progress)}
 
     return work
 
@@ -117,7 +141,7 @@ def _resume_work(series_id: str, storage_root: Path) -> Work:
     """Task that drains a series' already-queued rows (from resume/retry) without planning."""
 
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
-        return {"downloaded": _drain_queue(session, series_id, storage_root, on_progress)}
+        return {"downloaded": _drain_parallel(session, series_id, storage_root, on_progress)}
 
     return work
 
@@ -143,6 +167,7 @@ def create_downloads(
     label = f"Downloading {series.title}"
     if provider_chapter_ids and len(provider_chapter_ids) == 1:
         label = f"Downloading chapter for {series.title}"
+    clear_cancel(series_id)
     return queue.submit_task(
         "download",
         label,
@@ -193,6 +218,7 @@ def bulk_action(session: Session, action: str, storage_root: Path) -> list[Downl
             series_ids.add(row.series_id)
     session.commit()
     for sid in series_ids:
+        clear_cancel(sid)
         series = session.get(Series, sid)
         label = f"Resuming {series.title}" if series else f"Resuming {sid}"
         _ = queue.submit("download", label, _resume_work(sid, storage_root))
@@ -223,6 +249,7 @@ def resume_download(session: Session, task_id: str, storage_root: Path) -> list[
         raise BadRequestError("download is not paused")
     if task.series_id is None:
         raise BadRequestError("download has no series to resume")
+    clear_cancel(task.series_id)
     task.status = "queued"
     session.commit()
     _ = queue.submit(
@@ -241,6 +268,7 @@ def retry_download(session: Session, task_id: str, storage_root: Path) -> TaskOu
         raise BadRequestError("download has no series to retry")
     if task.remote_json is None:
         return create_downloads(session, task.series_id, storage_root)
+    clear_cancel(task.series_id)
     task.status = "queued"
     task.error = None
     task.progress = 0

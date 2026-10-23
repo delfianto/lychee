@@ -82,6 +82,8 @@ class TrackerUpdate(CamelModel):
 
 
 class SyncJobOut(CamelModel):
+    task_id: str | None = None
+    phases: dict[str, dict[str, int]] = Field(default_factory=dict)
     id: str
     kind: str
     title: str

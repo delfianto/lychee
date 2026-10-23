@@ -9,7 +9,7 @@ download ``Provider`` and the ``MetadataProvider`` contract from downloads/provi
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,9 @@ from src.downloads.provider import (
 )
 from src.providers.mangadex_client import MangaDexClient
 from src.providers.mangadex_lists import MangaDexLists
+from src.tasks.concurrency import parallel_map
+from src.tasks.context import checkpoint
+from src.tasks.queue import queue
 
 _CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
@@ -389,15 +392,22 @@ class MangaDexProvider:
         data_saver: bool = False,
         on_page: Callable[[int, int], None] | None = None,
     ) -> list[Path]:
-        paths: list[Path] = []
+        return list(self.iter_pages_to(chapter, directory, data_saver=data_saver, on_page=on_page))
 
-        def save(index: int, data: bytes) -> None:
+    def iter_pages_to(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        data_saver: bool = False,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> Iterator[Path]:
+        """Fetch files concurrently and feed conversion in original page order."""
+        for index, content in self._iter_pages(chapter, data_saver=data_saver, on_page=on_page):
+            checkpoint()
             path = directory / f"{index:04d}.source"
-            path.write_bytes(data)
-            paths.append(path)
-
-        self._fetch_pages(chapter, data_saver=data_saver, on_page=on_page, save=save)
-        return paths
+            path.write_bytes(content)
+            yield path
 
     def fetch_adhoc_pages(
         self,
@@ -440,24 +450,52 @@ class MangaDexProvider:
         on_page: Callable[[int, int], None] | None,
         save: Callable[[int, bytes], None] | None = None,
     ) -> list[bytes]:
-        server = self._at_home(chapter.provider_chapter_id)
-        quality = "data-saver" if data_saver else "data"
-        chapter_hash = server["chapter"]["hash"]
-        files: list[str] = server["chapter"]["dataSaver" if data_saver else "data"]
-        base = server["baseUrl"]  # mutated if a node expires (403) mid-chapter
-        total = len(files) or 1
-        pages: list[bytes] = []
-        for index, filename in enumerate(files, start=1):
-            content, base = self._fetch_page(
-                chapter.provider_chapter_id, base, quality, chapter_hash, filename
-            )
+        pages = []
+        for index, content in self._iter_pages(chapter, data_saver=data_saver, on_page=on_page):
             if save is not None:
                 save(index, content)
             else:
                 pages.append(content)
-            if on_page is not None:
-                on_page(index, total)
         return pages
+
+    def _iter_pages(
+        self,
+        chapter: RemoteChapter,
+        *,
+        data_saver: bool,
+        on_page: Callable[[int, int], None] | None,
+    ) -> Iterator[tuple[int, bytes]]:
+        checkpoint()
+        server = self._at_home(chapter.provider_chapter_id)
+        quality = "data-saver" if data_saver else "data"
+        chapter_hash = server["chapter"]["hash"]
+        files: list[str] = server["chapter"]["dataSaver" if data_saver else "data"]
+        base = server["baseUrl"]
+        total = len(files)
+        if on_page is not None:
+            on_page(0, total)
+
+        def fetch(item: tuple[int, str]) -> tuple[int, bytes]:
+            nonlocal base
+            with queue.file_limit.slot():
+                checkpoint()
+                content, refreshed = self._fetch_page(
+                    chapter.provider_chapter_id, base, quality, chapter_hash, item[1]
+                )
+                base = refreshed
+                checkpoint()
+                return item[0], content
+
+        results = parallel_map(
+            fetch, enumerate(files, 1), workers=queue.download_workers, ordered=True
+        )
+        try:
+            for index, content in results:
+                if on_page is not None:
+                    on_page(index, total)
+                yield index, content
+        finally:
+            results.close()
 
     def _fetch_page(
         self, chapter_id: str, base_url: str, quality: str, chapter_hash: str, filename: str

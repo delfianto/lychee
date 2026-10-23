@@ -2,9 +2,19 @@
 // Navbar affordance for background work (scans, downloads). Hidden when idle;
 // while tasks run it shows a spinning badge that opens a live progress list,
 // fed by the shared SSE task stream.
-import { Loader2 } from "@lucide/vue";
+import { Loader2, Square } from "@lucide/vue";
 
 import { activeTasks } from "../api/events";
+import { api } from "../api/client";
+import { toast } from "../lib/toast";
+import PhaseProgress from "./PhaseProgress.vue";
+
+async function cancelTask(id: string): Promise<void> {
+  const { error } = await api.POST("/api/tasks/{task_id}/cancel", {
+    params: { path: { task_id: id } },
+  });
+  if (error) toast("Couldn't cancel operation", "error");
+}
 
 function kindLabel(kind: string): string {
   if (kind === "thumbs") return "Thumbs";
@@ -44,6 +54,18 @@ function kindLabel(kind: string): string {
             </span>
             <span class="shrink-0 tabular-nums opacity-60">{{ task.progress }}%</span>
           </div>
+          <div class="mt-1 flex items-center justify-between gap-2 text-xs">
+            <span class="capitalize">{{ task.status }}</span>
+            <button
+              class="btn btn-ghost btn-xs"
+              :disabled="task.status === 'cancelling'"
+              :aria-label="`Cancel ${task.label}`"
+              @click="cancelTask(task.id)"
+            >
+              <Square class="size-3" /> Cancel
+            </button>
+          </div>
+          <PhaseProgress :phases="task.phases ?? {}" />
           <progress
             class="progress progress-primary mt-1 h-1.5 w-full"
             :value="task.progress"

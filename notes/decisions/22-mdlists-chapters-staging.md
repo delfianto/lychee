@@ -80,3 +80,11 @@ reverted in favor of stable provider identity. Existing title folders are not mo
 or migrated; their contents must be cleared and downloaded again when resetting a
 library. Scans index local originals in place. Transcoded imports use internal
 Lychee series IDs and source-derived book keys; these are not MangaDex identifiers.
+
+## Coordinated pipeline follow-up
+
+Scans now retain ownership through cover and gallery thumbnail generation rather
+than launching a detached thumbnail task. Downloads fetch MangaDex files
+concurrently, overlap fetching with conversion, and stay active through thumbnail
+work. Phase counters and cancellation follow the complete operation; see
+[ADR 08](08-task-runner.md) for worker budgets and cancellation boundaries.

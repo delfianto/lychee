@@ -14,8 +14,9 @@ class DownloadTaskOut(CamelModel):
     chapter: str
     status: str
     progress: int
-    phase: str | None = None  # fetching | encoding while in progress
+    phase: str | None = None  # fetching | encoding | thumbnails while in progress
     detail: str | None = None  # e.g. "12/40"
+    phases: dict[str, dict[str, int]] = Field(default_factory=dict)
     size_bytes: int | None = None
 
 

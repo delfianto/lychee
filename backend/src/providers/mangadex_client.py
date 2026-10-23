@@ -22,6 +22,7 @@ import httpx
 
 from src.core.logging import get_logger
 from src.providers.ratelimit import TokenBucket
+from src.tasks.context import checkpoint, cooperative_wait
 
 logger = get_logger(__name__)
 
@@ -79,6 +80,7 @@ class MangaDexClient:
             return self._client.post(path, json=json)
 
         if not retry:
+            checkpoint()
             response = send()
             response.raise_for_status()
             return response
@@ -106,10 +108,11 @@ class MangaDexClient:
         return self._with_retries(lambda: self._client.get(url))
 
     def _with_retries(self, send: Callable[[], httpx.Response]) -> httpx.Response:
+        checkpoint()
         response = send()
         attempt = 0
         while response.status_code in _RETRY_STATUSES and attempt < self._max_retries:
-            time.sleep(self._retry_wait(response, attempt))
+            cooperative_wait(self._retry_wait(response, attempt))
             attempt += 1
             response = send()
         _ = response.raise_for_status()

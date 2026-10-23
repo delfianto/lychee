@@ -51,7 +51,9 @@ being wrong for one or the other.
 `backend/src/media/thumbnails.py` — `ThumbnailStore`, two variants (`cover`
 320px, `detail` 640px longest edge), sharded content-addressed filesystem
 path `<root>/<id[:2]>/<id>.<variant>.avif`, atomic write (temp file +
-`os.replace`), idempotent unless `overwrite=True`.
+`os.replace`), idempotent unless `overwrite=True`. Concurrent generators share an artifact lock;
+unique temporary files avoid publication races. Image work uses the shared AVIF
+process pool described in [ADR 08](08-task-runner.md).
 
 Thumbnail location is configurable in **Settings → Libraries → Thumbnail storage**.
 The `thumbnail_config` singleton persists an optional absolute path; unset uses

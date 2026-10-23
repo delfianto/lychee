@@ -1,6 +1,10 @@
+import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Task } from "./events";
+
+const { fetchTasks } = vi.hoisted(() => ({ fetchTasks: vi.fn() }));
+vi.mock("./client", () => ({ api: { GET: fetchTasks } }));
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -26,6 +30,7 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
 }
 
 beforeEach(() => {
+  fetchTasks.mockResolvedValue({ data: [] });
   vi.resetModules(); // `source`/`tasks` are module-level singletons seeded on connect
   FakeEventSource.instances = [];
   vi.stubGlobal("EventSource", FakeEventSource);
@@ -60,7 +65,7 @@ describe("upsert (via incoming SSE messages)", () => {
     const source = FakeEventSource.instances[0]!;
     const { tasks } = useTasks();
 
-    for (let i = 0; i < 51; i++) source.emit("scan.started", task(`t${i}`));
+    for (let i = 0; i < 51; i++) source.emit("scan.done", task(`t${i}`, { status: "done" }));
 
     expect(tasks.value).toHaveLength(50);
     expect(tasks.value[0]!.id).toBe("t50"); // newest first
@@ -145,4 +150,64 @@ it("reflects connection gaps, filters running tasks, and disposes event subscrib
   source.emit("scan.progress", task("a", { progress: 25 }));
   expect(handler).toHaveBeenCalledTimes(2);
   expect(state.tasks.value.find((t) => t.id === "a")?.progress).toBe(25);
+});
+
+it("recovers active phases on reconnect without overwriting newer events", async () => {
+  let resolveSnapshot!: (value: { data: Task[] }) => void;
+  fetchTasks.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveSnapshot = resolve;
+    }),
+  );
+  const { connectTaskStream, activeTasks, useTasks } = await import("./events");
+  connectTaskStream();
+  const source = FakeEventSource.instances[0]!;
+  source.onopen?.();
+  source.emit("scan.progress", task("live", { progress: 80 }));
+  resolveSnapshot({
+    data: [
+      task("live", { progress: 20 }),
+      task("restored", {
+        status: "cancelling",
+        phases: { thumbnails: { completed: 3, total: 9 } },
+      }),
+    ],
+  });
+  await flushPromises();
+  expect(useTasks().tasks.value.find((t) => t.id === "live")?.progress).toBe(80);
+  expect(activeTasks.value.find((t) => t.id === "restored")?.phases?.thumbnails?.completed).toBe(3);
+  fetchTasks.mockResolvedValueOnce({ data: [task("restored", { status: "cancelled" })] });
+  source.onopen?.();
+  await flushPromises();
+  expect(activeTasks.value.some((t) => t.id === "restored")).toBe(false);
+});
+
+it("retains active operations beyond the history cap and reports cancellation as terminal", async () => {
+  const { connectTaskStream, activeTasks, onTaskDone } = await import("./events");
+  connectTaskStream();
+  const source = FakeEventSource.instances[0]!;
+  for (let index = 0; index < 55; index++)
+    source.emit("scan.started", task(`active-${index}`, { status: "queued" }));
+  expect(activeTasks.value).toHaveLength(55);
+  const done = vi.fn();
+  const dispose = onTaskDone(done);
+  source.emit("scan.cancelled", task("active-0", { status: "cancelled" }));
+  expect(done).toHaveBeenCalledTimes(1);
+  expect(activeTasks.value).toHaveLength(54);
+  dispose();
+});
+
+it("keeps the stream usable when snapshot fetching fails or returns no data", async () => {
+  fetchTasks.mockRejectedValueOnce(new Error("Connection lost"));
+  const { connectTaskStream, useTasks } = await import("./events");
+  connectTaskStream();
+  const source = FakeEventSource.instances[0]!;
+  source.onopen?.();
+  await flushPromises();
+  expect(useTasks().connected.value).toBe(true);
+  fetchTasks.mockResolvedValueOnce({});
+  source.onopen?.();
+  await flushPromises();
+  source.emit("scan.progress", task("after-reconnect", { progress: 40 }));
+  expect(useTasks().tasks.value[0]?.progress).toBe(40);
 });

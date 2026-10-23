@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from src.core.exceptions import NotFoundError
 from src.tasks.events import broker
 from src.tasks.schema import TaskOut
 from src.tasks.tracker import tracker
@@ -35,3 +36,11 @@ async def events() -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/tasks/{task_id}/cancel")
+def cancel_task(task_id: str) -> list[TaskOut]:
+    """Cancel the complete operation, including its active image work."""
+    if not tracker.cancel(task_id):
+        raise NotFoundError(f"task {task_id!r} not found")
+    return list_tasks()

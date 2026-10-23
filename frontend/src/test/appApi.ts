@@ -1,10 +1,8 @@
 import { installObservers } from "./observers";
-import createClient from "openapi-fetch";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from "vite-plus/test";
 import { connectTaskStream, useTasks, type Task } from "../api/events";
-import type { paths } from "../api/schema";
 import type { Series, Collection } from "../types";
 import type {
   Provider,
@@ -20,11 +18,6 @@ import type {
   GalleryMediaItem,
 } from "../api/client";
 
-export const testClient = () =>
-  createClient<paths>({
-    baseUrl: "http://localhost",
-    fetch: (request) => globalThis.fetch(request),
-  });
 export function makeSeries(id = "s1", patch: Partial<Series> = {}): Series {
   return {
     id,
@@ -412,6 +405,8 @@ export function useAppApi() {
         }
         return json({ ...item, series: db.series.filter((s) => item.seriesIds.includes(s.id)) });
       }
+      if (path === "/api/tasks") return json([]);
+      if (/^\/api\/tasks\/[^/]+\/cancel$/.test(path)) return json([]);
       if (path === "/api/providers") return json(db.providers);
       const providerMatch = path.match(/^\/api\/providers\/([^/]+)(?:\/(.+))?$/);
       if (providerMatch) {

@@ -16,7 +16,7 @@ import Toaster from "./Toaster.vue";
 import { toast } from "../lib/toast";
 vi.mock("../api/client", async (original) => ({
   ...(await original<typeof import("../api/client")>()),
-  api: (await import("../test/appApi")).testClient(),
+  api: (await import("../test/client")).testClient(),
 }));
 const api = useAppApi();
 
