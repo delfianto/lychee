@@ -1,0 +1,457 @@
+{
+  "capturedAt": "2026-10-23T14:39:50.265Z",
+  "source": "Local MSW browser harness (frontend/src/mocks)",
+  "browser": "156.0.8078.4",
+  "screenshots": [
+    {
+      "file": "home.png",
+      "title": "Home dashboard",
+      "route": "/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "library-grid.png",
+      "title": "Manga library in gallery density",
+      "route": "/manga?view=gallery",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "library-filters.png",
+      "title": "Advanced library filters",
+      "route": "/manga?view=gallery",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Filters open; Action included; OR tag matching selected."
+    },
+    {
+      "file": "library-list.png",
+      "title": "Manga library in list density",
+      "route": "/manga?view=list",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "library-compact.png",
+      "title": "Manga library in compact density",
+      "route": "/manga?view=compact",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "comics.png",
+      "title": "Comic library",
+      "route": "/comics?view=gallery",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "favorites.png",
+      "title": "Favorite series",
+      "route": "/favorites?view=gallery",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "reading.png",
+      "title": "Reading shelf",
+      "route": "/reading?view=list",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "recently-added.png",
+      "title": "Recently added series",
+      "route": "/added",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Gallery density selected with the toolbar control."
+    },
+    {
+      "file": "updates.png",
+      "title": "Recent chapter updates",
+      "route": "/updates",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "unread.png",
+      "title": "Unread chapter feed",
+      "route": "/unread",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "search.png",
+      "title": "Library-wide search",
+      "route": "/search?q=night",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "lists.png",
+      "title": "Reading lists",
+      "route": "/lists",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "All media-kind tabs selected via the All tab."
+    },
+    {
+      "file": "list-detail.png",
+      "title": "Reading list contents",
+      "route": "/lists/list-currently-reading",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "series-detail.png",
+      "title": "Series details and chapters",
+      "route": "/series/nightfall-requiem",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "series-related.png",
+      "title": "Related series",
+      "route": "/series/nightfall-requiem",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Related tab selected in the chapter area."
+    },
+    {
+      "file": "series-art.png",
+      "title": "Series cover artwork",
+      "route": "/series/nightfall-requiem",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Art tab selected in the chapter area."
+    },
+    {
+      "file": "edit-metadata.png",
+      "title": "Edit series metadata",
+      "route": "/series/nightfall-requiem",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Series Edit dialog open; no edits submitted."
+    },
+    {
+      "file": "match-series.png",
+      "title": "Match metadata on MangaDex",
+      "route": "/series/nightfall-requiem",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Metadata source menu \u2192 Match on MangaDex; initial title search loaded."
+    },
+    {
+      "file": "reader.png",
+      "title": "Full-screen reader",
+      "route": "/read/nightfall-requiem-c142",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "reader-settings.png",
+      "title": "Reader display settings",
+      "route": "/read/nightfall-requiem-c142",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Reader settings panel open."
+    },
+    {
+      "file": "gallery.png",
+      "title": "Art gallery browser",
+      "route": "/gallery",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "gallery-detail.png",
+      "title": "Gallery details and image grid",
+      "route": "/gallery/moonfall-tactics-official-artworks",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "gallery-lightbox.png",
+      "title": "Gallery image lightbox",
+      "route": "/gallery/moonfall-tactics-official-artworks",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "First still image open in the gallery lightbox."
+    },
+    {
+      "file": "settings-general.png",
+      "title": "Accounts, metadata, appearance and reader settings",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": true,
+      "theme": "dark",
+      "notes": "General tab; full-page capture includes appearance and theme choices."
+    },
+    {
+      "file": "settings-libraries.png",
+      "title": "Library roots and local import",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": true,
+      "theme": "dark",
+      "notes": "Libraries tab; full-page capture includes Local import."
+    },
+    {
+      "file": "add-library.png",
+      "title": "Add a library root",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Libraries tab \u2192 Add library; empty registration form."
+    },
+    {
+      "file": "path-browser.png",
+      "title": "Server storage picker",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Libraries \u2192 Add library \u2192 Browse; storage root listing."
+    },
+    {
+      "file": "settings-content.png",
+      "title": "Taxonomy and tag aliases",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": true,
+      "theme": "dark",
+      "notes": "Content tab; first taxonomy page."
+    },
+    {
+      "file": "settings-downloads.png",
+      "title": "Download queue and sync",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": true,
+      "theme": "dark",
+      "notes": "Downloads tab; seeded queue states and sync summary."
+    },
+    {
+      "file": "settings-about.png",
+      "title": "Server and library summary",
+      "route": "/settings",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "About tab; all version/platform/statistic values are fixtures."
+    },
+    {
+      "file": "mobile-home.png",
+      "title": "Home on a narrow viewport",
+      "route": "/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "fullPage": true,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "mobile-navigation.png",
+      "title": "Mobile navigation drawer",
+      "route": "/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Home route with mobile navigation drawer open."
+    },
+    {
+      "file": "mobile-library.png",
+      "title": "Library on a narrow viewport",
+      "route": "/manga?view=gallery",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "mobile-reader.png",
+      "title": "Reader on a narrow viewport",
+      "route": "/read/nightfall-requiem-c142",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "fullPage": false,
+      "theme": "dark",
+      "notes": "Default screen state for the recorded route."
+    },
+    {
+      "file": "home-light.png",
+      "title": "Light theme dashboard",
+      "route": "/",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "theme": "light",
+      "notes": "Home route after switching from the dark theme to light."
+    }
+  ],
+  "captureSettings": {
+    "desktopViewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "mobileViewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 1,
+    "locale": "en-US",
+    "timezone": "UTC",
+    "defaultTheme": "dark",
+    "fontSizePx": 16,
+    "format": "PNG",
+    "imagePolicy": "Wait for visible artwork to decode; load lazy images before capture.",
+    "pageErrors": 0
+  }
+}
