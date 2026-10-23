@@ -23,7 +23,8 @@ useFocusTrap(modalBox, ref(true));
 const form = reactive({
   clientId: "",
   clientSecret: "",
-  redirectUri: window.location.origin,
+  redirectUri:
+    props.tracker.id === "anilist" ? "https://anilist.co/api/v2/oauth/pin" : window.location.origin,
   authorizeUrl: "",
   code: "",
   username: "",
@@ -154,7 +155,12 @@ async function loginTrackerAccount(): Promise<void> {
             <Link2 class="size-4" />Authorize on {{ tracker.name }} ↗
           </a>
           <p class="text-xs text-base-content/50">
-            After authorizing, paste the <code>code</code> from the redirect URL:
+            <template v-if="tracker.id === 'anilist'">
+              After authorizing, paste the authorization code shown on AniList:
+            </template>
+            <template v-else>
+              After authorizing, paste the <code>code</code> from the redirect URL:
+            </template>
           </p>
           <div class="flex gap-2">
             <input
