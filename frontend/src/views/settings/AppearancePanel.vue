@@ -19,7 +19,12 @@ import { type Component, ref, watch } from "vue";
 import SegmentedToggle from "../../components/SegmentedToggle.vue";
 import { useDensity, useListsDefaultTab } from "../../lib/density";
 import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, useFontSize } from "../../lib/fontSize";
-import { useReaderSettings } from "../../lib/readerSettings";
+import {
+  clampPreloadPages,
+  MAX_PRELOAD_PAGES,
+  MIN_PRELOAD_PAGES,
+  useReaderSettings,
+} from "../../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../../lib/theme";
 
 const { theme, mode, setTheme, setMode } = useTheme();
@@ -91,6 +96,9 @@ function readerValue(k: ReaderChoiceKey): string {
 }
 function setReader(k: ReaderChoiceKey, v: string): void {
   (reader as unknown as Record<string, string>)[k] = v;
+}
+function setPreloadPages(value: number): void {
+  reader.preloadPages = clampPreloadPages(value);
 }
 
 const { density } = useDensity();
@@ -287,6 +295,27 @@ function onFontSizeUp(): void {
                 @update:model-value="(v) => setReader(grp.key, v)"
               />
             </div>
+
+            <label class="flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <Layers class="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div class="text-sm font-medium">Ad-hoc preload pages</div>
+                  <div class="text-xs text-base-content/50">
+                    Pages buffered into temp/ when reading undownloaded chapters (1–20)
+                  </div>
+                </div>
+              </div>
+              <input
+                type="number"
+                :min="MIN_PRELOAD_PAGES"
+                :max="MAX_PRELOAD_PAGES"
+                :value="reader.preloadPages"
+                aria-label="Ad-hoc preload pages"
+                class="input input-bordered input-sm w-20 text-right tabular-nums"
+                @change="setPreloadPages(Number(($event.target as HTMLInputElement).value))"
+              />
+            </label>
 
             <div class="divider my-0"></div>
             <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">

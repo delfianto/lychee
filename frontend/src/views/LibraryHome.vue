@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BookMarked, BookOpen, ChevronRight, HardDrive, Library, Settings } from "@lucide/vue";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
 import { fetchDashboard, fetchLibrarySummaries, type LibrarySummary } from "../api/queries";
@@ -9,10 +9,12 @@ import ErrorState from "../components/ErrorState.vue";
 import FeaturedCarousel from "../components/FeaturedCarousel.vue";
 import RecentUpdates from "../components/RecentUpdates.vue";
 import SeriesRail from "../components/SeriesRail.vue";
+import { useRecentlyAddedKinds } from "../lib/density";
 import type { RecentUpdate, Series } from "../types";
 
 defineOptions({ name: "LibraryHome" });
 
+const { recentlyAddedKinds } = useRecentlyAddedKinds();
 const loading = ref(true);
 const failed = ref(false);
 const totalSeries = ref(0);
@@ -31,7 +33,10 @@ async function load(): Promise<void> {
   loading.value = true;
   failed.value = false;
   try {
-    const [dashboard, summaries] = await Promise.all([fetchDashboard(), fetchLibrarySummaries()]);
+    const [dashboard, summaries] = await Promise.all([
+      fetchDashboard(recentlyAddedKinds.value),
+      fetchLibrarySummaries(),
+    ]);
     totalSeries.value = dashboard.stats.series;
     unreadTotal.value = dashboard.stats.unreadChapters;
     readingCount.value = dashboard.stats.reading;
@@ -47,6 +52,9 @@ async function load(): Promise<void> {
   }
 }
 onMounted(load);
+watch(recentlyAddedKinds, () => {
+  void load();
+});
 onUnmounted(
   onTaskDone((task) => {
     if (task.status === "done" && ["import", "scan", "metadata", "mdlist"].includes(task.kind))

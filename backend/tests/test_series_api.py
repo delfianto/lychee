@@ -84,6 +84,9 @@ def test_filter_by_kind_and_favorite(client: TestClient, db_session: Session) ->
     manga = client.get("/api/series", params={"kind": "manga"}).json()["items"]
     assert [s["title"] for s in manga] == ["Manga A"]
 
+    multi = client.get("/api/series", params={"kind": "manga,comics"}).json()["items"]
+    assert {s["title"] for s in multi} == {"Manga A", "Comic B"}
+
     favorites = client.get("/api/series", params={"favorite": "true"}).json()["items"]
     assert [s["title"] for s in favorites] == ["Manga A"]
 

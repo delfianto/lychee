@@ -15,18 +15,22 @@ describe("useReaderSettings load()", () => {
       direction: "ltr",
       fit: "height",
       background: "dark",
+      preloadPages: 4,
       videoAutoPlay: true,
       videoAutoNext: true,
     });
   });
 
-  it("merges a stored partial value over the defaults", async () => {
-    localStorage.setItem(KEY, JSON.stringify({ mode: "double", fit: "width" }));
-    const { useReaderSettings } = await import("./readerSettings");
+  it("merges a stored partial value over the defaults and clamps preloadPages", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ mode: "double", fit: "width", preloadPages: 50 }));
+    const { useReaderSettings, clampPreloadPages } = await import("./readerSettings");
     const settings = useReaderSettings();
     expect(settings.mode).toBe("double");
     expect(settings.fit).toBe("width");
     expect(settings.direction).toBe("ltr"); // untouched default
+    expect(settings.preloadPages).toBe(20);
+    expect(clampPreloadPages("invalid")).toBe(4);
+    expect(clampPreloadPages(0)).toBe(1);
   });
 
   it("falls back to defaults (without throwing) on malformed JSON", async () => {
@@ -37,6 +41,7 @@ describe("useReaderSettings load()", () => {
       direction: "ltr",
       fit: "height",
       background: "dark",
+      preloadPages: 4,
       videoAutoPlay: true,
       videoAutoNext: true,
     });

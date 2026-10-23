@@ -15,6 +15,8 @@ def update_progress(
     session: Session, chapter_id: str, page: int, completed: bool | None = None
 ) -> None:
     """Upsert this user's position in a chapter; completing recomputes unread."""
+    if chapter_id.startswith("adhoc:"):
+        return
     chapter = session.get(Chapter, chapter_id)
     if chapter is None:
         raise NotFoundError(f"chapter {chapter_id!r} not found")

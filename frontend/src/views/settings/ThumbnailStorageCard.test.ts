@@ -1,5 +1,6 @@
 import { flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { useRecentlyAddedKinds } from "../../lib/density";
 import { useAppApi } from "../../test/appApi";
 import { renderView, input, button, click } from "../../test/views";
 import ThumbnailStorageCard from "./ThumbnailStorageCard.vue";
@@ -42,6 +43,23 @@ describe("thumbnail storage", () => {
     await input(second, "select", "default");
     await submit(second);
     expect(api.writes().at(-1)?.body).toEqual({ path: null });
+  });
+
+  it("defaults recently added content to manga and updates multi-select kinds", async () => {
+    useRecentlyAddedKinds().recentlyAddedKinds.value = ["manga"];
+    const { wrapper } = await renderView(ThumbnailStorageCard);
+    const trigger = wrapper.get('[aria-label="Recently added content"]');
+    expect(trigger.text()).toBe("Manga");
+    await wrapper.get('input[aria-label="Comics"]').trigger("change");
+    expect(trigger.text()).toBe("Manga, Comics");
+    await wrapper.get('input[aria-label="Gallery"]').trigger("change");
+    expect(trigger.text()).toBe("Manga, Comics, Gallery");
+    await wrapper.get('input[aria-label="Manga"]').trigger("change");
+    await wrapper.get('input[aria-label="Comics"]').trigger("change");
+    await wrapper.get('input[aria-label="Gallery"]').trigger("change");
+    expect(trigger.text()).toBe("None");
+    await wrapper.get('input[aria-label="Manga"]').trigger("change");
+    expect(useRecentlyAddedKinds().recentlyAddedKinds.value).toEqual(["manga"]);
   });
 
   it("retries failed loads and keeps edits on a failed save", async () => {

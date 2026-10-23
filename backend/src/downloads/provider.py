@@ -54,6 +54,19 @@ class DiskDownloadProvider(Protocol):
     ) -> list[Path]: ...
 
 
+@runtime_checkable
+class AdhocPageProvider(Protocol):
+    def fetch_adhoc_pages(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        start_page: int = 1,
+        count: int = 4,
+        data_saver: bool = False,
+    ) -> tuple[int, list[int]]: ...
+
+
 class Provider(Protocol):
     id: str
 

@@ -61,7 +61,7 @@ onBeforeUnmount(() => ro?.disconnect());
       <RouterLink
         v-for="s in series"
         :key="s.id"
-        :to="`/series/${s.id}`"
+        :to="s.kind === 'gallery' ? `/gallery/${s.id}` : `/series/${s.id}`"
         class="group w-36 shrink-0 sm:w-44"
       >
         <CoverImage

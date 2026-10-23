@@ -5,9 +5,10 @@ import { type Component, ref, watch } from "vue";
 import { useSeriesList } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
-import { type Density, useDensity } from "../lib/density";
+import { type Density, useDensity, useRecentlyAddedKinds } from "../lib/density";
 
 const { density } = useDensity();
+const { recentlyAddedKinds } = useRecentlyAddedKinds();
 const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "list", icon: List, label: "List view" },
   { value: "compact", icon: Grid2x2, label: "Compact view" },
@@ -23,7 +24,15 @@ const sorts = Object.keys(SORTS);
 const sort = ref("Recently Added");
 
 const { items: results, loading, hasMore, reload, loadMore } = useSeriesList();
-watch(sort, (s) => void reload({ sort: SORTS[s] ?? "recentlyAdded" }), { immediate: true });
+watch(
+  [sort, recentlyAddedKinds],
+  ([s, kinds]) =>
+    void reload({
+      sort: SORTS[s] ?? "recentlyAdded",
+      kind: kinds.length ? kinds.join(",") : "none",
+    }),
+  { immediate: true },
+);
 </script>
 
 <template>

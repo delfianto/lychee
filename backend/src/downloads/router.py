@@ -9,7 +9,12 @@ from src.core.exceptions import BadRequestError
 from src.core.persistence.database import DbSession
 from src.downloads import service
 from src.downloads.deps import StorageRootDep
-from src.downloads.schema import DownloadCreate, DownloadTaskOut
+from src.downloads.schema import (
+    DownloadConfigOut,
+    DownloadConfigUpdate,
+    DownloadCreate,
+    DownloadTaskOut,
+)
 from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -44,6 +49,16 @@ def post_downloads(
         status_code=status.HTTP_202_ACCEPTED,
         content=task.model_dump(by_alias=True, mode="json"),
     )
+
+
+@router.get("/config")
+def get_download_config() -> DownloadConfigOut:
+    return service.get_download_config()
+
+
+@router.patch("/config")
+def update_download_config(data: DownloadConfigUpdate) -> DownloadConfigOut:
+    return service.update_download_config(data)
 
 
 @router.post("/clear-completed", status_code=status.HTTP_204_NO_CONTENT)

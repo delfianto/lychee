@@ -16,12 +16,21 @@ from src.downloads.cancel import request_cancel, request_cancel_many
 from src.downloads.downloader import plan_downloads, resolve_manga_library, run_download_queue
 from src.downloads.models import DownloadTask
 from src.downloads.provider import get_provider
-from src.downloads.schema import DownloadTaskOut
+from src.downloads.schema import DownloadConfigOut, DownloadConfigUpdate, DownloadTaskOut
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
 _BULK_ACTIONS = frozenset({"pause-all", "cancel-all", "resume-all"})
+
+
+def get_download_config() -> DownloadConfigOut:
+    return DownloadConfigOut(parallel_downloads=queue.download_workers)
+
+
+def update_download_config(data: DownloadConfigUpdate) -> DownloadConfigOut:
+    workers = queue.set_download_workers(data.parallel_downloads)
+    return DownloadConfigOut(parallel_downloads=workers)
 
 
 def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskOut]:
@@ -85,13 +94,20 @@ def _download_work(
             raise BadRequestError(f"provider {series.provider!r} is not available")
         config = session.get(ProviderConfig, series.provider)
         language = config.language if config else "en"
-        _ = plan_downloads(
+        queued = plan_downloads(
             session,
             series,
             provider,
             language=language,
             provider_chapter_ids=provider_chapter_ids,
         )
+        extra = min(max(queue.download_workers - 1, 0), max(queued - 1, 0))
+        for _ in range(extra):
+            _ = queue.submit(
+                "download",
+                f"Downloading {series.title}",
+                _resume_work(series_id, storage_root),
+            )
         return {"downloaded": _drain_queue(session, series_id, storage_root, on_progress)}
 
     return work

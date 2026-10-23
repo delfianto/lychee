@@ -71,6 +71,14 @@ function rowKey(c: Chapter): string {
   return c.id ?? c.providerChapterId ?? `${c.number}-${c.language}`;
 }
 
+function chapterReadLink(c: Chapter): string | null {
+  if (c.id && c.status === "downloaded") return `/read/${c.id}`;
+  if (c.providerChapterId && props.seriesId) {
+    return `/read/adhoc:${props.seriesId}:${c.providerChapterId}`;
+  }
+  return c.id ? `/read/${c.id}` : null;
+}
+
 function canDownload(c: Chapter): boolean {
   return c.status === "available" || c.status === "failed";
 }
@@ -251,14 +259,11 @@ const statusLabel: Record<string, string> = {
             v-for="c in vg.chapters"
             :key="rowKey(c)"
             class="flex items-center gap-3 border-b border-base-300 px-3 py-2 last:border-b-0"
-            :class="[
-              c.id && c.status === 'downloaded' ? 'hover:bg-base-300/40' : '',
-              c.read ? 'opacity-50' : '',
-            ]"
+            :class="[chapterReadLink(c) ? 'hover:bg-base-300/40' : '', c.read ? 'opacity-50' : '']"
           >
             <component
-              :is="c.id && c.status === 'downloaded' ? RouterLink : 'div'"
-              v-bind="c.id && c.status === 'downloaded' ? { to: `/read/${c.id}` } : {}"
+              :is="chapterReadLink(c) ? RouterLink : 'div'"
+              v-bind="chapterReadLink(c) ? { to: chapterReadLink(c)! } : {}"
               class="flex min-w-0 grow items-center gap-3"
             >
               <span

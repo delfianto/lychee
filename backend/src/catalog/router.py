@@ -5,11 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import FileResponse
 
-from src.catalog import matching, media, purge, service
+from src.catalog import adhoc, matching, media, purge, service
 from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
 from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterAvailabilityOut,
+    ChapterBufferOut,
+    ChapterBufferRequest,
     ChapterDetailOut,
     DashboardOut,
     DeleteChapterOut,
@@ -138,9 +140,21 @@ def chapter_availability(
 
 
 @router.get("/chapters/{chapter_id}")
-def get_chapter(db: DbSession, chapter_id: str) -> ChapterDetailOut:
-    """Chapter detail for the reader."""
-    return service.get_chapter(db, chapter_id)
+def get_chapter(
+    db: DbSession,
+    chapter_id: str,
+    preload_pages: int = Query(adhoc.DEFAULT_PRELOAD_PAGES, alias="preloadPages", ge=1, le=20),
+) -> ChapterDetailOut:
+    """Chapter detail for the reader (local chapter, ad-hoc remote chapter, or series start)."""
+    return service.get_chapter(db, chapter_id, preload_pages=preload_pages)
+
+
+@router.post("/chapters/{chapter_id}/buffer")
+def buffer_chapter(db: DbSession, chapter_id: str, data: ChapterBufferRequest) -> ChapterBufferOut:
+    """Buffer a window of pages into ``temp/adhoc/`` for ad-hoc reading."""
+    return adhoc.buffer_chapter(
+        db, chapter_id, start_page=data.start_page, preload_pages=data.preload_pages
+    )
 
 
 @router.delete("/chapters/{chapter_id}")
@@ -169,9 +183,12 @@ def unread_updates(
 
 
 @router.get("/dashboard")
-def dashboard(db: DbSession) -> DashboardOut:
+def dashboard(
+    db: DbSession,
+    recently_added_kinds: str | None = Query(None, alias="recentlyAddedKinds"),
+) -> DashboardOut:
     """One call for the Home dashboard: stats + continue-reading + updates + added."""
-    return service.dashboard(db)
+    return service.dashboard(db, recently_added_kinds=recently_added_kinds)
 
 
 @router.get("/libraries/summary")

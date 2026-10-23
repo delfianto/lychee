@@ -518,7 +518,20 @@ describe("HTTP request contracts", () => {
         expect(new URL(request.url).searchParams.get("q")).toBe("Story");
         return HttpResponse.json([{ providerSeriesId: "md", title: "Story" }]);
       }),
+      http.post(`${root}/api/chapters/c1/buffer`, async ({ request }) => {
+        expect(await request.json()).toEqual({ startPage: 2, preloadPages: 3 });
+        return HttpResponse.json({
+          chapterId: "c1",
+          pageCount: 5,
+          bufferedPages: [2, 3, 4],
+        });
+      }),
     );
+    expect(await queries.bufferChapterPages("c1", 2, 3)).toEqual({
+      chapterId: "c1",
+      pageCount: 5,
+      bufferedPages: [2, 3, 4],
+    });
     expect(await queries.fetchSeries("s1")).toMatchObject({
       year: 2024,
       libraryStatus: "reading",

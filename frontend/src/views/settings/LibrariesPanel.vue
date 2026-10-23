@@ -14,6 +14,7 @@ import {
 } from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 import AddLibraryModal from "./AddLibraryModal.vue";
+import ThumbnailStorageCard from "./ThumbnailStorageCard.vue";
 
 interface LibraryRow {
   id: string;
@@ -94,50 +95,56 @@ onMounted(loadLibraries);
 </script>
 
 <template>
-  <section class="flex flex-col gap-3">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Libraries</h3>
-      <div class="flex gap-2">
-        <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
-          <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
-        </button>
-        <button class="btn btn-primary btn-sm gap-1" @click="showAdd = true">
-          <Plus class="size-4" />Add library
-        </button>
-      </div>
-    </div>
-    <div class="grid gap-4 lg:grid-cols-2">
-      <div v-for="lib in libraries" :key="lib.id" class="card bg-base-100">
-        <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
-          <Library class="size-5 shrink-0 text-primary" />
-          <div class="min-w-0 grow">
-            <div class="font-medium">{{ lib.name }}</div>
-            <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
-            <div class="text-xs text-base-content/50">
-              {{ lib.series }} series
-              <template v-if="lib.managed"> · Managed by account sync</template>
-              <template v-else> · scanned {{ lib.lastScan }}</template>
-            </div>
-          </div>
-          <button
-            v-if="!lib.managed"
-            class="btn btn-ghost btn-sm"
-            :disabled="scanning"
-            @click="scanOne(lib.id)"
-          >
-            Scan
+  <div class="flex flex-col gap-8">
+    <section class="flex flex-col gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Libraries
+        </h3>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
+            <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
           </button>
-          <button
-            v-if="!lib.managed"
-            class="btn btn-ghost btn-sm text-error"
-            @click="removeLibrary(lib.id)"
-          >
-            Remove
+          <button class="btn btn-primary btn-sm gap-1" @click="showAdd = true">
+            <Plus class="size-4" />Add library
           </button>
         </div>
       </div>
-    </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div v-for="lib in libraries" :key="lib.id" class="card bg-base-100">
+          <div class="card-body flex-row flex-wrap items-center gap-4 p-4">
+            <Library class="size-5 shrink-0 text-primary" />
+            <div class="min-w-0 grow">
+              <div class="font-medium">{{ lib.name }}</div>
+              <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
+              <div class="text-xs text-base-content/50">
+                {{ lib.series }} series
+                <template v-if="lib.managed"> · Managed by account sync</template>
+                <template v-else> · scanned {{ lib.lastScan }}</template>
+              </div>
+            </div>
+            <button
+              v-if="!lib.managed"
+              class="btn btn-ghost btn-sm"
+              :disabled="scanning"
+              @click="scanOne(lib.id)"
+            >
+              Scan
+            </button>
+            <button
+              v-if="!lib.managed"
+              class="btn btn-ghost btn-sm text-error"
+              @click="removeLibrary(lib.id)"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
 
-    <AddLibraryModal v-if="showAdd" @close="showAdd = false" @added="onLibraryAdded" />
-  </section>
+      <AddLibraryModal v-if="showAdd" @close="showAdd = false" @added="onLibraryAdded" />
+    </section>
+
+    <ThumbnailStorageCard />
+  </div>
 </template>

@@ -7,6 +7,8 @@ filesystem paths.
 
 from __future__ import annotations
 
+from pydantic import Field
+
 from src.core.schema import CamelModel, UtcDatetime
 
 
@@ -128,6 +130,17 @@ class ChapterDetailOut(CamelModel):
     comments: int
     read: bool
     uploaded_at: UtcDatetime | None = None
+
+
+class ChapterBufferRequest(CamelModel):
+    start_page: int = Field(default=1, ge=1)
+    preload_pages: int = Field(default=4, ge=1, le=20)
+
+
+class ChapterBufferOut(CamelModel):
+    chapter_id: str
+    page_count: int
+    buffered_pages: list[int]
 
 
 class VolumeGroupOut(CamelModel):

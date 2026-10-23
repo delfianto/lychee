@@ -13,10 +13,21 @@ export interface ReaderSettings {
   direction: ReaderDirection;
   fit: ReaderFit;
   background: ReaderBackground;
+  /** Ad-hoc reading (Neko style): number of pages to prefetch into temp/ (1–20). */
+  preloadPages: number;
   /** Gallery lightbox: start playback when a video is opened. */
   videoAutoPlay: boolean;
   /** Gallery lightbox: advance to the next item when a video ends. */
   videoAutoNext: boolean;
+}
+
+export const MIN_PRELOAD_PAGES = 1;
+export const MAX_PRELOAD_PAGES = 20;
+
+export function clampPreloadPages(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 4;
+  return Math.max(MIN_PRELOAD_PAGES, Math.min(MAX_PRELOAD_PAGES, Math.round(num)));
 }
 
 const KEY = "lychee.reader";
@@ -25,6 +36,7 @@ const defaults: ReaderSettings = {
   direction: "ltr",
   fit: "height",
   background: "dark",
+  preloadPages: 4,
   videoAutoPlay: true,
   videoAutoNext: true,
 };
@@ -32,7 +44,17 @@ const defaults: ReaderSettings = {
 function load(): ReaderSettings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...defaults, ...(JSON.parse(raw) as Partial<ReaderSettings>) };
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ReaderSettings>;
+      return {
+        ...defaults,
+        ...parsed,
+        preloadPages:
+          parsed.preloadPages !== undefined
+            ? clampPreloadPages(parsed.preloadPages)
+            : defaults.preloadPages,
+      };
+    }
   } catch {
     /* fall through to defaults */
   }

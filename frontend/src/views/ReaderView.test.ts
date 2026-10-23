@@ -1,11 +1,18 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, expect, it, vi } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { fetchChapterDetail, fetchChapters, fetchSeries, putProgress } from "../api/queries";
+import {
+  bufferChapterPages,
+  fetchChapterDetail,
+  fetchChapters,
+  fetchSeries,
+  putProgress,
+} from "../api/queries";
 import { useReaderSettings } from "../lib/readerSettings";
 import type { Series, VolumeGroup } from "../types";
 import ReaderView from "./ReaderView.vue";
 vi.mock("../api/queries", () => ({
+  bufferChapterPages: vi.fn(),
   fetchChapterDetail: vi.fn(),
   fetchChapters: vi.fn(),
   fetchSeries: vi.fn(),
@@ -18,7 +25,13 @@ beforeEach(() => {
     direction: "ltr",
     fit: "height",
     background: "dark",
+    preloadPages: 4,
   });
+  vi.mocked(bufferChapterPages).mockImplementation(async (id, startPage = 1, preloadPages = 4) => ({
+    chapterId: id,
+    pageCount: 6,
+    bufferedPages: Array.from({ length: preloadPages }, (_, i) => startPage + i),
+  }));
   vi.mocked(fetchChapterDetail).mockImplementation(async (id) => ({
     id,
     seriesId: "series",
@@ -212,4 +225,44 @@ it("gives the last unpaired page the whole width in double mode", async () => {
   await flushPromises();
   expect(wrapper.findAll("img")).toHaveLength(1);
   expect((area.element as HTMLElement).style.getPropertyValue("--reader-columns")).toBe("1");
+});
+
+it("buffers undownloaded ad-hoc chapters using preloadPages and prefetches on page turn", async () => {
+  useReaderSettings().preloadPages = 3;
+  vi.mocked(fetchChapters).mockResolvedValue([
+    {
+      volume: null,
+      chapters: [
+        { id: null, number: "5", status: "available", providerChapterId: "pc-5" },
+        { id: "one", number: "1", status: "downloaded" },
+      ],
+    },
+  ] as VolumeGroup[]);
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: "/read/:id", component: ReaderView },
+      { path: "/series/:id", component: { template: "<div>Series</div>" } },
+    ],
+  });
+  await router.push("/read/adhoc:series:pc-5");
+  await router.isReady();
+  const wrapper = mount(ReaderView, { attachTo: document.body, global: { plugins: [router] } });
+  await flushPromises();
+
+  expect(bufferChapterPages).toHaveBeenCalledWith("adhoc:series:pc-5", 1, 3);
+  expect(fetchChapterDetail).toHaveBeenCalledWith("adhoc:series:pc-5", 3);
+  expect(wrapper.findAll("option").map((o) => o.attributes("value"))).toEqual([
+    "one",
+    "adhoc:series:pc-5",
+  ]);
+
+  await key("ArrowRight");
+  expect(bufferChapterPages).toHaveBeenLastCalledWith("adhoc:series:pc-5", 2, 3);
+
+  await wrapper.get('[aria-label="Settings"]').trigger("click");
+  const preloadInput = wrapper.get('[aria-label="Ad-hoc preload pages"]');
+  await preloadInput.setValue("6");
+  await preloadInput.trigger("change");
+  expect(useReaderSettings().preloadPages).toBe(6);
 });

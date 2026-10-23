@@ -171,6 +171,7 @@ function seed() {
       makeTax("shonen", { category: "demographic", system: true }),
     ],
     downloads: [] as DownloadTask[],
+    downloadConfig: { parallelDownloads: 1 },
     importConfig: {
       enabled: true,
       quality: 75,
@@ -184,7 +185,15 @@ function seed() {
       started: "2026-01-01T00:00:00Z",
       uptimeSeconds: 90000,
     } as About,
-    sync: { lastSync: null, autoEveryMinutes: 0, newChapters: 2, syncing: false } as SyncState,
+    sync: {
+      lastSync: null,
+      autoEveryMinutes: 0,
+      newChapters: 2,
+      syncing: false,
+      paused: false,
+      parallelSyncs: 1,
+      jobs: [],
+    } as SyncState,
     chapters: [
       {
         volume: 1,
@@ -282,7 +291,10 @@ export function useAppApi() {
           availableCount: 2,
           totalCount: 2,
         });
-      if (path === "/api/dashboard")
+      if (path === "/api/dashboard") {
+        const kindsParam = url.searchParams.get("recentlyAddedKinds") ?? "manga";
+        const kinds =
+          kindsParam === "none" ? [] : kindsParam.split(",").filter((k) => k.length > 0);
         return json({
           stats: { series: db.series.length, unreadChapters: 2, reading: 1 },
           continueReading: db.series.filter((s) => s.kind !== "gallery"),
@@ -293,8 +305,9 @@ export function useAppApi() {
             chapter: "2",
             updatedAt: new Date().toISOString(),
           })),
-          recentlyAdded: db.series,
+          recentlyAdded: db.series.filter((s) => kinds.includes(s.kind ?? "manga")),
         });
+      }
       if (path === "/api/libraries/summary")
         return json([
           { key: "manga", title: "Manga", sizeGb: 1.5 },
@@ -316,13 +329,14 @@ export function useAppApi() {
           })),
           nextCursor: null,
         });
-      if (path === "/api/series" && method === "GET")
+      if (path === "/api/series" && method === "GET") {
+        const kindParam = url.searchParams.get("kind");
+        const kinds = kindParam ? kindParam.split(",").filter(Boolean) : null;
         return json({
-          items: db.series.filter(
-            (s) => !url.searchParams.has("kind") || s.kind === url.searchParams.get("kind"),
-          ),
+          items: db.series.filter((s) => !kinds || kinds.includes(s.kind ?? "manga")),
           nextCursor: null,
         });
+      }
       const seriesMatch = path.match(/^\/api\/series\/([^/]+)(?:\/(.+))?$/);
       if (seriesMatch) {
         const [, id, action] = seriesMatch;
@@ -348,6 +362,19 @@ export function useAppApi() {
         if (method === "DELETE")
           return json({ mode: "provider", redownloadable: true, seriesId: "s1" });
         if (path.endsWith("/progress")) return done();
+        if (path.endsWith("/buffer")) {
+          const cid = path.split("/").at(-2) ?? "1";
+          const start = Number(body.startPage ?? 1);
+          const count = Number(body.preloadPages ?? 4);
+          return json({
+            chapterId: cid,
+            pageCount: 3,
+            bufferedPages: Array.from(
+              { length: Math.min(3 - start + 1, count) },
+              (_, i) => start + i,
+            ),
+          });
+        }
         return json({
           id: path.split("/").at(-1),
           seriesId: "s1",
@@ -474,6 +501,12 @@ export function useAppApi() {
         else return task();
         return json(db.downloads);
       }
+      if (path === "/api/downloads/config") {
+        if (method === "PATCH") {
+          db.downloadConfig.parallelDownloads = Number(body.parallelDownloads ?? 1);
+        }
+        return json(db.downloadConfig);
+      }
       if (path === "/api/downloads/clear-completed") {
         db.downloads = db.downloads.filter((d) => d.status !== "done");
         return done();
@@ -489,6 +522,45 @@ export function useAppApi() {
         return json(db.downloads);
       }
       if (path === "/api/sync") return method === "GET" ? json(db.sync) : task();
+      if (path === "/api/sync/config") {
+        db.sync.parallelSyncs = Number(body.parallelSyncs ?? 1);
+        return json(db.sync);
+      }
+      if (path === "/api/sync/control") {
+        const action = typeof body.action === "string" ? body.action : "";
+        const jobId = typeof body.jobId === "string" ? body.jobId : null;
+        const jobs = db.sync.jobs ?? [];
+        if (action === "clear-completed") {
+          db.sync.jobs = jobs.filter(
+            (j) => j.status !== "done" && j.status !== "failed" && j.status !== "cancelled",
+          );
+        } else if (jobId) {
+          const job = jobs.find((j) => j.id === jobId);
+          if (job) {
+            if (action === "pause") job.status = "paused";
+            else if (action === "resume") job.status = "queued";
+            else if (action === "cancel") job.status = "cancelled";
+          }
+        } else if (action === "pause-all") {
+          db.sync.paused = true;
+          jobs.forEach((j) => {
+            if (j.status === "queued" || j.status === "running") j.status = "paused";
+          });
+        } else if (action === "resume-all") {
+          db.sync.paused = false;
+          jobs.forEach((j) => {
+            if (j.status === "paused") j.status = "queued";
+          });
+        } else if (action === "cancel-all") {
+          db.sync.paused = false;
+          jobs.forEach((j) => {
+            if (j.status === "queued" || j.status === "running" || j.status === "paused") {
+              j.status = "cancelled";
+            }
+          });
+        }
+        return json(db.sync);
+      }
       if (path === "/api/import/config") {
         if (method === "PATCH") Object.assign(db.importConfig, body);
         return json(db.importConfig);

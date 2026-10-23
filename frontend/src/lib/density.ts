@@ -33,3 +33,60 @@ watch(listsDefaultTab, (t) => localStorage.setItem(LISTS_TAB_KEY, t));
 export function useListsDefaultTab() {
   return { listsDefaultTab };
 }
+
+export type RecentlyAddedKind = "manga" | "comic" | "gallery";
+export const RECENTLY_ADDED_OPTIONS: { value: RecentlyAddedKind; label: string }[] = [
+  { value: "manga", label: "Manga" },
+  { value: "comic", label: "Comics" },
+  { value: "gallery", label: "Gallery" },
+];
+const RECENTLY_ADDED_KEY = "lychee.recentlyAddedKinds";
+const VALID_RECENTLY_ADDED_KINDS: RecentlyAddedKind[] = ["manga", "comic", "gallery"];
+
+function normalizeRecentlyAddedKind(v: unknown): RecentlyAddedKind | null {
+  if (v === "comics") return "comic";
+  return v === "manga" || v === "comic" || v === "gallery" ? v : null;
+}
+
+function toRecentlyAddedKinds(raw: string | null): RecentlyAddedKind[] {
+  if (raw === null) return ["manga"];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return ["manga"];
+    if (parsed.length === 0) return [];
+    const normalized = new Set(
+      parsed.map(normalizeRecentlyAddedKind).filter((k): k is RecentlyAddedKind => k !== null),
+    );
+    return normalized.size > 0
+      ? VALID_RECENTLY_ADDED_KINDS.filter((k) => normalized.has(k))
+      : ["manga"];
+  } catch {
+    const parts = raw
+      .split(",")
+      .map((s) => normalizeRecentlyAddedKind(s.trim()))
+      .filter((k): k is RecentlyAddedKind => k !== null);
+    return parts.length > 0
+      ? VALID_RECENTLY_ADDED_KINDS.filter((k) => parts.includes(k))
+      : ["manga"];
+  }
+}
+
+const recentlyAddedKinds = ref<RecentlyAddedKind[]>(
+  toRecentlyAddedKinds(localStorage.getItem(RECENTLY_ADDED_KEY)),
+);
+watch(
+  recentlyAddedKinds,
+  (kinds) => localStorage.setItem(RECENTLY_ADDED_KEY, JSON.stringify(kinds)),
+  { deep: true },
+);
+
+export function toggleRecentlyAddedKind(kind: RecentlyAddedKind): void {
+  const current = new Set(recentlyAddedKinds.value);
+  if (current.has(kind)) current.delete(kind);
+  else current.add(kind);
+  recentlyAddedKinds.value = VALID_RECENTLY_ADDED_KINDS.filter((k) => current.has(k));
+}
+
+export function useRecentlyAddedKinds() {
+  return { recentlyAddedKinds, toggleRecentlyAddedKind };
+}

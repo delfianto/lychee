@@ -12,7 +12,7 @@ import ListsView from "./ListsView.vue";
 import ListDetailView from "./ListDetailView.vue";
 import FilterPanel from "../components/FilterPanel.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
-import { useDensity, useListsDefaultTab } from "../lib/density";
+import { useDensity, useListsDefaultTab, useRecentlyAddedKinds } from "../lib/density";
 vi.mock("../api/client", async (original) => ({
   ...(await original<typeof import("../api/client")>()),
   api: (await import("../test/appApi")).testClient(),
@@ -53,13 +53,23 @@ it("shows the synced reading shelf without local progress and refreshes when syn
   expect(api.requests.length).toBe(requestCount);
 });
 
-it("hides the reading-list rail when the shelf is empty", async () => {
+it("hides the reading-list rail when the shelf is empty and filters recently added by configured kinds", async () => {
+  useRecentlyAddedKinds().recentlyAddedKinds.value = ["manga"];
   api.db.series.forEach((series) => {
     series.libraryStatus = "completed";
   });
   const { wrapper } = await renderView(LibraryHome);
   expect(wrapper.text()).not.toContain("On your reading list");
   expect(wrapper.text()).toContain("Recently added");
+  expect(wrapper.find('a[href="/gallery/g1"]').exists()).toBe(false);
+  useRecentlyAddedKinds().recentlyAddedKinds.value = ["gallery"];
+  await flushPromises();
+  expect(wrapper.find('a[href="/gallery/g1"]').exists()).toBe(true);
+  useRecentlyAddedKinds().recentlyAddedKinds.value = [];
+  await flushPromises();
+  expect(wrapper.text()).not.toContain("Recently added");
+  useRecentlyAddedKinds().recentlyAddedKinds.value = ["manga"];
+  await flushPromises();
 });
 
 it("renders dashboard content, retries a failure, and guides an empty library to settings", async () => {
@@ -189,9 +199,11 @@ it("filters galleries by artist, characters and franchise and sorts their titles
   await selects[2]!.setValue("Title");
 });
 
-it("sorts the added feed and switches its shared density", async () => {
+it("sorts the added feed, filters by recently added kinds, and switches its shared density", async () => {
+  useRecentlyAddedKinds().recentlyAddedKinds.value = ["manga"];
   const { wrapper } = await renderView(AddedView);
   expect(wrapper.text()).toContain("Story s1");
+  expect(wrapper.text()).not.toContain("Gallery g1");
   await input(wrapper, "select", "Title");
   await vi.waitFor(() =>
     expect(
@@ -201,6 +213,15 @@ it("sorts the added feed and switches its shared density", async () => {
         ?.query.get("sort"),
     ).toBe("title"),
   );
+  useRecentlyAddedKinds().recentlyAddedKinds.value = [];
+  await flushPromises();
+  expect(
+    api.requests
+      .filter((r) => r.path === "/api/series")
+      .at(-1)
+      ?.query.get("kind"),
+  ).toBe("none");
+  useRecentlyAddedKinds().recentlyAddedKinds.value = ["manga"];
   await wrapper.get('[aria-label="Compact view"]').trigger("click");
   expect(useDensity().density.value).toBe("compact");
 });

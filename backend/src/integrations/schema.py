@@ -81,11 +81,34 @@ class TrackerUpdate(CamelModel):
     sync_on_read: bool | None = None
 
 
+class SyncJobOut(CamelModel):
+    id: str
+    kind: str
+    title: str
+    source: str
+    status: str
+    progress: int = 0
+    detail: str | None = None
+    error: str | None = None
+
+
 class SyncOut(CamelModel):
     last_sync: UtcDatetime | None = None
     auto_every_minutes: int
     new_chapters: int
     syncing: bool
+    paused: bool = False
+    parallel_syncs: int = 1
+    jobs: list[SyncJobOut] = Field(default_factory=list)
+
+
+class SyncControlRequest(CamelModel):
+    action: str
+    job_id: str | None = None
+
+
+class SyncConfigUpdate(CamelModel):
+    parallel_syncs: int = Field(ge=1, le=10)
 
 
 class AboutOut(CamelModel):

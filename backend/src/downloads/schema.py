@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import Field
+
 from src.catalog.schema import SeriesOut
 from src.core.schema import CamelModel
 
@@ -30,3 +32,11 @@ class DownloadCreate(CamelModel):
     provider_chapter_ids: list[str] | None = None
     # pause-all | cancel-all | resume-all — mutates the queue without enqueueing a series.
     action: str | None = None
+
+
+class DownloadConfigOut(CamelModel):
+    parallel_downloads: int
+
+
+class DownloadConfigUpdate(CamelModel):
+    parallel_downloads: int = Field(ge=1, le=10)
