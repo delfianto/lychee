@@ -9,6 +9,7 @@ from src.catalog import matching, media, purge, service
 from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
 from src.catalog.media import Served
 from src.catalog.schema import (
+    ChapterAvailabilityOut,
     ChapterDetailOut,
     DashboardOut,
     DeleteChapterOut,
@@ -127,6 +128,13 @@ def list_chapters(
 ) -> list[VolumeGroupOut]:
     """Chapters grouped by volume (Related/chapters tab)."""
     return service.list_chapters(db, series_id, language=language, order=order)
+
+
+@router.get("/series/{series_id}/chapter-availability")
+def chapter_availability(
+    db: DbSession, series_id: str, language: str | None = None, refresh: bool = False
+) -> ChapterAvailabilityOut:
+    return service.chapter_availability(db, series_id, language=language, refresh=refresh)
 
 
 @router.get("/chapters/{chapter_id}")

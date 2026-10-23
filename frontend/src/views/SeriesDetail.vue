@@ -7,6 +7,8 @@ import { onTaskDone } from "../api/events";
 import {
   fetchArt,
   fetchChapters,
+  fetchChapterAvailability,
+  type ChapterAvailability,
   fetchRelated,
   fetchSeries,
   patchSeries,
@@ -34,6 +36,8 @@ const route = useRoute();
 
 const series = ref<Series | null>(null);
 const volumes = ref<VolumeGroup[]>([]);
+const availability = ref<ChapterAvailability | null>(null);
+const checkingChapters = ref(false);
 const related = ref<Series[]>([]);
 const artCovers = ref<string[]>([]);
 const loading = ref(true);
@@ -60,15 +64,21 @@ async function load(id: string, opts: { soft?: boolean } = {}): Promise<void> {
   }
   failed.value = false;
   try {
-    const [s, vols, rel, art] = await Promise.all([
+    const chapterRequest = fetchChapters(id, {
+      language: chapterLanguage.value,
+      order: chapterOrder.value,
+    });
+    const [s, vols, rel, art, status] = await Promise.all([
       fetchSeries(id),
-      fetchChapters(id, { language: chapterLanguage.value, order: chapterOrder.value }),
+      chapterRequest,
       fetchRelated(id),
       fetchArt(id),
+      chapterRequest.then(() => fetchChapterAvailability(id, chapterLanguage.value)),
     ]);
     if (!staleGuard.isCurrent(token)) return;
     series.value = s;
     volumes.value = vols;
+    availability.value = status;
     related.value = rel;
     artCovers.value = art;
     favorite.value = s.favorite ?? false;
@@ -88,7 +98,24 @@ async function reloadChapters(): Promise<void> {
     language: chapterLanguage.value,
     order: chapterOrder.value,
   });
-  if (staleGuard.isCurrent(token)) volumes.value = vols;
+  const status = await fetchChapterAvailability(String(route.params.id), chapterLanguage.value);
+  if (staleGuard.isCurrent(token)) {
+    volumes.value = vols;
+    availability.value = status;
+  }
+}
+async function retryChapters(): Promise<void> {
+  if (checkingChapters.value) return;
+  const id = String(route.params.id);
+  checkingChapters.value = true;
+  try {
+    const status = await fetchChapterAvailability(id, chapterLanguage.value, true);
+    if (String(route.params.id) !== id) return;
+    availability.value = status;
+    await reloadChapters();
+  } finally {
+    checkingChapters.value = false;
+  }
 }
 function onLanguageChange(language: string): void {
   chapterLanguage.value = language;
@@ -486,6 +513,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             :series-id="series.id"
             :matched="isMatched"
             :synced="chaptersSynced"
+            :availability="availability ?? undefined"
+            :checking="checkingChapters"
+            @retry="retryChapters"
             :language="chapterLanguage"
             :order="chapterOrder"
             @download="downloadChapter"

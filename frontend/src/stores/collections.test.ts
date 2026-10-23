@@ -106,11 +106,13 @@ describe("collection management", () => {
       description: undefined,
       kind: undefined,
     });
-    expect(api.POST).toHaveBeenLastCalledWith("/api/collections", { body: { name: "Weekend" } });
+    expect(api.POST).toHaveBeenLastCalledWith("/api/collections", {
+      body: { name: "Weekend", visibility: "private" },
+    });
     expect(store.getList("new")?.id).toBe("new");
     expect(await store.createList("  ")).toBeUndefined();
     expect(api.POST).toHaveBeenLastCalledWith("/api/collections", {
-      body: { name: "Untitled list" },
+      body: { name: "Untitled list", visibility: "private" },
     });
     expect(store.lists).toHaveLength(1);
   });

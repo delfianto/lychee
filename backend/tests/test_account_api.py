@@ -33,6 +33,9 @@ class _FakeAuthedProvider:
     def reading_status(self) -> dict[str, str]:
         return {"md-1": "reading"}
 
+    def list_followed_lists(self) -> list[CustomList]:
+        return []
+
     def list_custom_lists(self) -> list[CustomList]:
         return [CustomList(provider_list_id="list-1", name="Faves", manga_ids=["md-1", "md-2"])]
 

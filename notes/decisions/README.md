@@ -34,6 +34,8 @@ the sibling directories one level up (`../komga/`, `../lanraragi/`,
 | [20](20-lychee-info-metadata.md) | `lychee.info` — native YAML metadata sidecar | Implemented — reader and writer both |
 | [21](21-tag-aliases.md) | Tag aliases — synonym resolution + a renamable display label | Implemented |
 
+| [22](22-mdlists-chapters-staging.md) | MDLists, chapter availability, and fixed ingest staging | Implemented |
+
 ## Open questions
 
 None outstanding. (The three originally tracked here — page storage, task

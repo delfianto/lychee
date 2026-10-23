@@ -130,6 +130,14 @@ export interface BrowseFilters {
 
 /** A user-curated collection / reading list. */
 export interface Collection {
+  provider?: string | null;
+  providerListId?: string | null;
+  sourceUrl?: string | null;
+  visibility?: "public" | "private" | null;
+  owned?: boolean;
+  followed?: boolean;
+  editable?: boolean;
+  lastSyncedAt?: string | null;
   id: string;
   name: string;
   description?: string;

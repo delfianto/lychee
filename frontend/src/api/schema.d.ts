@@ -149,6 +149,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{series_id}/chapter-availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chapter Availability */
+        get: operations["chapter_availability_api_series__series_id__chapter_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chapters/{chapter_id}": {
         parameters: {
             query?: never;
@@ -942,6 +959,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collections/mangadex/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Mdlist */
+        post: operations["import_mdlist_api_collections_mangadex_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/mangadex/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Mdlists */
+        post: operations["sync_mdlists_api_collections_mangadex_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/mangadex/users/{reference}/lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse User Lists */
+        get: operations["browse_user_lists_api_collections_mangadex_users__reference__lists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/{collection_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Mdlist */
+        post: operations["sync_mdlist_api_collections__collection_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/{collection_id}/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Follow Mdlist */
+        put: operations["follow_mdlist_api_collections__collection_id__follow_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/{collection_id}/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Feed */
+        get: operations["list_feed_api_collections__collection_id__feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/collections/{collection_id}": {
         parameters: {
             query?: never;
@@ -1252,6 +1371,34 @@ export interface components {
              */
             kind: string;
         };
+        /** ChapterAvailabilityOut */
+        ChapterAvailabilityOut: {
+            /** Status */
+            status: string;
+            /** Language */
+            language: string;
+            /**
+             * Availablelanguages
+             * @default []
+             */
+            availableLanguages: string[];
+            /**
+             * Availablecount
+             * @default 0
+             */
+            availableCount: number;
+            /**
+             * Totalcount
+             * @default 0
+             */
+            totalCount: number;
+            /** Checkedat */
+            checkedAt?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
+        };
         /** ChapterDetailOut */
         ChapterDetailOut: {
             /** Id */
@@ -1317,6 +1464,14 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Provider */
+            provider?: "mangadex" | null;
+            /**
+             * Visibility
+             * @default private
+             * @enum {string}
+             */
+            visibility: "public" | "private";
         };
         /** CollectionDetailOut */
         CollectionDetailOut: {
@@ -1326,6 +1481,31 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Providerlistid */
+            providerListId?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
+            /** Visibility */
+            visibility?: ("public" | "private") | null;
+            /**
+             * Owned
+             * @default false
+             */
+            owned: boolean;
+            /**
+             * Followed
+             * @default false
+             */
+            followed: boolean;
+            /**
+             * Editable
+             * @default true
+             */
+            editable: boolean;
+            /** Lastsyncedat */
+            lastSyncedAt?: string | null;
             /** Series */
             series: components["schemas"]["SeriesOut"][];
         };
@@ -1337,6 +1517,31 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Providerlistid */
+            providerListId?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
+            /** Visibility */
+            visibility?: ("public" | "private") | null;
+            /**
+             * Owned
+             * @default false
+             */
+            owned: boolean;
+            /**
+             * Followed
+             * @default false
+             */
+            followed: boolean;
+            /**
+             * Editable
+             * @default true
+             */
+            editable: boolean;
+            /** Lastsyncedat */
+            lastSyncedAt?: string | null;
             /** Seriesids */
             seriesIds: string[];
             /** Kind */
@@ -1353,6 +1558,8 @@ export interface components {
             name?: string | null;
             /** Description */
             description?: string | null;
+            /** Visibility */
+            visibility?: ("public" | "private") | null;
         };
         /** DashboardOut */
         DashboardOut: {
@@ -1563,6 +1770,39 @@ export interface components {
             /** Enabled */
             enabled?: boolean | null;
         };
+        /** ListChapterOut */
+        ListChapterOut: {
+            /** Chapterid */
+            chapterId: string;
+            /** Mangaid */
+            mangaId: string;
+            /** Mangatitle */
+            mangaTitle: string;
+            /** Seriesid */
+            seriesId?: string | null;
+            /** Number */
+            number?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Language */
+            language: string;
+            /** Group */
+            group?: string | null;
+            /** Uploadedat */
+            uploadedAt?: string | null;
+            /** Sourceurl */
+            sourceUrl: string;
+        };
+        /** ListFollow */
+        ListFollow: {
+            /** Followed */
+            followed: boolean;
+        };
+        /** ListImport */
+        ListImport: {
+            /** Reference */
+            reference: string;
+        };
         /**
          * MangaMatchOut
          * @description A provider search candidate for matching a local series.
@@ -1588,6 +1828,17 @@ export interface components {
              * @default mangadex
              */
             provider: string;
+        };
+        /** OffsetPage[ListChapterOut] */
+        OffsetPage_ListChapterOut_: {
+            /** Items */
+            items: components["schemas"]["ListChapterOut"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Pagesize */
+            pageSize: number;
         };
         /** OffsetPage[TaxonomyItemOut] */
         OffsetPage_TaxonomyItemOut_: {
@@ -1698,6 +1949,19 @@ export interface components {
             chapter: string;
             /** Updatedat */
             updatedAt: string;
+        };
+        /** RemoteListOut */
+        RemoteListOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Visibility */
+            visibility: string;
+            /** Mangacount */
+            mangaCount: number;
+            /** Sourceurl */
+            sourceUrl: string;
         };
         /** SeriesArtOut */
         SeriesArtOut: {
@@ -2283,6 +2547,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VolumeGroupOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chapter_availability_api_series__series_id__chapter_availability_get: {
+        parameters: {
+            query?: {
+                language?: string | null;
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterAvailabilityOut"];
                 };
             };
             /** @description Validation Error */
@@ -3796,6 +4094,191 @@ export interface operations {
             };
         };
     };
+    import_mdlist_api_collections_mangadex_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_mdlists_api_collections_mangadex_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+        };
+    };
+    browse_user_lists_api_collections_mangadex_users__reference__lists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteListOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_mdlist_api_collections__collection_id__sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    follow_mdlist_api_collections__collection_id__follow_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListFollow"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feed_api_collections__collection_id__feed_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                language?: string | null;
+            };
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffsetPage_ListChapterOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_collection_api_collections__collection_id__get: {
         parameters: {
             query?: never;
@@ -3829,7 +4312,9 @@ export interface operations {
     };
     delete_collection_api_collections__collection_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                remote?: boolean;
+            };
             header?: never;
             path: {
                 collection_id: string;

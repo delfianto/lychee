@@ -441,3 +441,65 @@ def test_chapter_path_rel_human_readable(db_session: Session) -> None:
     remote = RemoteChapter("x", "10.5", 2, "Finale", "en")
     rel = chapter_path_rel(series, remote)
     assert rel == "My CoolManga/Vol.02/Ch.10.5 - Finale.cbz"
+
+
+def test_download_stages_all_processing_and_publishes_only_finished_archive(
+    client: TestClient, db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.downloads import downloader
+
+    root = tmp_path / "manga"
+    series = _linked_series(db_session, root)
+    real_writer = downloader.write_cbz
+    destinations = []
+
+    def checked_writer(dest, pages, **kwargs):
+        assert dest.is_relative_to(root / "temp")
+        assert list(root.glob("*/Vol.*/*.cbz")) == [] or len(destinations) > 0
+        destinations.append(dest)
+        return real_writer(dest, pages, **kwargs)
+
+    monkeypatch.setattr(downloader, "write_cbz", checked_writer)
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
+    assert len(destinations) == 2
+    assert list((root / "temp").iterdir()) == []
+    assert len(list(root.rglob("*.cbz"))) == 2
+
+
+def test_encoding_failure_cleans_temp_without_publishing(
+    client: TestClient, db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.downloads import downloader
+
+    root = tmp_path / "manga"
+    series = _linked_series(db_session, root)
+
+    def fail(_pages):
+        raise ValueError("encoding failed")
+
+    monkeypatch.setattr(downloader, "encode_pages", fail)
+    assert client.post("/api/downloads", json={"seriesId": series.id}).status_code == 202
+    queue.wait_idle()
+    assert not list(root.rglob("*.cbz"))
+    assert list((root / "temp").iterdir()) == []
+    assert all(row["status"] == "failed" for row in client.get("/api/downloads").json())
+
+
+def test_fresh_mangadex_uuid_path_uses_title_but_keeps_existing_downloads(
+    db_session: Session, tmp_path: Path
+) -> None:
+    from src.downloads.downloader import _series_dir_name
+
+    library = ensure_manga_library(db_session, tmp_path)
+    series = make_series(db_session, title="Human title", kind="manga")
+    series.library_id = library.id
+    series.provider_series_id = "f6fc7b4d-085b-4075-9263-345631e6ac93"
+    series.path_rel = series.provider_series_id
+    db_session.commit()
+    assert _series_dir_name(series) == "Human title"
+    assert series.path_rel is not None
+    existing = tmp_path / "f6fc7b4d-085b-4075-9263-345631e6ac93"
+    existing.mkdir()
+    (existing / "existing.cbz").write_bytes(b"existing")
+    assert _series_dir_name(series) == series.provider_series_id

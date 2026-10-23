@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from src.downloads.provider import CustomList, MangaMatch, RemoteChapter, SeriesMetadata
+from src.downloads.provider import (
+    ChapterListing,
+    CustomList,
+    MangaMatch,
+    RemoteChapter,
+    SeriesMetadata,
+)
 from src.providers.mangadex_client import MangaDexClient
+from src.providers.mangadex_lists import MangaDexLists
 
 _CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 
@@ -108,6 +116,7 @@ class MangaDexProvider:
     ) -> None:
         # Accept a raw httpx.Client (tests inject a MockTransport) or a ready client.
         self._api = api or MangaDexClient(client=client)
+        self.lists = MangaDexLists(self._api)
 
     def list_chapters(
         self, provider_series_id: str, *, language: str = "en"
@@ -123,6 +132,11 @@ class MangaDexProvider:
                     "contentRating[]": _CONTENT_RATINGS,  # else erotica/pornographic are dropped
                     "includes[]": ["scanlation_group"],
                     "order[chapter]": "asc",
+                    "includeFutureUpdates": "0",
+                    "includeFuturePublishAt": 0,
+                    "includeUnavailable": "0",
+                    "includeEmptyPages": 0,
+                    "includeExternalUrl": 0,
                     "limit": _FEED_LIMIT,
                     "offset": offset,
                 },
@@ -130,10 +144,16 @@ class MangaDexProvider:
             body = response.json()
             for item in body.get("data", []):
                 attributes: dict[str, Any] = item.get("attributes", {})
-                number = attributes.get("chapter")
-                if not number or number in seen:
+                number = attributes.get("chapter") or "Oneshot"
+                key = attributes.get("chapter") or item["id"]
+                if (
+                    key in seen
+                    or attributes.get("isUnavailable")
+                    or attributes.get("externalUrl")
+                    or attributes.get("pages") == 0
+                ):
                     continue
-                seen.add(number)
+                seen.add(key)
                 chapters.append(
                     RemoteChapter(
                         provider_chapter_id=item["id"],
@@ -151,6 +171,59 @@ class MangaDexProvider:
             if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
                 break
         return chapters
+
+    def inspect_chapters(self, provider_series_id: str, *, language: str = "en") -> ChapterListing:
+        chapters = self.list_chapters(provider_series_id, language=language)
+        if chapters:
+            return ChapterListing(
+                chapters, available_languages=[language], total_count=len(chapters)
+            )
+        # Only empty feeds need the cross-language diagnostic. Include unavailable
+        # and external records to distinguish an empty language from a removed feed.
+        languages: set[str] = set()
+        external = False
+        total = 0
+        offset = 0
+        while True:
+            body = self._api.get(
+                f"/manga/{provider_series_id}/feed",
+                params={
+                    "limit": _FEED_LIMIT,
+                    "offset": offset,
+                    "contentRating[]": _CONTENT_RATINGS,
+                    "includeUnavailable": "1",
+                    "includeEmptyPages": 1,
+                    "includeExternalUrl": 1,
+                    "includeFutureUpdates": "0",
+                    "includeFuturePublishAt": 0,
+                },
+            ).json()
+            total = int(body.get("total", 0))
+            for item in body.get("data", []):
+                attrs = item.get("attributes", {})
+                if attrs.get("externalUrl") and attrs.get("translatedLanguage") == language:
+                    external = True
+                elif not attrs.get("isUnavailable") and attrs.get("pages", 0) > 0:
+                    languages.add(attrs.get("translatedLanguage", "en"))
+            offset += _FEED_LIMIT
+            if offset >= min(total, _MAX_OFFSET):
+                break
+        status = (
+            "language_unavailable"
+            if languages
+            else "external_only"
+            if external
+            else "unavailable"
+            if total
+            else "no_chapters"
+        )
+        # A nonempty readable feed in the requested language that the primary
+        # request missed is a failed/inconsistent check, not a confirmed empty feed.
+        if language in languages:
+            status = "error"
+        return ChapterListing(
+            [], status=status, available_languages=sorted(languages), total_count=total
+        )
 
     def search(self, title: str, *, limit: int = 5) -> list[MangaMatch]:
         response = self._api.get(
@@ -221,24 +294,10 @@ class MangaDexProvider:
         return self._api.get("/manga/status").json().get("statuses", {}) or {}
 
     def list_custom_lists(self) -> list[CustomList]:
-        """The authed user's MDLists + their member manga ids (needs a Bearer token). The
-        manga ids ride in each list's relationships, so no per-list fetch is needed."""
-        results: list[CustomList] = []
-        offset = 0
-        while True:
-            body = self._api.get("/user/list", params={"limit": 100, "offset": offset}).json()
-            for data in body.get("data", []):
-                name = data.get("attributes", {}).get("name") or data["id"]  # MDList name is plain
-                manga_ids = [
-                    rel["id"] for rel in data.get("relationships", []) if rel.get("type") == "manga"
-                ]
-                results.append(
-                    CustomList(provider_list_id=data["id"], name=name, manga_ids=manga_ids)
-                )
-            offset += 100
-            if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
-                break
-        return results
+        return self.lists.listing("/user/list", owned=True)
+
+    def list_followed_lists(self) -> list[CustomList]:
+        return self.lists.listing("/user/follows/list", followed=True)
 
     def read_markers(self, manga_ids: list[str]) -> dict[str, list[str]]:
         """Map of manga id → read chapter ids for the authed user (batched, grouped)."""
@@ -320,6 +379,34 @@ class MangaDexProvider:
         data_saver: bool = False,
         on_page: Callable[[int, int], None] | None = None,
     ) -> list[bytes]:
+        return self._fetch_pages(chapter, data_saver=data_saver, on_page=on_page)
+
+    def fetch_pages_to(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        data_saver: bool = False,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[Path]:
+        paths: list[Path] = []
+
+        def save(index: int, data: bytes) -> None:
+            path = directory / f"{index:04d}.source"
+            path.write_bytes(data)
+            paths.append(path)
+
+        self._fetch_pages(chapter, data_saver=data_saver, on_page=on_page, save=save)
+        return paths
+
+    def _fetch_pages(
+        self,
+        chapter: RemoteChapter,
+        *,
+        data_saver: bool,
+        on_page: Callable[[int, int], None] | None,
+        save: Callable[[int, bytes], None] | None = None,
+    ) -> list[bytes]:
         server = self._at_home(chapter.provider_chapter_id)
         quality = "data-saver" if data_saver else "data"
         chapter_hash = server["chapter"]["hash"]
@@ -327,13 +414,16 @@ class MangaDexProvider:
         base = server["baseUrl"]  # mutated if a node expires (403) mid-chapter
         total = len(files) or 1
         pages: list[bytes] = []
-        for filename in files:
+        for index, filename in enumerate(files, start=1):
             content, base = self._fetch_page(
                 chapter.provider_chapter_id, base, quality, chapter_hash, filename
             )
-            pages.append(content)
+            if save is not None:
+                save(index, content)
+            else:
+                pages.append(content)
             if on_page is not None:
-                on_page(len(pages), total)
+                on_page(index, total)
         return pages
 
     def _fetch_page(

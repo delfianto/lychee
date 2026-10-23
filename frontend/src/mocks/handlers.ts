@@ -53,6 +53,7 @@ type SeriesOut = components["schemas"]["SeriesOut"];
 type ChapterOut = components["schemas"]["ChapterOut"];
 type TaskOut = components["schemas"]["TaskOut"];
 type DownloadTaskOut = components["schemas"]["DownloadTaskOut"];
+type CollectionOut = components["schemas"]["CollectionOut"];
 type LibraryOut = components["schemas"]["LibraryOut"];
 
 function apiError(status: number, code: string, message: string) {
@@ -446,6 +447,16 @@ export const handlers = [
     await delay(60);
     return new HttpResponse(null, { status: 204 });
   }),
+
+  http.get("/api/series/:series_id/chapter-availability", () =>
+    HttpResponse.json({
+      status: "ready",
+      language: "en",
+      availableLanguages: ["en"],
+      availableCount: 3,
+      totalCount: 3,
+    }),
+  ),
 
   // --- dashboard / updates / search ---------------------------------------
   http.get("/api/dashboard", async () => {
@@ -844,6 +855,11 @@ export const handlers = [
   http.post("/api/collections", async ({ request }) => {
     const body = (await request.json()) as components["schemas"]["CollectionCreate"];
     const created = {
+      owned: body.provider === "mangadex",
+      followed: false,
+      editable: true,
+      provider: body.provider,
+      visibility: body.provider ? body.visibility : null,
       id: `list-${slugify(body.name)}-${collectionsDb.length + 1}`,
       name: body.name,
       description: body.description ?? null,
@@ -861,9 +877,7 @@ export const handlers = [
     await delay(120);
     const series = collection.seriesIds.map(seriesById).filter((s): s is SeriesOut => Boolean(s));
     return HttpResponse.json({
-      id: collection.id,
-      name: collection.name,
-      description: collection.description,
+      ...collection,
       series,
     });
   }),
@@ -872,6 +886,9 @@ export const handlers = [
     const collection = collectionsDb.find((c) => c.id === params.collection_id);
     if (!collection) return apiError(404, "collection_not_found", "List not found.");
     const body = (await request.json()) as components["schemas"]["CollectionUpdate"];
+    if (collection.editable === false)
+      return apiError(403, "read_only", "This MangaDex list is read-only.");
+    if (body.visibility !== undefined) collection.visibility = body.visibility;
     if (body.name !== undefined && body.name !== null) collection.name = body.name;
     if (body.description !== undefined) collection.description = body.description;
     await delay(120);
@@ -890,6 +907,8 @@ export const handlers = [
     const collection = collectionsDb.find((c) => c.id === params.collection_id);
     if (!collection) return apiError(404, "collection_not_found", "List not found.");
     const body = (await request.json()) as components["schemas"]["CollectionSeriesAdd"];
+    if (collection.editable === false)
+      return apiError(403, "read_only", "This MangaDex list is read-only.");
     if (!collection.seriesIds.includes(body.seriesId)) collection.seriesIds.push(body.seriesId);
     collection.kind = kindFor(collection.seriesIds);
     await delay(100);
@@ -899,10 +918,114 @@ export const handlers = [
   http.delete("/api/collections/:collection_id/series/:series_id", async ({ params }) => {
     const collection = collectionsDb.find((c) => c.id === params.collection_id);
     if (!collection) return apiError(404, "collection_not_found", "List not found.");
+    if (collection.editable === false)
+      return apiError(403, "read_only", "This MangaDex list is read-only.");
     collection.seriesIds = collection.seriesIds.filter((id) => id !== params.series_id);
     collection.kind = kindFor(collection.seriesIds);
     await delay(100);
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post("/api/collections/mangadex/import", async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["ListImport"];
+    const remoteId = body.reference.startsWith("https://")
+      ? new URL(body.reference).pathname.split("/")[2]!
+      : body.reference;
+    const existing = collectionsDb.find((c) => c.providerListId === remoteId);
+    const imported: CollectionOut = existing ?? {
+      id: `mdlist-${collectionsDb.length}`,
+      name: "Imported MangaDex list",
+      provider: "mangadex",
+      providerListId: remoteId,
+      sourceUrl: `https://mangadex.org/list/${remoteId}`,
+      visibility: "public",
+      owned: false,
+      followed: false,
+      editable: false,
+      seriesIds: seriesCatalog.slice(0, 4).map((s) => s.id),
+      kind: "manga",
+      lastSyncedAt: new Date().toISOString(),
+    };
+    return HttpResponse.json(
+      simulateTask({
+        kind: "mdlist",
+        label: "Importing MangaDex list",
+        result: { collectionId: imported.id },
+        onDone: () => {
+          if (!existing) collectionsDb.push(imported);
+        },
+      }),
+      { status: 202 },
+    );
+  }),
+  http.post("/api/collections/mangadex/sync", () =>
+    HttpResponse.json(
+      simulateTask({
+        kind: "mdlist",
+        label: "Syncing MangaDex lists",
+        result: { lists: collectionsDb.filter((c) => c.provider === "mangadex").length },
+      }),
+      { status: 202 },
+    ),
+  ),
+  http.get("/api/collections/mangadex/users/:reference/lists", () =>
+    HttpResponse.json([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "Public MangaDex list",
+        visibility: "public",
+        mangaCount: 4,
+        sourceUrl: "https://mangadex.org/list/11111111-1111-4111-8111-111111111111",
+      },
+    ]),
+  ),
+  http.post("/api/collections/:collection_id/sync", ({ params }) => {
+    const list = collectionsDb.find((c) => c.id === params.collection_id);
+    if (!list) return apiError(404, "not_found", "List not found");
+    return HttpResponse.json(
+      simulateTask({
+        kind: "mdlist",
+        label: "Syncing list",
+        result: { collectionId: list.id },
+        onDone: () => {
+          list.lastSyncedAt = new Date().toISOString();
+        },
+      }),
+      { status: 202 },
+    );
+  }),
+  http.put("/api/collections/:collection_id/follow", async ({ params, request }) => {
+    const list = collectionsDb.find((c) => c.id === params.collection_id);
+    if (!list) return apiError(404, "not_found", "List not found");
+    if (list.owned) return apiError(400, "own_list", "This is your own list");
+    list.followed = ((await request.json()) as components["schemas"]["ListFollow"]).followed;
+    return HttpResponse.json(list);
+  }),
+  http.get("/api/collections/:collection_id/feed", ({ params, request }) => {
+    const list = collectionsDb.find((c) => c.id === params.collection_id);
+    if (!list) return apiError(404, "not_found", "List not found");
+    const query = new URL(request.url).searchParams;
+    const items = list.seriesIds
+      .map(seriesById)
+      .filter((s): s is SeriesOut => !!s)
+      .map((s, index) => ({
+        chapterId: `demo-chapter-${index}`,
+        mangaId: s.id,
+        mangaTitle: s.title,
+        seriesId: s.id,
+        number: String(index + 1),
+        language: query.get("language") ?? "en",
+        sourceUrl: `https://mangadex.org/title/${s.id}`,
+        uploadedAt: new Date().toISOString(),
+      }));
+    const page = Number(query.get("page") ?? 1),
+      pageSize = Number(query.get("pageSize") ?? 30);
+    return HttpResponse.json({
+      items: items.slice((page - 1) * pageSize, page * pageSize),
+      total: items.length,
+      page,
+      pageSize,
+    });
   }),
 
   // --- tasks / events -------------------------------------------------------

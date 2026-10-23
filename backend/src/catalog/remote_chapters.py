@@ -17,7 +17,7 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.downloads.models import DownloadTask
-from src.downloads.provider import RemoteChapter, get_provider
+from src.downloads.provider import ChapterIndexProvider, ChapterListing, RemoteChapter, get_provider
 from src.integrations.models import Provider as ProviderConfig
 
 logger = get_logger(__name__)
@@ -98,7 +98,9 @@ def upsert_provider_chapters(
     return len(remotes)
 
 
-def refresh_series_chapter_index(session: Session, series_id: str) -> int:
+def refresh_series_chapter_index(
+    session: Session, series_id: str, *, language: str | None = None
+) -> int:
     """Fetch the provider feed for a matched series and upsert the index. Returns count."""
     series = session.get(Series, series_id)
     if series is None:
@@ -109,16 +111,41 @@ def refresh_series_chapter_index(session: Session, series_id: str) -> int:
     if provider is None:
         raise BadRequestError(f"provider {series.provider!r} is not available")
     config = session.get(ProviderConfig, series.provider)
-    language = config.language if config else "en"
-    remotes = provider.list_chapters(series.provider_series_id, language=language)
-    return upsert_provider_chapters(session, series, remotes, provider=series.provider)
+    language = language or (config.language if config else "en")
+    if isinstance(provider, ChapterIndexProvider):
+        listing = provider.inspect_chapters(series.provider_series_id, language=language)
+    else:
+        remotes = provider.list_chapters(series.provider_series_id, language=language)
+        listing = ChapterListing(
+            remotes, status="ready" if remotes else "no_chapters", total_count=len(remotes)
+        )
+    if listing.status == "error":
+        raise BadRequestError("MangaDex returned inconsistent chapter information; retry the check")
+    series.chapter_index_language = language
+    series.chapter_availability_json = {
+        "status": listing.status,
+        "language": language,
+        "available_languages": listing.available_languages,
+        "available_count": len(listing.chapters),
+        "total_count": listing.total_count,
+        "checked_at": utc_now().isoformat(),
+    }
+    return upsert_provider_chapters(session, series, listing.chapters, provider=series.provider)
 
 
-def index_is_stale(session: Session, series_id: str) -> bool:
+def index_is_stale(session: Session, series_id: str, *, language: str | None = None) -> bool:
     """True when the series is matched and the chapter index is missing or past TTL."""
     series = session.get(Series, series_id)
     if series is None or not series.provider or not series.provider_series_id:
         return False
+    config = session.get(ProviderConfig, series.provider)
+    language = language or (config.language if config else "en")
+    if not series.chapter_availability_json or series.chapter_index_language != language:
+        return True
+    snapshot = series.chapter_availability_json
+    if snapshot.get("status") == "error":
+        checked = datetime.fromisoformat(str(snapshot["checked_at"]))
+        return datetime.now(UTC) - checked > timedelta(seconds=60)
     latest = series.chapter_index_at
     if latest is None:
         return True
@@ -127,19 +154,33 @@ def index_is_stale(session: Session, series_id: str) -> bool:
     return datetime.now(UTC) - latest > _INDEX_TTL
 
 
-def ensure_chapter_index(session: Session, series_id: str) -> None:
+def ensure_chapter_index(
+    session: Session, series_id: str, *, language: str | None = None, force: bool = False
+) -> None:
     """Refresh the remote chapter index when stale or missing (best-effort)."""
     series = session.get(Series, series_id)
     if series is None or not series.provider or not series.provider_series_id:
         return
-    if not index_is_stale(session, series_id):
+    if not force and not index_is_stale(session, series_id, language=language):
         return
     try:
-        _ = refresh_series_chapter_index(session, series_id)
+        _ = refresh_series_chapter_index(session, series_id, language=language)
         session.commit()
     except Exception as exc:  # noqa: BLE001 - listing must still return local chapters
         session.rollback()
         logger.warning("chapter_index_refresh_failed", series_id=series_id, error=str(exc))
+        series = session.get(Series, series_id)
+        if series is not None:
+            config = session.get(ProviderConfig, series.provider)
+            selected = language or (config.language if config else "en")
+            series.chapter_index_language = selected
+            series.chapter_availability_json = {
+                "status": "error",
+                "language": selected,
+                "checked_at": utc_now().isoformat(),
+                "message": "Could not check chapters on MangaDex. Retry the check.",
+            }
+            session.commit()
 
 
 def download_status_map(session: Session, series_id: str) -> dict[str, str]:

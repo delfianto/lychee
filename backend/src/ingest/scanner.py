@@ -108,7 +108,9 @@ def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
     found: list[Candidate] = []
 
     def visit(directory: Path) -> None:
-        entries = sorted(p for p in directory.iterdir() if not p.name.startswith("."))
+        entries = sorted(
+            p for p in directory.iterdir() if not p.name.startswith(".") and p.name != "temp"
+        )
         if any(
             e.is_file() and is_media_file(e.name) and not is_cover_file(e.name) for e in entries
         ):
@@ -171,7 +173,7 @@ def scan_library(
     seen: set[str] = set()
 
     gallery = _series_kind(library) == "gallery"
-    entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".")]
+    entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"]
     total_entries = max(len(entries), 1)
 
     for index, entry in enumerate(entries, start=1):
@@ -269,7 +271,7 @@ def _ingest_artist(
     """
     artist_name = artist_dir.name
     for child in sorted(artist_dir.iterdir()):
-        if child.name.startswith("."):
+        if child.name.startswith(".") or child.name == "temp":
             continue
         if child.is_dir() or (child.is_file() and _archive_kind(child.name)):
             _ingest_entry(

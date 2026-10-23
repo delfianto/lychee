@@ -64,7 +64,7 @@ def start_import(session: Session, data: ImportRequest, storage_root: Path) -> T
 async def _stage_uploads(files: list[UploadFile], storage_root: Path) -> Path:
     """Stream uploads into one fresh staging dir, enforcing the per-file size cap; clean
     up the whole dir on any error. Returns the staging dir."""
-    staged_dir = storage_root / "uploads" / uuid.uuid4().hex
+    staged_dir = storage_root / "imports" / "temp" / f"upload-{uuid.uuid4().hex}"
     staged_dir.mkdir(parents=True, exist_ok=True)
     try:
         for file in files:

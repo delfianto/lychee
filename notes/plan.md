@@ -625,7 +625,7 @@ subfolder/cbz below = its own gallery.
 > Decided 2026-07-25: a **two-way** sync with the MangaDex account. Local edits to a dex-linked series
 > **push to MangaDex the moment you make them** (per-action, like the AniList/MAL trackers); a re-runnable
 > **pull** brings MangaDex state down with **MangaDex as the source of truth**. Custom lists →
-> Collections (pull-only). Metadata + covers, **no page downloads** (download stays a triggered action).
+> Collections (owned lists now write through; followed/imported lists are read-only). Metadata + covers, **no page downloads** (download stays a triggered action).
 > Plus a **no-volume** chapter-grouping fix. A sync, not a client. New deps: none.
 >
 > **The rule that makes it robust:** push on the *action*, not at sync time — so MangaDex already has your
@@ -648,7 +648,7 @@ already labelled `volume=null` (just capitalised to "No Volume").
 | Reading status (shelf) | two-way | push on change; **MD-wins** on pull (replace) |
 | Read markers (progress) | two-way | push on chapter-read; pull marks read from MD (additive v1; downloaded series only) |
 | Metadata · tags · covers | pull only | **MD-wins** (mirror of a MD-sourced title) |
-| Custom lists → Collections | pull only (managed) | **MD-wins**; local edits to a *synced* list revert (two-way membership is a later opt-in) |
+| Custom lists → Collections | owned: write-through; followed/imported: read-only | Fetch current version/ownership before writes; failed writes preserve local state; sync reconciles a fresh snapshot |
 | Favorite · personal rating | local only | not synced |
 | Unfollow / removal on MD | — | **never delete** a series with downloaded chapters; just clear its shelf |
 
@@ -955,3 +955,29 @@ numbered volumes, and the FE has no label for `volume: null`.
   Demo data: `uv run python -m src.dev_seed`. Checks: `uv run ruff check . && uv run basedpyright && uv run pytest`.
 - Regen API client: `cd backend && uv run python scripts/dump_openapi.py` then `cd frontend && bun run api:gen`.
 - Frontend: `cd frontend && bun run dev` (proxies /api → :8000). `bun run typecheck`.
+
+
+# MDLists, chapter availability, and staging — implemented
+
+- Owned and followed MangaDex lists sync into Collections. Individual list URLs/UUIDs
+  can be imported; a user's public lists can be browsed. Local lists remain local.
+- Lists expose provider linkage, source URL, ownership, visibility, follow state,
+  editability, and last sync time. Owned lists support remote creation, rename,
+  visibility changes, membership writes, and explicitly confirmed remote deletion.
+  Removing a local copy is a separate action; it keeps the remote list and manga files.
+- Non-owned lists are read-only, with follow/unfollow controls. MDList feeds are
+  paginated, language-filtered, and independent of local downloads. Background tasks
+  report sync/import failures; a remote-write failure never applies the local edit.
+- Unnumbered readable MangaDex chapters are retained as Oneshot rows. Chapter checks
+  report ready, empty in every language, language mismatch, unavailable records,
+  external publisher links, or request failure. Checks are cached per selected
+  language; errors have a short cooldown and an explicit retry. The API cannot tell
+  us why a chapter was removed, so the UI does not claim a legal takedown.
+- Downloads and converted imports use a fixed per-library `temp/` workspace, excluded
+  from scans. Source pages and archive encoding stay there until a completed CBZ can
+  be published with an atomic rename. Upload staging is `imports/temp/upload-*`.
+- Fresh MangaDex downloads use title-based folders rather than the virtual MangaDex
+  UUID. Existing populated UUID download folders stay in place. Scanned local media
+  is never moved; converted imports retain their internal Lychee series/book keys.
+
+See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync details.

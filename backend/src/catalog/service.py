@@ -23,6 +23,7 @@ from src.catalog.remote_chapters import (
 )
 from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
 from src.catalog.schema import (
+    ChapterAvailabilityOut,
     ChapterDetailOut,
     ChapterOut,
     DashboardOut,
@@ -469,7 +470,7 @@ def list_chapters(
         raise NotFoundError(f"series {series_id!r} not found")
 
     # Best-effort: pull MangaDex feed when cache is empty/stale so first open works.
-    ensure_chapter_index(session, series_id)
+    ensure_chapter_index(session, series_id, language=language)
 
     ascending = order == "asc"
     rows = repo.list_chapters(session, series_id, language=language, descending=not ascending)
@@ -506,7 +507,7 @@ def list_chapters(
         covered_local_ids: set[str] = set()
         for remote in remote_rows:
             local = local_pid.get(remote.provider_chapter_id)
-            if local is None and remote.number is not None:
+            if local is None and remote.number is not None and remote.number != "Oneshot":
                 local = local_num.get((remote.number, remote.language))
             if local is not None:
                 covered_local_ids.add(local.id)
@@ -682,3 +683,27 @@ def library_summaries(session: Session) -> list[LibrarySummaryOut]:
     order = {"manga": 0, "comics": 1, "gallery": 2}
     summaries.sort(key=lambda s: order.get(s.key, 9))
     return summaries
+
+
+def chapter_availability(
+    session: Session, series_id: str, *, language: str | None = None, refresh: bool = False
+) -> ChapterAvailabilityOut:
+    series = session.get(Series, series_id)
+    if series is None:
+        raise NotFoundError("Series not found")
+    if refresh:
+        ensure_chapter_index(session, series_id, language=language, force=True)
+    snapshot = series.chapter_availability_json or {}
+    source = (
+        f"https://mangadex.org/title/{series.provider_series_id}"
+        if series.provider == "mangadex" and series.provider_series_id
+        else None
+    )
+    return ChapterAvailabilityOut.model_validate(
+        {
+            **snapshot,
+            "status": snapshot.get("status", "not_checked" if source else "local"),
+            "language": snapshot.get("language", language or "en"),
+            "source_url": source,
+        }
+    )

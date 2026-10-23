@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from src.catalog.media import materialize_series_cover
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Chapter, Library, Series
-from src.collections.models import Collection, CollectionSeries
+from src.collections.sync import apply_list, reconcile_account_flags
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
@@ -35,6 +35,7 @@ from src.progress.models import ReadingProgress
 from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import password_grant, refresh_grant
 from src.providers.mangadex_client import API_BASE, USER_AGENT
+from src.providers.mangadex_lists import LIST_LOCK
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -169,44 +170,18 @@ def _safe_metadata(provider: MangaDexProvider, md_id: str, language: str) -> Ser
         return None
 
 
-def _reconcile_membership(
-    session: Session, collection: Collection, ordered_series_ids: list[str]
-) -> None:
-    """Set a synced collection's members to exactly ``ordered_series_ids`` (MangaDex order)."""
-    want = set(ordered_series_ids)
-    have = {entry.series_id: entry for entry in collection.entries}
-    for series_id, entry in list(have.items()):
-        if series_id not in want:
-            collection.entries.remove(entry)  # delete-orphan drops the row
-    for position, series_id in enumerate(ordered_series_ids):
-        entry = have.get(series_id)
-        if entry is None:
-            collection.entries.append(CollectionSeries(series_id=series_id, position=position))
-        else:
-            entry.position = position
-
-
 def _sync_lists(session: Session, lists: list[CustomList], series_by_id: dict[str, Series]) -> int:
     """Mirror each MangaDex custom list into a managed Collection (get-or-create by list id;
     name + membership from MangaDex). Returns the number of lists synced."""
+    reconcile_account_flags(session, lists)
+    synced = 0
     for custom in lists:
-        collection = session.scalar(
-            select(Collection).where(
-                Collection.provider == _MANGADEX,
-                Collection.provider_list_id == custom.provider_list_id,
-            )
-        )
-        if collection is None:
-            collection = Collection(
-                name=custom.name, provider=_MANGADEX, provider_list_id=custom.provider_list_id
-            )
-            session.add(collection)
-            session.flush()
-        else:
-            collection.name = custom.name  # MangaDex wins on the name
-        ordered = [series_by_id[mid].id for mid in custom.manga_ids if mid in series_by_id]
-        _reconcile_membership(session, collection, ordered)
-    return len(lists)
+        if any(mid not in series_by_id for mid in custom.manga_ids):
+            logger.warning("mdlist_incomplete_metadata", list_id=custom.provider_list_id)
+            continue  # Keep the last complete membership if upstream metadata failed.
+        apply_list(session, custom, series_by_id)
+        synced += 1
+    return synced
 
 
 def _sync_ratings(
@@ -284,7 +259,12 @@ def _sync_work() -> Work:
         on_progress(5, "Fetching account")
         follows = provider.list_follows(language=config.language)
         statuses = provider.reading_status()
-        lists = provider.list_custom_lists()
+        lists = list(
+            {
+                item.provider_list_id: item
+                for item in [*provider.list_followed_lists(), *provider.list_custom_lists()]
+            }.values()
+        )
 
         # The synced set = follows ∪ manga with a reading status ∪ custom-list members.
         meta_by_id: dict[str, SeriesMetadata] = {m.provider_series_id: m for m in follows}
@@ -305,7 +285,25 @@ def _sync_work() -> Work:
             on_progress(round(index / total * 90), meta.title)
 
         on_progress(95, "Syncing lists")
-        synced_lists = _sync_lists(session, lists, series_by_id)
+        with LIST_LOCK:
+            # Refresh snapshots after the long metadata import so a concurrent
+            # user edit cannot be overwritten by membership fetched at startup.
+            lists = list(
+                {
+                    item.provider_list_id: item
+                    for item in [*provider.list_followed_lists(), *provider.list_custom_lists()]
+                }.values()
+            )
+            for custom in lists:
+                for mid in custom.manga_ids:
+                    if mid not in series_by_id:
+                        meta = _safe_metadata(provider, mid, config.language)
+                        if meta is not None:
+                            series_by_id[mid] = _upsert_series(
+                                session, library, meta, None, fetch_covers=config.fetch_covers
+                            )
+            synced_lists = _sync_lists(session, lists, series_by_id)
+            session.commit()
         on_progress(96, "Syncing ratings")
         rated = _sync_ratings(session, provider, series_by_id)
         on_progress(98, "Syncing read markers")

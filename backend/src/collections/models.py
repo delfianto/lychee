@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.persistence.base_model import Base, BaseModel
@@ -23,6 +24,17 @@ class Collection(BaseModel):
     # Provider linkage for synced lists (e.g. a MangaDex custom list); null = a local list.
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provider_list_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+
+    provider_owner_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    visibility: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    provider_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    owned: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    followed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     entries: Mapped[list[CollectionSeries]] = relationship(
         back_populates="collection",
