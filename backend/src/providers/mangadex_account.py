@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from pathlib import Path
 
 import httpx
 from sqlalchemy import func, select
@@ -23,7 +22,6 @@ from src.catalog.media import materialize_series_cover
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Chapter, Library, Series
 from src.collections.models import Collection, CollectionSeries
-from src.core.config import settings
 from src.core.crypto import decrypt, encrypt
 from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
@@ -31,6 +29,7 @@ from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.progress.models import ReadingProgress
 from src.providers.mangadex import MangaDexProvider
@@ -157,7 +156,7 @@ def _upsert_series(
     if fetch_covers and series.cover_source:
         # Eagerly materialize so library grids don't blank while first cover request
         # hits the CDN + AVIF encode on the request path.
-        store = ThumbnailStore(Path(settings.storage_path) / "thumbnails")
+        store = ThumbnailStore(thumbnail_root(session))
         _ = materialize_series_cover(session, store, series.id)
     return series
 

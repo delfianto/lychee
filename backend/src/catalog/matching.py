@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,11 +17,11 @@ from src.catalog.media import materialize_series_cover
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Series
 from src.catalog.schema import MangaMatchOut
-from src.core.config import settings
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.logging import get_logger
 from src.downloads.provider import MetadataProvider, get_metadata_provider
 from src.integrations.models import Provider as ProviderConfig
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
@@ -31,8 +30,8 @@ logger = get_logger(__name__)
 _DEFAULT_PROVIDER = "mangadex"
 
 
-def _thumb_store() -> ThumbnailStore:
-    return ThumbnailStore(Path(settings.storage_path) / "thumbnails")
+def _thumb_store(session: Session) -> ThumbnailStore:
+    return ThumbnailStore(thumbnail_root(session))
 
 
 def _refresh_work(series_id: str, provider_id: str, language: str, fetch_covers: bool) -> Work:
@@ -49,7 +48,7 @@ def _refresh_work(series_id: str, provider_id: str, language: str, fetch_covers:
         apply_metadata(session, series, meta, fetch_covers=fetch_covers)
         if fetch_covers:
             on_progress(85, "Warming cover")
-            _ = materialize_series_cover(session, _thumb_store(), series_id)
+            _ = materialize_series_cover(session, _thumb_store(session), series_id)
         # Pull the remote chapter index so series detail has chapters without a full download.
         try:
             from src.catalog.remote_chapters import refresh_series_chapter_index
@@ -150,7 +149,7 @@ def _auto_match_one(
     meta = provider.get_metadata(match.provider_series_id, language=language)
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
     if fetch_covers:
-        _ = materialize_series_cover(session, _thumb_store(), series.id)
+        _ = materialize_series_cover(session, _thumb_store(session), series.id)
     return True
 
 

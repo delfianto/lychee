@@ -25,6 +25,7 @@ from src.ingest.parser import PatternResult, parse_pattern
 from src.ingest.scanner import Candidate, order_chapters, resolve_books, sync_chapter
 from src.media.containers import open_container, write_cbz
 from src.media.encode_pool import encode_pages
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
 logger = get_logger(__name__)
@@ -213,7 +214,7 @@ def import_path(
         raise BadRequestError(f"import path not found: {source}")
     series_kind = kind if kind in _KINDS else "manga"
     library = imports_library(session, storage_root)
-    store = ThumbnailStore(storage_root / "thumbnails")
+    store = ThumbnailStore(thumbnail_root(session, storage_root))
 
     source_name, candidates = _resolve_source(source)
     # A pattern match on the first book can name the series (+ its year/credits); failing

@@ -148,6 +148,11 @@ function seed() {
         syncOnRead: false,
       },
     ] as Tracker[],
+    thumbnailStorage: {
+      path: null as string | null,
+      defaultPath: "/storage/thumbnails",
+      effectivePath: "/storage/thumbnails",
+    },
     libraries: [
       {
         id: "lib",
@@ -394,6 +399,14 @@ export function useAppApi() {
         if (method === "PATCH") Object.assign(item, body);
         if (method === "DELETE") item.connected = false;
         return done();
+      }
+      if (path === "/api/libraries/thumbnail-storage") {
+        if (method === "PUT") {
+          db.thumbnailStorage.path = body.path as string | null;
+          db.thumbnailStorage.effectivePath =
+            db.thumbnailStorage.path ?? db.thumbnailStorage.defaultPath;
+        }
+        return json(db.thumbnailStorage);
       }
       if (path === "/api/libraries") {
         if (method === "POST") {

@@ -16,6 +16,7 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.logging import get_logger
 from src.ingest.scanner import ScanSummary, scan_library
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
@@ -95,7 +96,7 @@ def _thumbs_work(library_id: str, storage_root: Path) -> Work:
 
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
         library = _get(session, library_id)
-        store = ThumbnailStore(storage_root / "thumbnails")
+        store = ThumbnailStore(thumbnail_root(session, storage_root))
         on_progress(0, "Starting")
         # Series covers first (fast), then item thumbs.
         _ = warm_library_covers(session, store, library.id)
@@ -128,7 +129,7 @@ def _finish_scan_phases(
         if on_progress is not None:
             on_progress(100, "Warming covers")
         try:
-            store = ThumbnailStore(storage_root / "thumbnails")
+            store = ThumbnailStore(thumbnail_root(session, storage_root))
             _ = warm_library_covers(session, store, library.id)
             session.commit()
         except Exception:  # noqa: BLE001

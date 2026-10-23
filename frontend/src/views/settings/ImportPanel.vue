@@ -24,6 +24,7 @@ import {
 } from "../../api/settingsQueries";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { toast } from "../../lib/toast";
+import ThumbnailStorageCard from "./ThumbnailStorageCard.vue";
 
 const config = reactive({ enabled: false, quality: 75, filenamePattern: "" });
 const presets = ref<{ name: string; pattern: string }[]>([]);
@@ -134,6 +135,7 @@ onMounted(async () => {
         <!-- Config -->
         <div class="card bg-base-100">
           <div class="card-body gap-4 p-4">
+            <ThumbnailStorageCard />
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
                 <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -159,7 +161,11 @@ onMounted(async () => {
                   <div class="text-xs text-base-content/50">AVIF quality for transcoded pages</div>
                 </div>
               </div>
-              <select v-model.number="config.quality" class="select select-bordered select-sm w-40">
+              <select
+                aria-label="Import image quality"
+                v-model.number="config.quality"
+                class="select select-bordered select-sm w-40"
+              >
                 <option v-for="t in qualityTiers" :key="t.value" :value="t.value">
                   {{ t.label }}
                 </option>
@@ -271,6 +277,7 @@ onMounted(async () => {
                 <label class="text-xs text-base-content/60">Kind</label>
                 <select
                   v-model="importForm.kind"
+                  aria-label="Import kind"
                   class="select select-bordered select-sm w-full sm:w-40"
                   :disabled="!config.enabled"
                 >

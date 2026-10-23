@@ -476,6 +476,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries/thumbnail-storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Thumbnail Storage */
+        get: operations["get_thumbnail_storage_api_libraries_thumbnail_storage_get"];
+        /** Update Thumbnail Storage */
+        put: operations["update_thumbnail_storage_api_libraries_thumbnail_storage_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/{library_id}": {
         parameters: {
             query?: never;
@@ -1860,6 +1878,20 @@ export interface components {
             /** Enabled */
             enabled?: boolean | null;
         };
+        /** ThumbnailStorageOut */
+        ThumbnailStorageOut: {
+            /** Path */
+            path: string | null;
+            /** Defaultpath */
+            defaultPath: string;
+            /** Effectivepath */
+            effectivePath: string;
+        };
+        /** ThumbnailStorageUpdate */
+        ThumbnailStorageUpdate: {
+            /** Path */
+            path: string | null;
+        };
         /**
          * TitleVariantIn
          * @description An additional title form (ADR 18) — language-tagged, e.g. native/romanized.
@@ -2788,6 +2820,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+        };
+    };
+    get_thumbnail_storage_api_libraries_thumbnail_storage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailStorageOut"];
+                };
+            };
+        };
+    };
+    update_thumbnail_storage_api_libraries_thumbnail_storage_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThumbnailStorageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThumbnailStorageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
