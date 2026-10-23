@@ -43,9 +43,17 @@ class Limiter:
 
 
 def parallel_map[T, R](
-    work: Callable[[T], R], items: Iterable[T], *, workers: int, ordered: bool = False
+    work: Callable[[T], R],
+    items: Iterable[T],
+    *,
+    workers: int,
+    ordered: bool = False,
+    limit: Limiter | None = None,
 ) -> Generator[R]:
     """Yield completed results, with at most ``workers`` jobs in flight.
+
+    ``workers`` bounds executor capacity; an optional live limiter controls the
+    submission window and is rechecked while existing work is blocked.
 
     Copy the operation context into workers. On cancellation/error, stop submission,
     cancel pending futures and join running work before the owner's workspace exits.
@@ -53,6 +61,7 @@ def parallel_map[T, R](
     source = iter(items)
     pool = ThreadPoolExecutor(max_workers=max(1, workers), thread_name_prefix="lychee-io")
     pending = []
+    exhausted = False
     try:
 
         def submit_one() -> bool:
@@ -64,17 +73,18 @@ def parallel_map[T, R](
             pending.append(pool.submit(copy_context().run, work, item))
             return True
 
-        for _ in range(max(1, workers)):
-            if not submit_one():
-                break
-        while pending:
+        while True:
             checkpoint()
+            target = min(max(1, workers), max(1, limit.count)) if limit else max(1, workers)
+            while not exhausted and len(pending) < target:
+                exhausted = not submit_one()
+            if not pending:
+                break
             targets = pending[:1] if ordered else pending
             done, _ = wait(targets, timeout=0.1, return_when=FIRST_COMPLETED)
             for future in done:
                 pending.remove(future)
                 yield future.result()
-                submit_one()
     finally:
         for future in pending:
             future.cancel()
