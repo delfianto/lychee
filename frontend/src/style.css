@@ -491,6 +491,49 @@
   }
 }
 
+/* Size-query units resolve fit modes against the actual reading viewport.
+   Content can grow past either axis without a centered negative overflow edge. */
+.reader-viewport {
+  container-type: size;
+}
+.reader-spread,
+.reader-strip {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  align-items: center;
+}
+.reader-spread {
+  justify-content: center;
+  gap: 4px;
+}
+.reader-strip {
+  flex-direction: column;
+}
+.reader-page {
+  display: block;
+  flex: none;
+  max-width: none;
+}
+.reader-fit-width {
+  width: calc((100cqw - (var(--reader-columns) - 1) * 4px) / var(--reader-columns));
+  height: auto;
+}
+.reader-fit-height {
+  width: auto;
+  height: 100cqh;
+}
+.reader-fit-both {
+  width: calc((100cqw - (var(--reader-columns) - 1) * 4px) / var(--reader-columns));
+  height: 100cqh;
+  object-fit: contain;
+}
+.reader-fit-original {
+  width: auto;
+  height: auto;
+}
+
 /* Reader "sepia" reading tone — a deliberate comfort color, defined once here
    rather than as scattered arbitrary utilities in markup. */
 .reader-sepia {
