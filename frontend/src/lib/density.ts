@@ -90,3 +90,32 @@ export function toggleRecentlyAddedKind(kind: RecentlyAddedKind): void {
 export function useRecentlyAddedKinds() {
   return { recentlyAddedKinds, toggleRecentlyAddedKind };
 }
+
+export interface MainBarIcons {
+  comics: boolean;
+  gallery: boolean;
+}
+const MAIN_BAR_KEY = "lychee.mainBarIcons";
+const defaultMainBarIcons: MainBarIcons = { comics: true, gallery: true };
+
+function toMainBarIcons(raw: string | null): MainBarIcons {
+  if (!raw) return { ...defaultMainBarIcons };
+  try {
+    const parsed = JSON.parse(raw) as Partial<MainBarIcons>;
+    return {
+      comics: typeof parsed.comics === "boolean" ? parsed.comics : true,
+      gallery: typeof parsed.gallery === "boolean" ? parsed.gallery : true,
+    };
+  } catch {
+    return { ...defaultMainBarIcons };
+  }
+}
+
+const mainBarIcons = ref<MainBarIcons>(toMainBarIcons(localStorage.getItem(MAIN_BAR_KEY)));
+watch(mainBarIcons, (val) => localStorage.setItem(MAIN_BAR_KEY, JSON.stringify(val)), {
+  deep: true,
+});
+
+export function useMainBarIcons() {
+  return { mainBarIcons };
+}

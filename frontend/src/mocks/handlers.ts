@@ -861,6 +861,21 @@ export const handlers = [
 
   http.post("/api/sync", async () => {
     syncState.syncing = true;
+    const sample = seriesCatalog.find((s) => s.provider === "mangadex");
+    const jobId = `sync-job-${Date.now()}`;
+    syncState.jobs = [
+      {
+        id: jobId,
+        kind: "sync",
+        title: sample?.title ?? "Matched Series",
+        source: "MangaDex",
+        status: "running",
+        progress: 40,
+        detail: `Pulling chapters for ${sample?.title ?? "Matched Series"} from MangaDex`,
+        error: null,
+      },
+      ...(syncState.jobs ?? []),
+    ];
     const task = simulateTask({
       kind: "sync",
       label: "Checking matched series for new chapters",
@@ -868,8 +883,15 @@ export const handlers = [
       onDone: (t) => {
         syncState.syncing = false;
         syncState.lastSync = nowIso();
-        syncState.newChapters =
+        const found =
           (t.result?.newChapters as number | undefined) ?? randInt(rngFor(nowIso()), 0, 12);
+        syncState.newChapters = found;
+        const job = syncState.jobs?.find((j) => j.id === jobId);
+        if (job && job.status === "running") {
+          job.status = "done";
+          job.progress = 100;
+          job.detail = `Pulled from MangaDex · ${found} new chapter(s)`;
+        }
       },
       result: { newChapters: randInt(rngFor("sync" + nowIso()), 0, 12) },
     });
