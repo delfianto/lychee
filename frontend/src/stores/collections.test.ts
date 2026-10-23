@@ -1,6 +1,6 @@
 import { flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { useCollections } from "./collections";
 
@@ -46,7 +46,10 @@ describe("useCollections", () => {
     expect(store.hasSeries("l1", "s1")).toBe(true); // optimistic add reflected synchronously
     expect(api.POST).toHaveBeenCalledWith(
       "/api/collections/{collection_id}/series",
-      expect.objectContaining({ params: { path: { collection_id: "l1" } }, body: { seriesId: "s1" } }),
+      expect.objectContaining({
+        params: { path: { collection_id: "l1" } },
+        body: { seriesId: "s1" },
+      }),
     );
 
     await store.toggleSeries("l1", "s1");
@@ -85,5 +88,59 @@ describe("useCollections", () => {
       "/api/collections/{collection_id}/series/{series_id}",
       expect.objectContaining({ params: { path: { collection_id: "l1", series_id: "s1" } } }),
     );
+  });
+});
+
+describe("collection management", () => {
+  it("creates trimmed names, supplies a fallback, and handles an empty response", async () => {
+    const { api } = await import("../api/client");
+    const store = useCollections();
+    await flushPromises();
+    vi.mocked(api.POST).mockResolvedValueOnce({
+      data: apiCollection("new"),
+      error: undefined,
+      response: { status: 201 },
+    } as Awaited<ReturnType<typeof api.POST>>);
+    expect(await store.createList("  Weekend  ")).toMatchObject({
+      id: "new",
+      description: undefined,
+      kind: undefined,
+    });
+    expect(api.POST).toHaveBeenLastCalledWith("/api/collections", { body: { name: "Weekend" } });
+    expect(store.getList("new")?.id).toBe("new");
+    expect(await store.createList("  ")).toBeUndefined();
+    expect(api.POST).toHaveBeenLastCalledWith("/api/collections", {
+      body: { name: "Untitled list" },
+    });
+    expect(store.lists).toHaveLength(1);
+  });
+
+  it("renames known lists, ignores blank names, deletes, and refreshes", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.GET).mockResolvedValueOnce({
+      data: [apiCollection("l1")],
+      error: undefined,
+      response: { status: 200 },
+    } as Awaited<ReturnType<typeof api.GET>>);
+    const store = useCollections();
+    await flushPromises();
+    await store.renameList("unknown", "New");
+    await store.renameList("l1", " ");
+    expect(api.PATCH).not.toHaveBeenCalled();
+    await store.renameList("l1", "  New name  ");
+    expect(store.getList("l1")?.name).toBe("New name");
+    expect(api.PATCH).toHaveBeenCalledWith("/api/collections/{collection_id}", {
+      params: { path: { collection_id: "l1" } },
+      body: { name: "New name" },
+    });
+    await store.deleteList("l1");
+    expect(store.getList("l1")).toBeUndefined();
+    expect(api.DELETE).toHaveBeenCalledWith("/api/collections/{collection_id}", {
+      params: { path: { collection_id: "l1" } },
+    });
+    await store.removeSeries("unknown", "s1");
+    expect(api.DELETE).toHaveBeenCalledTimes(1);
+    await store.refresh();
+    expect(store.lists).toEqual([]);
   });
 });

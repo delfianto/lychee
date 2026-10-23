@@ -1,12 +1,17 @@
 <script setup lang="ts">
 // Settings → Libraries: the registered library roots + manual scan triggers.
 // Owns the scan SSE handler (a background scan refreshes the list on done).
-import { Library, Plus, RefreshCw } from "lucide-vue-next";
+import { Library, Plus, RefreshCw } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { activeTasks, onTaskDone } from "../../api/events";
 import { relativeTime } from "../../api/format";
-import { deleteLibrary, fetchLibraryRows, scanAllLibraries, scanLibrary } from "../../api/settingsQueries";
+import {
+  deleteLibrary,
+  fetchLibraryRows,
+  scanAllLibraries,
+  scanLibrary,
+} from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 import AddLibraryModal from "./AddLibraryModal.vue";
 
@@ -82,7 +87,9 @@ onMounted(loadLibraries);
         <button class="btn btn-ghost btn-sm gap-1" :disabled="scanning" @click="scanAll">
           <RefreshCw :class="['size-4', scanning && 'animate-spin']" />Scan all
         </button>
-        <button class="btn btn-primary btn-sm gap-1" @click="showAdd = true"><Plus class="size-4" />Add library</button>
+        <button class="btn btn-primary btn-sm gap-1" @click="showAdd = true">
+          <Plus class="size-4" />Add library
+        </button>
       </div>
     </div>
     <div class="grid gap-4 lg:grid-cols-2">
@@ -92,10 +99,16 @@ onMounted(loadLibraries);
           <div class="min-w-0 grow">
             <div class="font-medium">{{ lib.name }}</div>
             <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
-            <div class="text-xs text-base-content/50">{{ lib.series }} series · scanned {{ lib.lastScan }}</div>
+            <div class="text-xs text-base-content/50">
+              {{ lib.series }} series · scanned {{ lib.lastScan }}
+            </div>
           </div>
-          <button class="btn btn-ghost btn-sm" :disabled="scanning" @click="scanOne(lib.id)">Scan</button>
-          <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">Remove</button>
+          <button class="btn btn-ghost btn-sm" :disabled="scanning" @click="scanOne(lib.id)">
+            Scan
+          </button>
+          <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">
+            Remove
+          </button>
         </div>
       </div>
     </div>

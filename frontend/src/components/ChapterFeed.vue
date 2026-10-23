@@ -34,7 +34,11 @@ withDefaults(
         <span class="shrink-0 text-xs text-base-content/70">
           <template v-if="u.volume !== null">Vol. {{ u.volume }} · </template>Ch. {{ u.chapter }}
         </span>
-        <span v-if="newBadge && u.series.unreadCount > 0" class="badge badge-primary badge-xs shrink-0">new</span>
+        <span
+          v-if="newBadge && u.series.unreadCount > 0"
+          class="badge badge-primary badge-xs shrink-0"
+          >new</span
+        >
       </div>
       <span class="shrink-0 text-xs text-base-content/50">{{ u.updatedAt }}</span>
     </RouterLink>

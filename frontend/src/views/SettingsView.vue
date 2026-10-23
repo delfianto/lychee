@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Settings shell: the section rail + the active tab. Each tab's concerns live in
 // its own panel under views/settings/ (each owns its state, loads, and SSE wiring).
-import { Download, Info, Library, SlidersHorizontal, Tag } from "lucide-vue-next";
+import { Download, Info, Library, SlidersHorizontal, Tag } from "@lucide/vue";
 import { type Component, ref } from "vue";
 
 import AboutPanel from "./settings/AboutPanel.vue";
@@ -29,12 +29,18 @@ const active = ref("general");
 
     <div class="flex max-w-7xl flex-col gap-6 lg:flex-row lg:gap-8">
       <!-- Section rail -->
-      <nav class="flex gap-1 overflow-x-auto pb-1 lg:w-52 lg:shrink-0 lg:flex-col lg:overflow-visible lg:pb-0">
+      <nav
+        class="flex gap-1 overflow-x-auto pb-1 lg:w-52 lg:shrink-0 lg:flex-col lg:overflow-visible lg:pb-0"
+      >
         <button
           v-for="s in sections"
           :key="s.key"
           class="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm transition"
-          :class="active === s.key ? 'bg-primary text-primary-content' : 'text-base-content/80 hover:bg-base-100'"
+          :class="
+            active === s.key
+              ? 'bg-primary text-primary-content'
+              : 'text-base-content/80 hover:bg-base-100'
+          "
           @click="active = s.key"
         >
           <component :is="s.icon" class="size-4 shrink-0" />{{ s.label }}

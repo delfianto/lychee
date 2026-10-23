@@ -2,7 +2,7 @@
 // Settings → Accounts: connect/disconnect the MangaDex account (with "Sync") and the
 // reading trackers (AniList, MyAnimeList, MangaUpdates), each via a popup.
 // Trackers with no public API (NovelUpdates) are hidden.
-import { Link2, RefreshCw } from "lucide-vue-next";
+import { Link2, RefreshCw } from "@lucide/vue";
 import { onMounted, onUnmounted, ref } from "vue";
 
 import { onTaskDone } from "../../api/events";
@@ -38,15 +38,25 @@ async function load(): Promise<void> {
   const md = providers.find((p) => p.id === "mangadex");
   if (md) {
     rows.push({
-      id: md.id, name: md.name, kind: "provider",
-      connected: md.connected, accountName: md.accountName ?? "", syncOnRead: false, authKind: "",
+      id: md.id,
+      name: md.name,
+      kind: "provider",
+      connected: md.connected,
+      accountName: md.accountName ?? "",
+      syncOnRead: false,
+      authKind: "",
     });
   }
   for (const t of trackers) {
     if (t.authKind === "unsupported") continue; // hide trackers with no public API (NovelUpdates)
     rows.push({
-      id: t.id, name: t.name, kind: "tracker",
-      connected: t.connected, accountName: t.accountName ?? "", syncOnRead: t.syncOnRead, authKind: t.authKind,
+      id: t.id,
+      name: t.name,
+      kind: "tracker",
+      connected: t.connected,
+      accountName: t.accountName ?? "",
+      syncOnRead: t.syncOnRead,
+      authKind: t.authKind,
     });
   }
   accounts.value = rows;
@@ -95,25 +105,53 @@ onMounted(load);
     <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Accounts</h3>
     <div class="card grow bg-base-100">
       <div class="card-body gap-4 p-4">
-        <div v-for="a in accounts" :key="a.id" class="flex flex-wrap items-center justify-between gap-4">
+        <div
+          v-for="a in accounts"
+          :key="a.id"
+          class="flex flex-wrap items-center justify-between gap-4"
+        >
           <div class="flex items-start gap-3">
             <Link2 class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">{{ a.name }}</div>
               <div class="text-xs" :class="a.connected ? 'text-success' : 'text-base-content/50'">
-                {{ a.connected ? (a.accountName ? `Connected as ${a.accountName}` : "Connected") : "Not connected" }}
+                {{
+                  a.connected
+                    ? a.accountName
+                      ? `Connected as ${a.accountName}`
+                      : "Connected"
+                    : "Not connected"
+                }}
               </div>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <label v-if="a.connected && a.kind === 'tracker'" class="flex items-center gap-2 text-xs text-base-content/60">
+            <label
+              v-if="a.connected && a.kind === 'tracker'"
+              class="flex items-center gap-2 text-xs text-base-content/60"
+            >
               Sync on read
-              <input v-model="a.syncOnRead" type="checkbox" class="toggle toggle-primary toggle-sm" @change="setSyncOnRead(a)" />
+              <input
+                v-model="a.syncOnRead"
+                type="checkbox"
+                class="toggle toggle-primary toggle-sm"
+                @change="setSyncOnRead(a)"
+              />
             </label>
-            <button v-if="a.connected && a.kind === 'provider'" class="btn btn-primary btn-sm gap-1" @click="syncAccount(a)">
+            <button
+              v-if="a.connected && a.kind === 'provider'"
+              class="btn btn-primary btn-sm gap-1"
+              @click="syncAccount(a)"
+            >
               <RefreshCw class="size-4" />Sync
             </button>
-            <button v-if="a.connected" class="btn btn-ghost btn-sm text-error" @click="disconnect(a)">Disconnect</button>
+            <button
+              v-if="a.connected"
+              class="btn btn-ghost btn-sm text-error"
+              @click="disconnect(a)"
+            >
+              Disconnect
+            </button>
             <button v-else class="btn btn-primary btn-sm" @click="connect(a)">Connect</button>
           </div>
         </div>

@@ -57,7 +57,11 @@ export const fsTree = new Map<string, FsEntry[]>([
     "/data/manga",
     [
       { name: "Nightfall Requiem", path: "/data/manga/Nightfall Requiem", kind: "dir" },
-      { name: "Wraith of the Nine Tails", path: "/data/manga/Wraith of the Nine Tails", kind: "dir" },
+      {
+        name: "Wraith of the Nine Tails",
+        path: "/data/manga/Wraith of the Nine Tails",
+        kind: "dir",
+      },
       { name: "Bloodmoon Apothecary", path: "/data/manga/Bloodmoon Apothecary", kind: "dir" },
     ],
   ],

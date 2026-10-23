@@ -2,7 +2,7 @@
 // Full-screen gallery viewer: stills/GIFs as <img>, progressive MP4 via Plyr
 // (polished controls). Prev/next, Esc, counter. Honors Settings → Reader video
 // (auto play / auto next). Plyr is destroyed on index change.
-import { ChevronLeft, ChevronRight, X } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight, X } from "@lucide/vue";
 import Plyr from "plyr";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
@@ -135,11 +135,7 @@ onBeforeUnmount(() => {
       :alt="`Item ${index + 1} of ${items.length}`"
       class="max-h-[90vh] max-w-[90vw] rounded object-contain shadow-2xl"
     />
-    <div
-      v-else
-      class="lychee-plyr w-full max-w-[min(90vw,56rem)]"
-      @click.stop
-    >
+    <div v-else class="lychee-plyr w-full max-w-[min(90vw,56rem)]" @click.stop>
       <video
         :key="`${index}-${current()?.url}`"
         ref="videoEl"

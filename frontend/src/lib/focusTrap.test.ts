@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { useFocusTrap } from "./focusTrap";
 
@@ -51,7 +51,9 @@ describe("useFocusTrap", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     expect(document.activeElement).toBe(first); // wrapped forward
 
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }),
+    );
     expect(document.activeElement).toBe(second); // wrapped backward
 
     wrapper.unmount();

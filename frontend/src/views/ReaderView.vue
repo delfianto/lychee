@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Settings, X } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight, Settings, X } from "@lucide/vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -39,14 +39,19 @@ async function load(id: string): Promise<void> {
   const detail = await fetchChapterDetail(id);
   if (!staleGuard.isCurrent(token)) return;
   seriesId.value = detail.seriesId;
-  chapterLabel.value = detail.title ? `Ch. ${detail.number} · ${detail.title}` : `Ch. ${detail.number}`;
+  chapterLabel.value = detail.title
+    ? `Ch. ${detail.number} · ${detail.title}`
+    : `Ch. ${detail.number}`;
   pages.value = Array.from(
     { length: detail.pageCount },
     (_, i) => `/api/chapters/${id}/pages/${i + 1}`,
   );
   currentPage.value = 1;
   showEnd.value = false;
-  const [s, vols] = await Promise.all([fetchSeries(detail.seriesId), fetchChapters(detail.seriesId)]);
+  const [s, vols] = await Promise.all([
+    fetchSeries(detail.seriesId),
+    fetchChapters(detail.seriesId),
+  ]);
   if (!staleGuard.isCurrent(token)) return;
   seriesTitle.value = s.title;
   // Reader only navigates local (downloaded) chapters.
@@ -169,9 +174,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         <img v-for="(p, i) in pages" :key="i" :src="p" :alt="`Page ${i + 1}`" class="w-full" />
       </div>
     </div>
-    <div v-else class="flex h-full items-center justify-center overflow-auto" @click="controls = !controls">
+    <div
+      v-else
+      class="flex h-full items-center justify-center overflow-auto"
+      @click="controls = !controls"
+    >
       <div class="flex items-center gap-1">
-        <img :src="pages[currentPage - 1]" :alt="`Page ${currentPage}`" class="mx-auto" :class="fitClass" />
+        <img
+          :src="pages[currentPage - 1]"
+          :alt="`Page ${currentPage}`"
+          class="mx-auto"
+          :class="fitClass"
+        />
         <img
           v-if="settings.mode === 'double' && currentPage < pages.length"
           :src="pages[currentPage]"
@@ -218,7 +232,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         >
           <option v-for="c in chapterOptions" :key="c.id" :value="c.id">{{ c.label }}</option>
         </select>
-        <button class="btn btn-circle btn-ghost btn-sm" aria-label="Settings" @click="settingsOpen = !settingsOpen">
+        <button
+          class="btn btn-circle btn-ghost btn-sm"
+          aria-label="Settings"
+          @click="settingsOpen = !settingsOpen"
+        >
           <Settings class="size-5" />
         </button>
       </div>
@@ -229,7 +247,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       v-show="controls && settings.mode !== 'longstrip'"
       class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-base-100/80 px-4 py-2 backdrop-blur"
     >
-      <button class="btn btn-ghost btn-sm gap-1" @click="prev"><ChevronLeft class="size-4" />Prev</button>
+      <button class="btn btn-ghost btn-sm gap-1" @click="prev">
+        <ChevronLeft class="size-4" />Prev
+      </button>
       <input
         v-model.number="currentPage"
         type="range"
@@ -239,7 +259,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         aria-label="Page"
       />
       <span class="w-14 shrink-0 text-center text-xs">{{ currentPage }} / {{ pages.length }}</span>
-      <button class="btn btn-ghost btn-sm gap-1" @click="next">Next<ChevronRight class="size-4" /></button>
+      <button class="btn btn-ghost btn-sm gap-1" @click="next">
+        Next<ChevronRight class="size-4" />
+      </button>
     </footer>
 
     <!-- Settings panel -->
@@ -249,7 +271,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     >
       <div class="flex items-center justify-between">
         <h3 class="font-semibold">Reader settings</h3>
-        <button class="btn btn-circle btn-ghost btn-sm" aria-label="Close" @click="settingsOpen = false">
+        <button
+          class="btn btn-circle btn-ghost btn-sm"
+          aria-label="Close"
+          @click="settingsOpen = false"
+        >
           <X class="size-5" />
         </button>
       </div>
@@ -261,7 +287,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Direction</div>
-        <SegmentedToggle v-model="settings.direction" :options="directions" aria-label="Direction" block />
+        <SegmentedToggle
+          v-model="settings.direction"
+          :options="directions"
+          aria-label="Direction"
+          block
+        />
       </div>
 
       <div>
@@ -271,14 +302,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
       <div>
         <div class="mb-1 text-xs text-base-content/60">Background</div>
-        <SegmentedToggle v-model="settings.background" :options="backgrounds" aria-label="Background" block />
+        <SegmentedToggle
+          v-model="settings.background"
+          :options="backgrounds"
+          aria-label="Background"
+          block
+        />
       </div>
 
       <p class="mt-auto text-xs text-base-content/50">Tip: ← / → turn pages, Esc exits.</p>
     </aside>
 
     <!-- End of chapter -->
-    <div v-show="showEnd" class="absolute inset-0 z-30 flex items-center justify-center bg-base-300/90">
+    <div
+      v-show="showEnd"
+      class="absolute inset-0 z-30 flex items-center justify-center bg-base-300/90"
+    >
       <div class="card w-80 bg-base-100 shadow-xl">
         <div class="card-body items-center gap-3 text-center">
           <h3 class="card-title">End of chapter</h3>
@@ -289,7 +328,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             <button v-if="nextChapterId" class="btn btn-primary btn-sm" @click="nextChapter">
               Next chapter
             </button>
-            <button class="btn btn-ghost btn-sm" @click="goToChapter(undefined)">Back to series</button>
+            <button class="btn btn-ghost btn-sm" @click="goToChapter(undefined)">
+              Back to series
+            </button>
           </div>
         </div>
       </div>

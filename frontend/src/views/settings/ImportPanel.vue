@@ -3,7 +3,16 @@
 // transcoding their pages to AVIF — the enable toggle, page quality, and the
 // filename→metadata token pattern — plus the import action itself. Config persists
 // on change (watch → PATCH); imports run on the queue and report via SSE.
-import { Bookmark, FileText, FolderInput, Gauge, HardDriveDownload, Save, Upload, X } from "lucide-vue-next";
+import {
+  Bookmark,
+  FileText,
+  FolderInput,
+  Gauge,
+  HardDriveDownload,
+  Save,
+  Upload,
+  X,
+} from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import { activeTasks, onTaskDone } from "../../api/events";
@@ -113,10 +122,13 @@ onMounted(async () => {
 <template>
   <div class="flex flex-col gap-6">
     <section class="flex flex-col gap-3">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Local import</h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+        Local import
+      </h3>
       <p class="max-w-2xl text-xs text-base-content/50">
-        Import comic/manga containers (CBZ/ZIP) or image folders from the server's disk and transcode
-        their pages to AVIF. Configure it on the left, then import from a path or upload files.
+        Import comic/manga containers (CBZ/ZIP) or image folders from the server's disk and
+        transcode their pages to AVIF. Configure it on the left, then import from a path or upload
+        files.
       </p>
       <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
         <!-- Config -->
@@ -127,10 +139,16 @@ onMounted(async () => {
                 <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <div class="text-sm font-medium">Enable local import</div>
-                  <div class="text-xs text-base-content/50">Allow importing &amp; transcoding local files</div>
+                  <div class="text-xs text-base-content/50">
+                    Allow importing &amp; transcoding local files
+                  </div>
                 </div>
               </div>
-              <input v-model="config.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
+              <input
+                v-model="config.enabled"
+                type="checkbox"
+                class="toggle toggle-primary toggle-sm"
+              />
             </div>
 
             <label class="flex items-center justify-between gap-4">
@@ -142,7 +160,9 @@ onMounted(async () => {
                 </div>
               </div>
               <select v-model.number="config.quality" class="select select-bordered select-sm w-40">
-                <option v-for="t in qualityTiers" :key="t.value" :value="t.value">{{ t.label }}</option>
+                <option v-for="t in qualityTiers" :key="t.value" :value="t.value">
+                  {{ t.label }}
+                </option>
               </select>
             </label>
 
@@ -163,12 +183,17 @@ onMounted(async () => {
               />
               <p class="text-xs leading-relaxed text-base-content/40">
                 Tokens:
-                <code class="text-primary/70">{series}</code> <code class="text-primary/70">{title}</code>
-                <code class="text-primary/70">{volume}</code> <code class="text-primary/70">{chapter}</code>
-                <code class="text-primary/70">{author}</code> <code class="text-primary/70">{artist}</code>
-                <code class="text-primary/70">{group}</code> <code class="text-primary/70">{year}</code>
-                <code class="text-primary/70">{language}</code> <code class="text-primary/70">{tags}</code>
-                · <code class="text-primary/70">*</code> ignores a segment
+                <code class="text-primary/70">{series}</code>
+                <code class="text-primary/70">{title}</code>
+                <code class="text-primary/70">{volume}</code>
+                <code class="text-primary/70">{chapter}</code>
+                <code class="text-primary/70">{author}</code>
+                <code class="text-primary/70">{artist}</code>
+                <code class="text-primary/70">{group}</code>
+                <code class="text-primary/70">{year}</code>
+                <code class="text-primary/70">{language}</code>
+                <code class="text-primary/70">{tags}</code> ·
+                <code class="text-primary/70">*</code> ignores a segment
               </p>
               <!-- Saved pattern presets (reusable, stored server-side with the config) -->
               <div class="mt-1 flex flex-col gap-1.5 border-t border-base-content/10 pt-3">
@@ -184,9 +209,15 @@ onMounted(async () => {
                     <button class="min-w-0 flex-1 text-left" @click="applyPreset(p)">
                       <div class="flex items-center gap-2">
                         <span class="truncate text-sm font-medium">{{ p.name }}</span>
-                        <span v-if="config.filenamePattern === p.pattern" class="badge badge-primary badge-xs">active</span>
+                        <span
+                          v-if="config.filenamePattern === p.pattern"
+                          class="badge badge-primary badge-xs"
+                          >active</span
+                        >
                       </div>
-                      <div class="truncate font-mono text-xs text-base-content/50">{{ p.pattern }}</div>
+                      <div class="truncate font-mono text-xs text-base-content/50">
+                        {{ p.pattern }}
+                      </div>
                     </button>
                     <button
                       class="btn btn-ghost btn-xs btn-circle text-base-content/40 opacity-0 transition hover:text-error group-hover:opacity-100"
@@ -197,7 +228,9 @@ onMounted(async () => {
                     </button>
                   </div>
                 </div>
-                <p v-else class="text-xs text-base-content/40">No presets yet — name the pattern above to reuse it.</p>
+                <p v-else class="text-xs text-base-content/40">
+                  No presets yet — name the pattern above to reuse it.
+                </p>
                 <div class="mt-0.5 flex gap-2">
                   <input
                     v-model="presetName"
@@ -227,7 +260,8 @@ onMounted(async () => {
               <div class="min-w-0">
                 <div class="text-sm font-medium">Import from a path</div>
                 <div class="text-xs text-base-content/50">
-                  A container file (.cbz/.zip) or a folder on the server — browse storage or type a path.
+                  A container file (.cbz/.zip) or a folder on the server — browse storage or type a
+                  path.
                 </div>
               </div>
             </div>
@@ -291,7 +325,9 @@ onMounted(async () => {
               />
             </div>
 
-            <p v-if="!config.enabled" class="text-xs text-warning/80">Enable local import to use this.</p>
+            <p v-if="!config.enabled" class="text-xs text-warning/80">
+              Enable local import to use this.
+            </p>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Heart, Star } from "lucide-vue-next";
+import { Heart, Star } from "@lucide/vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -24,7 +24,9 @@ const blurb = computed(() => synopsisOnly(props.series.description));
     :to="series.kind === 'gallery' ? `/gallery/${series.id}` : `/series/${series.id}`"
     class="group block"
   >
-    <article class="flex gap-3 rounded-box surface-border bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4">
+    <article
+      class="flex gap-3 rounded-box surface-border bg-base-100 p-3 shadow-sm transition hover:shadow-md sm:gap-4"
+    >
       <CoverImage
         :src="series.coverUrl"
         :alt="series.title"
@@ -39,7 +41,10 @@ const blurb = computed(() => synopsisOnly(props.series.description));
             class="flex min-w-0 items-center gap-1.5 font-semibold leading-tight"
             :class="compact ? 'text-sm' : 'text-base'"
           >
-            <CountryFlag v-if="series.originCountry && series.kind !== 'gallery'" :cc="series.originCountry" />
+            <CountryFlag
+              v-if="series.originCountry && series.kind !== 'gallery'"
+              :cc="series.originCountry"
+            />
             <span class="truncate group-hover:text-primary">{{ series.title }}</span>
           </h3>
           <div class="flex shrink-0 items-center gap-2">
@@ -57,7 +62,10 @@ const blurb = computed(() => synopsisOnly(props.series.description));
               :title="statusLabel[series.status]"
             ></span>
             <div class="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-              <AddToListMenu :series-id="series.id" trigger-class="btn btn-ghost btn-xs btn-square" />
+              <AddToListMenu
+                :series-id="series.id"
+                trigger-class="btn btn-ghost btn-xs btn-square"
+              />
             </div>
           </div>
         </div>

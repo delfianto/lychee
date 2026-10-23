@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Grid2x2, LayoutGrid, List } from "lucide-vue-next";
+import { Grid2x2, LayoutGrid, List } from "@lucide/vue";
 import { type Component, ref, watch } from "vue";
 
 import { useSeriesList } from "../api/queries";
@@ -14,7 +14,11 @@ const densities: { value: Density; icon: Component; label: string }[] = [
   { value: "gallery", icon: LayoutGrid, label: "Gallery view" },
 ];
 
-const SORTS: Record<string, string> = { "Recently Added": "recentlyAdded", Rating: "rating", Title: "title" };
+const SORTS: Record<string, string> = {
+  "Recently Added": "recentlyAdded",
+  Rating: "rating",
+  Title: "title",
+};
 const sorts = Object.keys(SORTS);
 const sort = ref("Recently Added");
 

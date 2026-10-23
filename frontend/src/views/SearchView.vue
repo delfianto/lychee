@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Search } from "lucide-vue-next";
-import { ref, watch } from "vue";
+import { Search } from "@lucide/vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { searchSeries } from "../api/queries";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import type { Series } from "../types";
+import { createStaleGuard } from "../lib/staleGuard";
 
 defineOptions({ name: "SearchView" });
 
@@ -25,9 +26,11 @@ watch(
 
 // Debounced live search against the API.
 let timer: ReturnType<typeof setTimeout> | undefined;
+const staleGuard = createStaleGuard();
 watch(
   q,
   (val) => {
+    const token = staleGuard.next();
     if (timer) clearTimeout(timer);
     const term = val.trim();
     if (!term) {
@@ -37,12 +40,19 @@ watch(
     }
     loading.value = true;
     timer = setTimeout(async () => {
-      results.value = await searchSeries(term);
+      const found = await searchSeries(term);
+      if (!staleGuard.isCurrent(token)) return;
+      results.value = found;
       loading.value = false;
     }, 250);
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  clearTimeout(timer);
+  staleGuard.next();
+});
 
 function submit(): void {
   const term = q.value.trim();
@@ -79,6 +89,8 @@ function submit(): void {
         empty-text="No series match your search."
       />
     </template>
-    <div v-else class="py-16 text-center text-base-content/50">Type to search your whole library.</div>
+    <div v-else class="py-16 text-center text-base-content/50">
+      Type to search your whole library.
+    </div>
   </div>
 </template>

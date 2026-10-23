@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Settings → Downloads: the download queue + the MangaDex sync card. Owns its own
 // SSE wiring — the table reloads on throttled download.* events and on sync.done.
-import { Globe, Pause, Play, RefreshCw, Square, X } from "lucide-vue-next";
+import { Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import type { DownloadTask } from "../../api/client";
@@ -52,7 +52,9 @@ const hasDone = computed(() => dl.value.some((d) => d.status === "done"));
 const hasQueued = computed(() => dl.value.some((d) => d.status === "queued"));
 const hasPaused = computed(() => dl.value.some((d) => d.status === "paused"));
 const hasActive = computed(() =>
-  dl.value.some((d) => d.status === "queued" || d.status === "downloading" || d.status === "paused"),
+  dl.value.some(
+    (d) => d.status === "queued" || d.status === "downloading" || d.status === "paused",
+  ),
 );
 
 function formatBytes(n: number | null | undefined): string {
@@ -158,7 +160,8 @@ const disposeDone = onTaskDone((task) => {
   } else if (task.kind === "sync") {
     sync.syncing = false;
     void loadSync();
-    if (task.status === "done") toast(`Sync complete — ${(task.result?.newChapters as number) ?? 0} new`);
+    if (task.status === "done")
+      toast(`Sync complete — ${(task.result?.newChapters as number) ?? 0} new`);
   }
 });
 // While a download runs, refresh the table on progress events (throttled) so rows
@@ -212,7 +215,9 @@ onMounted(() => {
 
     <section class="flex flex-col gap-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Downloads</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Downloads
+        </h3>
         <div class="flex flex-wrap items-center gap-1">
           <button
             class="btn btn-ghost btn-sm gap-1"
@@ -238,7 +243,9 @@ onMounted(() => {
           >
             <Square class="size-4" />Cancel all
           </button>
-          <button class="btn btn-ghost btn-sm" :disabled="!hasDone" @click="clearDone">Clear completed</button>
+          <button class="btn btn-ghost btn-sm" :disabled="!hasDone" @click="clearDone">
+            Clear completed
+          </button>
         </div>
       </div>
       <div class="flex flex-col gap-1.5">
@@ -247,7 +254,11 @@ onMounted(() => {
           :key="d.id"
           class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2.5"
         >
-          <CoverImage :src="d.series.coverUrl" :alt="d.series.title" class="cover h-12 w-8 shrink-0 rounded" />
+          <CoverImage
+            :src="d.series.coverUrl"
+            :alt="d.series.title"
+            class="cover h-12 w-8 shrink-0 rounded"
+          />
           <div class="min-w-0 grow">
             <div class="flex items-center gap-2">
               <span class="truncate text-sm font-medium">{{ d.series.title }}</span>
@@ -260,11 +271,21 @@ onMounted(() => {
               <span class="text-base-content/50">{{ d.size }}</span>
             </div>
             <div v-if="d.status === 'downloading'" class="mt-1.5 flex flex-col gap-0.5">
-              <div class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/50">
-                <span :class="d.phase === 'fetching' ? 'text-primary font-semibold' : ''">Fetch</span>
-                <span :class="d.phase === 'encoding' ? 'text-primary font-semibold' : ''">Encode</span>
+              <div
+                class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/50"
+              >
+                <span :class="d.phase === 'fetching' ? 'text-primary font-semibold' : ''"
+                  >Fetch</span
+                >
+                <span :class="d.phase === 'encoding' ? 'text-primary font-semibold' : ''"
+                  >Encode</span
+                >
               </div>
-              <progress class="progress progress-primary h-1.5 w-full" :value="d.progress" max="100" />
+              <progress
+                class="progress progress-primary h-1.5 w-full"
+                :value="d.progress"
+                max="100"
+              />
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1">
@@ -292,7 +313,11 @@ onMounted(() => {
             >
               <RefreshCw class="size-4" />
             </button>
-            <button class="btn btn-square btn-ghost btn-xs" aria-label="Remove" @click="removeDownload(d)">
+            <button
+              class="btn btn-square btn-ghost btn-xs"
+              aria-label="Remove"
+              @click="removeDownload(d)"
+            >
               <X class="size-4" />
             </button>
           </div>

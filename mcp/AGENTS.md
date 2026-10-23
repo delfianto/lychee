@@ -118,12 +118,15 @@ mcp-check` runs it from the repo root; `just mcp-fix` auto-fixes first.
 - `tests/test_client.py` exercises `LycheeClient` against `httpx.MockTransport`
   with canned JSON responses — no live backend, no network. This mirrors the
   pattern `backend/`'s own MangaDex client tests use.
-- The `tools/*.py` functions themselves are exercised end-to-end against a
-  real running backend (`just be-dev` + `just mcp-call ...` or the Inspector),
-  not unit-tested in isolation — they're thin enough that the client-layer
-  tests plus a live smoke pass cover the real risk (HTTP mapping / error
-  shapes), and a live backend is the only thing that can validate the actual
-  request/response contract stays in sync.
+- `tests/test_tools.py` exercises the real tools through `LycheeClient` and
+  `httpx.MockTransport`: pagination, filtering, tag modes, per-item failures,
+  validation, scans, and camelCase wire contracts. Clients are closed after
+  every test. No live backend or credentials are required.
+- `just mcp-coverage` writes HTML/XML/JSON reports and enforces 95% combined
+  statement/branch coverage across all `src/` code. `just mcp-check` and MCP CI
+  include this gate. See [the testing review](../notes/testing.md).
+- A live backend smoke pass still validates integration with the actual REST
+  implementation; offline fixtures alone cannot establish that contract.
 
 ## Config
 

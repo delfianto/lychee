@@ -2,10 +2,14 @@
 // The tracker connect dialog. OAuth trackers do client-creds → authorize URL →
 // paste code; credentials trackers (MangaUpdates) do a one-step username/password
 // login. Emits `connected` on success (parent reloads + closes).
-import { Link2, X } from "lucide-vue-next";
+import { Link2, X } from "@lucide/vue";
 import { reactive, ref } from "vue";
 
-import { beginTrackerConnect, completeTrackerConnect, loginTracker } from "../../api/settingsQueries";
+import {
+  beginTrackerConnect,
+  completeTrackerConnect,
+  loginTracker,
+} from "../../api/settingsQueries";
 import { useFocusTrap } from "../../lib/focusTrap";
 import { toast } from "../../lib/toast";
 
@@ -17,8 +21,14 @@ const modalBox = ref<HTMLElement | null>(null);
 useFocusTrap(modalBox, ref(true));
 
 const form = reactive({
-  clientId: "", clientSecret: "", redirectUri: window.location.origin,
-  authorizeUrl: "", code: "", username: "", password: "", busy: false,
+  clientId: "",
+  clientSecret: "",
+  redirectUri: window.location.origin,
+  authorizeUrl: "",
+  code: "",
+  username: "",
+  password: "",
+  busy: false,
 });
 
 async function beginTrackerAuth(): Promise<void> {
@@ -42,7 +52,11 @@ async function completeTrackerAuth(): Promise<void> {
   // the user to also paste it; the backend verifies it matches what it generated.
   const state = new URL(form.authorizeUrl).searchParams.get("state") ?? "";
   try {
-    await completeTrackerConnect(props.tracker.id, { code: form.code.trim(), redirectUri: form.redirectUri, state });
+    await completeTrackerConnect(props.tracker.id, {
+      code: form.code.trim(),
+      redirectUri: form.redirectUri,
+      state,
+    });
   } catch (e) {
     form.busy = false;
     toast(e instanceof Error ? e.message : "Authorization failed", "error");
@@ -80,8 +94,17 @@ async function loginTrackerAccount(): Promise<void> {
         <p class="mb-1 text-xs text-base-content/50">
           Sign in with your {{ tracker.name }} account. Your session token is encrypted at rest.
         </p>
-        <input v-model="form.username" class="input input-bordered input-sm" placeholder="Username" />
-        <input v-model="form.password" type="password" class="input input-bordered input-sm" placeholder="Password" />
+        <input
+          v-model="form.username"
+          class="input input-bordered input-sm"
+          placeholder="Username"
+        />
+        <input
+          v-model="form.password"
+          type="password"
+          class="input input-bordered input-sm"
+          placeholder="Password"
+        />
         <button
           class="btn btn-primary btn-sm self-start"
           :disabled="form.busy || !form.username || !form.password"
@@ -97,9 +120,22 @@ async function loginTrackerAccount(): Promise<void> {
           Create an OAuth client on {{ tracker.name }} with the redirect URI below, then paste its
           client ID &amp; secret. Secrets are encrypted at rest.
         </p>
-        <input v-model="form.clientId" class="input input-bordered input-sm" placeholder="Client ID" />
-        <input v-model="form.clientSecret" type="password" class="input input-bordered input-sm" placeholder="Client secret" />
-        <input v-model="form.redirectUri" class="input input-bordered input-sm" placeholder="Redirect URI" />
+        <input
+          v-model="form.clientId"
+          class="input input-bordered input-sm"
+          placeholder="Client ID"
+        />
+        <input
+          v-model="form.clientSecret"
+          type="password"
+          class="input input-bordered input-sm"
+          placeholder="Client secret"
+        />
+        <input
+          v-model="form.redirectUri"
+          class="input input-bordered input-sm"
+          placeholder="Redirect URI"
+        />
         <button
           v-if="!form.authorizeUrl"
           class="btn btn-primary btn-sm self-start"
@@ -109,12 +145,23 @@ async function loginTrackerAccount(): Promise<void> {
           {{ form.busy ? "Working…" : "Get authorize link" }}
         </button>
         <template v-else>
-          <a :href="form.authorizeUrl" target="_blank" rel="noopener" class="btn btn-outline btn-sm gap-1">
+          <a
+            :href="form.authorizeUrl"
+            target="_blank"
+            rel="noopener"
+            class="btn btn-outline btn-sm gap-1"
+          >
             <Link2 class="size-4" />Authorize on {{ tracker.name }} ↗
           </a>
-          <p class="text-xs text-base-content/50">After authorizing, paste the <code>code</code> from the redirect URL:</p>
+          <p class="text-xs text-base-content/50">
+            After authorizing, paste the <code>code</code> from the redirect URL:
+          </p>
           <div class="flex gap-2">
-            <input v-model="form.code" class="input input-bordered input-sm grow" placeholder="Authorization code" />
+            <input
+              v-model="form.code"
+              class="input input-bordered input-sm grow"
+              placeholder="Authorization code"
+            />
             <button
               class="btn btn-primary btn-sm"
               :disabled="form.busy || !form.code"

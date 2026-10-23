@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ImageOff } from "lucide-vue-next";
+import { ImageOff } from "@lucide/vue";
 import { ref, watch } from "vue";
 
 const props = withDefaults(
@@ -35,16 +35,9 @@ function onError(): void {
 </script>
 
 <template>
-  <div
-    class="relative overflow-hidden bg-base-300"
-    :class="props.class"
-  >
+  <div class="relative overflow-hidden bg-base-300" :class="props.class">
     <!-- Shimmer while the cover bytes are still materializing / transferring -->
-    <div
-      v-if="!loaded && !failed"
-      class="cover-shimmer absolute inset-0"
-      aria-hidden="true"
-    />
+    <div v-if="!loaded && !failed" class="cover-shimmer absolute inset-0" aria-hidden="true" />
     <img
       v-if="!failed"
       :src="src"

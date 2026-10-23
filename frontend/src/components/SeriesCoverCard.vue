@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X } from "lucide-vue-next";
+import { X } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 
 import type { Series } from "../types";
@@ -34,7 +34,9 @@ const emit = defineEmits<{ remove: [] }>();
     >
       {{ series.unreadCount }}
     </span>
-    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2 pt-8">
+    <div
+      class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2 pt-8"
+    >
       <div class="flex items-start gap-1.5">
         <CountryFlag
           v-if="series.originCountry && series.kind !== 'gallery'"

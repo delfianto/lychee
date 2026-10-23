@@ -2,7 +2,7 @@
 // Navbar affordance for background work (scans, downloads). Hidden when idle;
 // while tasks run it shows a spinning badge that opens a live progress list,
 // fed by the shared SSE task stream.
-import { Loader2 } from "lucide-vue-next";
+import { Loader2 } from "@lucide/vue";
 
 import { activeTasks } from "../api/events";
 
@@ -37,12 +37,18 @@ function kindLabel(kind: string): string {
         <li v-for="task in activeTasks" :key="task.id">
           <div class="flex justify-between gap-2 text-sm">
             <span class="min-w-0 truncate">
-              <span class="badge badge-ghost badge-xs mr-1 align-middle">{{ kindLabel(task.kind) }}</span>
+              <span class="badge badge-ghost badge-xs mr-1 align-middle">{{
+                kindLabel(task.kind)
+              }}</span>
               {{ task.label }}
             </span>
             <span class="shrink-0 tabular-nums opacity-60">{{ task.progress }}%</span>
           </div>
-          <progress class="progress progress-primary mt-1 h-1.5 w-full" :value="task.progress" max="100" />
+          <progress
+            class="progress progress-primary mt-1 h-1.5 w-full"
+            :value="task.progress"
+            max="100"
+          />
           <p v-if="task.detail" class="truncate text-xs opacity-50">{{ task.detail }}</p>
         </li>
       </ul>

@@ -3,7 +3,7 @@
 // your username/password (OAuth2 password grant). Secrets are encrypted at rest. Emits
 // `connected` on success (parent reloads + closes). Supports loading KEY=VAL env files
 // so long tokens don't have to be hand-pasted.
-import { Eye, EyeOff, FileUp, Link2, X } from "lucide-vue-next";
+import { Eye, EyeOff, FileUp, Link2, X } from "@lucide/vue";
 import { reactive, ref } from "vue";
 
 import { connectMangaDex } from "../../api/settingsQueries";
@@ -115,11 +115,16 @@ async function connect(): Promise<void> {
       <div class="flex flex-col gap-3">
         <p class="text-xs text-base-content/50">
           Create a
-          <a href="https://mangadex.org/settings" target="_blank" rel="noopener" class="link">personal API client</a>
-          on MangaDex, then sign in to import your follows &amp; reading status. Secrets are encrypted at rest.
+          <a href="https://mangadex.org/settings" target="_blank" rel="noopener" class="link"
+            >personal API client</a
+          >
+          on MangaDex, then sign in to import your follows &amp; reading status. Secrets are
+          encrypted at rest.
         </p>
 
-        <div class="flex flex-wrap items-center justify-between gap-2 rounded-box border border-base-content/10 bg-base-200/30 px-3 py-2">
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 rounded-box border border-base-content/10 bg-base-200/30 px-3 py-2"
+        >
           <p class="min-w-0 text-xs text-base-content/55">
             Prefill from a file with
             <code class="text-primary/80">CLIENT_ID</code>,

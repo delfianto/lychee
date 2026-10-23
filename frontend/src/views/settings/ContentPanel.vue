@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Settings → Content: the managed taxonomy (tags, content ratings, demographics)
 // as one searchable, client-paginated table.
-import { Plus, RefreshCw, Search, X } from "lucide-vue-next";
+import { Plus, RefreshCw, Search, X } from "@lucide/vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { activeTasks, onTaskDone } from "../../api/events";
@@ -72,12 +72,18 @@ const TAX_PAGE_SIZE = 20;
 const taxFiltered = computed(() => {
   const q = taxSearch.value.trim().toLowerCase();
   return taxonomy.value.filter(
-    (r) => (!q || r.name.toLowerCase().includes(q)) && (!taxCat.value || r.category === taxCat.value),
+    (r) =>
+      (!q || r.name.toLowerCase().includes(q)) && (!taxCat.value || r.category === taxCat.value),
   );
 });
-const taxPageCount = computed(() => Math.max(1, Math.ceil(taxFiltered.value.length / TAX_PAGE_SIZE)));
+const taxPageCount = computed(() =>
+  Math.max(1, Math.ceil(taxFiltered.value.length / TAX_PAGE_SIZE)),
+);
 const taxRows = computed(() =>
-  taxFiltered.value.slice(taxPage.value * TAX_PAGE_SIZE, taxPage.value * TAX_PAGE_SIZE + TAX_PAGE_SIZE),
+  taxFiltered.value.slice(
+    taxPage.value * TAX_PAGE_SIZE,
+    taxPage.value * TAX_PAGE_SIZE + TAX_PAGE_SIZE,
+  ),
 );
 watch([taxSearch, taxCat], () => (taxPage.value = 0));
 async function toggleTax(row: TaxRow): Promise<void> {
@@ -117,13 +123,15 @@ async function removeTax(row: TaxRow): Promise<void> {
 // id/group/deletability are locked there); see notes/decisions/21-tag-aliases.md.
 const editingId = ref<string | null>(null);
 const editValue = ref("");
-const editInput = ref<HTMLInputElement | null>(null);
+// Vue collects template refs inside v-for into an array, even when only one
+// row is currently being edited.
+const editInput = ref<HTMLInputElement[]>([]);
 async function startEdit(row: TaxRow): Promise<void> {
   editingId.value = row.id;
   editValue.value = row.name;
   await nextTick();
-  editInput.value?.focus();
-  editInput.value?.select();
+  editInput.value[0]?.focus();
+  editInput.value[0]?.select();
 }
 function cancelEdit(): void {
   editingId.value = null;
@@ -193,12 +201,18 @@ onMounted(loadTaxonomy);
 <template>
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Content taxonomy</h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+        Content taxonomy
+      </h3>
       <div class="flex items-center gap-2">
         <button class="btn btn-ghost btn-sm gap-1" :disabled="refreshing" @click="refreshTaxonomy">
-          <RefreshCw class="size-4" :class="{ 'animate-spin': refreshing }" />{{ refreshing ? "Refreshing…" : "Refresh" }}
+          <RefreshCw class="size-4" :class="{ 'animate-spin': refreshing }" />{{
+            refreshing ? "Refreshing…" : "Refresh"
+          }}
         </button>
-        <button class="btn btn-primary btn-sm gap-1" @click="openAddTax"><Plus class="size-4" />Add</button>
+        <button class="btn btn-primary btn-sm gap-1" @click="openAddTax">
+          <Plus class="size-4" />Add
+        </button>
       </div>
     </div>
 
@@ -206,7 +220,13 @@ onMounted(loadTaxonomy);
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="taxSearch" type="search" class="grow" placeholder="Search name…" aria-label="Search taxonomy" />
+        <input
+          v-model="taxSearch"
+          type="search"
+          class="grow"
+          placeholder="Search name…"
+          aria-label="Search taxonomy"
+        />
       </label>
       <select v-model="taxCat" class="select select-bordered select-sm" aria-label="Filter by type">
         <option value="">All types</option>
@@ -242,9 +262,15 @@ onMounted(loadTaxonomy);
                     @keyup.escape="cancelEdit"
                     @blur="commitEdit(row)"
                   />
-                  <button v-else class="hover:underline" @click="startEdit(row)">{{ row.name }}</button>
+                  <button v-else class="hover:underline" @click="startEdit(row)">
+                    {{ row.name }}
+                  </button>
                 </td>
-                <td><span class="badge badge-ghost badge-sm whitespace-nowrap">{{ row.category }}</span></td>
+                <td>
+                  <span class="badge badge-ghost badge-sm whitespace-nowrap">{{
+                    row.category
+                  }}</span>
+                </td>
                 <td>
                   <div class="flex flex-wrap items-center gap-1">
                     <span
@@ -257,21 +283,38 @@ onMounted(loadTaxonomy);
                         <X class="size-3" />
                       </button>
                     </span>
-                    <button class="btn btn-ghost btn-xs" aria-label="Add alias" @click="openAddAlias(row)">
+                    <button
+                      class="btn btn-ghost btn-xs"
+                      aria-label="Add alias"
+                      @click="openAddAlias(row)"
+                    >
                       <Plus class="size-3" />
                     </button>
                   </div>
                 </td>
                 <td class="text-base-content/60">{{ row.uses }}</td>
                 <td>
-                  <input v-model="row.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" @change="toggleTax(row)" />
+                  <input
+                    v-model="row.enabled"
+                    type="checkbox"
+                    class="toggle toggle-primary toggle-sm"
+                    @change="toggleTax(row)"
+                  />
                 </td>
                 <td class="whitespace-nowrap text-right">
-                  <button class="btn btn-ghost btn-xs text-error" :disabled="row.system" @click="removeTax(row)">Delete</button>
+                  <button
+                    class="btn btn-ghost btn-xs text-error"
+                    :disabled="row.system"
+                    @click="removeTax(row)"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
               <tr v-if="!taxRows.length">
-                <td colspan="6" class="py-8 text-center text-sm text-base-content/50">No entries match.</td>
+                <td colspan="6" class="py-8 text-center text-sm text-base-content/50">
+                  No entries match.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -285,8 +328,14 @@ onMounted(loadTaxonomy);
         {{ taxFiltered.length }} entries · page {{ taxPage + 1 }} of {{ taxPageCount }}
       </span>
       <div class="join">
-        <button class="btn btn-sm join-item" :disabled="taxPage === 0" @click="taxPage--">Prev</button>
-        <button class="btn btn-sm join-item" :disabled="taxPage >= taxPageCount - 1" @click="taxPage++">
+        <button class="btn btn-sm join-item" :disabled="taxPage === 0" @click="taxPage--">
+          Prev
+        </button>
+        <button
+          class="btn btn-sm join-item"
+          :disabled="taxPage >= taxPageCount - 1"
+          @click="taxPage++"
+        >
           Next
         </button>
       </div>

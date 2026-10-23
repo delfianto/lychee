@@ -79,7 +79,9 @@ onBeforeUnmount(() => ro?.disconnect());
         v-for="i in pageCount"
         :key="i"
         class="h-2 rounded-full transition-all"
-        :class="page === i - 1 ? 'w-4 bg-primary' : 'w-2 bg-base-content/30 hover:bg-base-content/50'"
+        :class="
+          page === i - 1 ? 'w-4 bg-primary' : 'w-2 bg-base-content/30 hover:bg-base-content/50'
+        "
         :aria-label="`Go to page ${i}`"
         @click="goto(i - 1)"
       ></button>

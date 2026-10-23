@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches: [main]
-    paths: ["backend/**", ".github/workflows/ci.yml"]
+    paths: ["backend/**", "mcp/**", "justfile", ".github/workflows/ci.yml"]
   pull_request:
-    paths: ["backend/**", ".github/workflows/ci.yml"]
+    paths: ["backend/**", "mcp/**", "justfile", ".github/workflows/ci.yml"]
   workflow_dispatch:
 
 concurrency:
@@ -27,15 +27,18 @@ jobs:
       # Throwaway DB for the alembic drift check; pytest uses its own temp DBs.
       DATABASE_URL: sqlite:///./ci.db
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev
+
+      - name: Format (ruff)
+        run: uv run ruff format --check .
 
       - name: Lint (ruff)
         run: uv run ruff check .
@@ -47,4 +50,41 @@ jobs:
         run: uv run alembic upgrade head && uv run alembic check
 
       - name: Tests (pytest)
-        run: uv run pytest -q
+        run: uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
+
+      - name: Upload coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+          if-no-files-found: warn
+          retention-days: 7
+
+  mcp:
+    name: MCP lint + type + test + coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+      - name: Format and lint
+        run: uv run ruff format --check . && uv run ruff check .
+      - name: Type-check
+        run: uv run basedpyright
+      - name: Tests and coverage
+        run: uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
+      - name: Upload coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-coverage
+          path: mcp/coverage/
+          if-no-files-found: warn
+          retention-days: 7

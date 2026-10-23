@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Pencil, Trash2 } from "lucide-vue-next";
+import { ArrowLeft, Pencil, Trash2 } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
@@ -34,7 +34,11 @@ async function load(id: string): Promise<void> {
   }
   loading.value = false;
 }
-watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
+watch(
+  () => route.params.id,
+  (id) => void load(String(id)),
+  { immediate: true },
+);
 
 const editing = ref(false);
 const editName = ref("");
@@ -76,13 +80,20 @@ function confirmDeleteList(): void {
         </RouterLink>
         <div class="grow">
           <div v-if="editing" class="flex items-center gap-2">
-            <input v-model="editName" class="input input-bordered input-sm max-w-xs" @keyup.enter="saveRename" />
+            <input
+              v-model="editName"
+              class="input input-bordered input-sm max-w-xs"
+              @keyup.enter="saveRename"
+            />
             <button class="btn btn-primary btn-sm" @click="saveRename">Save</button>
             <button class="btn btn-ghost btn-sm" @click="editing = false">Cancel</button>
           </div>
           <div v-else class="flex items-center gap-2">
             <h1 class="text-3xl font-bold">
-              <span v-if="loading && !name" class="inline-block h-8 w-40 animate-pulse rounded bg-base-300" />
+              <span
+                v-if="loading && !name"
+                class="inline-block h-8 w-40 animate-pulse rounded bg-base-300"
+              />
               <template v-else>{{ name }}</template>
             </h1>
             <button

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Task } from "./events";
 
@@ -106,7 +106,10 @@ describe("onTaskDone / onTaskEvent dispatch", () => {
     onTaskEvent(handler);
 
     source.emit("download.progress", task("t1"));
-    expect(handler).toHaveBeenCalledWith("download.progress", expect.objectContaining({ id: "t1" }));
+    expect(handler).toHaveBeenCalledWith(
+      "download.progress",
+      expect.objectContaining({ id: "t1" }),
+    );
   });
 
   it("disposer removes the handler so it stops firing", async () => {
@@ -120,4 +123,26 @@ describe("onTaskDone / onTaskEvent dispatch", () => {
     source.emit("scan.done", task("t1", { status: "done" }));
     expect(done).not.toHaveBeenCalled();
   });
+});
+
+it("reflects connection gaps, filters running tasks, and disposes event subscribers", async () => {
+  const { connectTaskStream, useTasks, onTaskEvent, activeTasks } = await import("./events");
+  connectTaskStream();
+  const source = FakeEventSource.instances[0]!;
+  const state = useTasks();
+  source.onopen?.();
+  expect(state.connected.value).toBe(true);
+  source.onerror?.();
+  expect(state.connected.value).toBe(false);
+  source.onopen?.();
+  expect(state.connected.value).toBe(true);
+  const handler = vi.fn();
+  const dispose = onTaskEvent(handler);
+  source.emit("scan.started", task("a"));
+  source.emit("scan.done", task("b", { status: "done" }));
+  expect(activeTasks.value.map((t) => t.id)).toEqual(["a"]);
+  dispose();
+  source.emit("scan.progress", task("a", { progress: 25 }));
+  expect(handler).toHaveBeenCalledTimes(2);
+  expect(state.tasks.value.find((t) => t.id === "a")?.progress).toBe(25);
 });

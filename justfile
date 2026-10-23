@@ -54,7 +54,13 @@ be-fix:
 # Lint + type-check + test the backend — the full CI gate (no auto-fix).
 [group('backend')]
 be-check:
-    cd {{ backend_dir }} && uv run ruff check . && uv run basedpyright && uv run pytest -q
+    cd {{ backend_dir }} && uv run ruff format --check . && uv run ruff check . && uv run basedpyright
+    just be-coverage
+
+# Backend tests with branch coverage and HTML/XML/JSON reports (85% combined floor).
+[group('backend')]
+be-coverage:
+    cd {{ backend_dir }} && uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
 
 # Stop the backend.
 [group('backend')]
@@ -111,10 +117,15 @@ fe-mock:
 fe-test:
     cd {{ frontend_dir }} && bun run test
 
-# Type-check + test + build the frontend — the full CI gate.
+# Format-check + lint + Vue type-check + test + build the frontend.
 [group('frontend')]
 fe-check:
-    cd {{ frontend_dir }} && bun run typecheck && bun run test && bun run build
+    cd {{ frontend_dir }} && bun run check && bun run test:coverage && bun run build
+
+# Frontend tests with whole-app coverage reports and per-file gates.
+[group('frontend')]
+fe-coverage:
+    cd {{ frontend_dir }} && bun run test:coverage
 
 # Build + serve the production bundle on :4173.
 [group('frontend')]
@@ -159,7 +170,13 @@ mcp-fix:
 # Lint + type-check + test the MCP server — the full CI gate (no auto-fix).
 [group('mcp')]
 mcp-check:
-    cd {{ mcp_dir }} && uv run ruff check . && uv run basedpyright && uv run pytest -q
+    cd {{ mcp_dir }} && uv run ruff format --check . && uv run ruff check . && uv run basedpyright
+    just mcp-coverage
+
+# MCP tests with branch coverage and HTML/XML/JSON reports (95% combined floor).
+[group('mcp')]
+mcp-coverage:
+    cd {{ mcp_dir }} && uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
 
 # ─────────────────────────────── codegen ────────────────────────────────
 

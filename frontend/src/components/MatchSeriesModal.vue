@@ -2,7 +2,7 @@
 // Search MangaDex for a metadata match and link the series to it. Runs an initial
 // search on open (seeded from the series title); emits `matched` once linked so the
 // parent can reload metadata.
-import { X } from "lucide-vue-next";
+import { X } from "@lucide/vue";
 import { ref } from "vue";
 
 import { fetchMatchCandidates, matchSeries, type MatchCandidate } from "../api/queries";
@@ -42,7 +42,13 @@ void search();
         </button>
       </div>
       <label class="input input-bordered flex items-center gap-2">
-        <input v-model="query" class="grow" placeholder="Search title…" aria-label="Search for a matching series" @keyup.enter="search" />
+        <input
+          v-model="query"
+          class="grow"
+          placeholder="Search title…"
+          aria-label="Search for a matching series"
+          @keyup.enter="search"
+        />
         <button class="btn btn-primary btn-sm" @click="search">Search</button>
       </label>
       <div v-if="loading" class="flex justify-center py-8">
@@ -54,7 +60,12 @@ void search();
             class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-200"
             @click="pick(c)"
           >
-            <img v-if="c.coverUrl" :src="c.coverUrl" :alt="c.title" class="h-16 w-12 shrink-0 rounded object-cover" />
+            <img
+              v-if="c.coverUrl"
+              :src="c.coverUrl"
+              :alt="c.title"
+              class="h-16 w-12 shrink-0 rounded object-cover"
+            />
             <div v-else class="h-16 w-12 shrink-0 rounded bg-base-300" />
             <div class="min-w-0">
               <div class="truncate font-medium">{{ c.title }}</div>

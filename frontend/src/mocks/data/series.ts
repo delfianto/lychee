@@ -30,7 +30,14 @@ type Kind = "manga" | "comic" | "gallery";
 type Status = "ongoing" | "completed" | "hiatus" | "cancelled";
 type ContentRating = (typeof CONTENT_RATINGS)[number];
 type Demographic = (typeof DEMOGRAPHICS)[number] | "none";
-type LibraryStatus = "none" | "reading" | "on_hold" | "dropped" | "plan_to_read" | "completed" | "re_reading";
+type LibraryStatus =
+  | "none"
+  | "reading"
+  | "on_hold"
+  | "dropped"
+  | "plan_to_read"
+  | "completed"
+  | "re_reading";
 
 export interface SeriesSeed {
   id: string;
@@ -559,7 +566,8 @@ const FLAGSHIPS: SeriesSeed[] = [
     demographic: "none",
     tagIds: ["theme-illustration", "theme-fan-art"],
     year: 2023,
-    description: "Fan-curated stills from the Starlit Chronicles setting, compiled and cleaned up for offline reading.",
+    description:
+      "Fan-curated stills from the Starlit Chronicles setting, compiled and cleaned up for offline reading.",
     originCountry: "jp",
     provider: null,
     favorite: false,
@@ -614,7 +622,8 @@ const FLAGSHIPS: SeriesSeed[] = [
     demographic: "none",
     tagIds: ["theme-official", "format-full-color"],
     year: 2021,
-    description: "The official art book release for Moonfall Tactics, full-color and cleanly scanned.",
+    description:
+      "The official art book release for Moonfall Tactics, full-color and cleanly scanned.",
     originCountry: "jp",
     provider: null,
     favorite: false,
@@ -662,7 +671,10 @@ const FLAGSHIPS: SeriesSeed[] = [
 
 // --- procedural filler -------------------------------------------------------
 
-function chapterShapeFor(rng: () => number, status: Status): { chapterCount: number; availableChapters: number } {
+function chapterShapeFor(
+  rng: () => number,
+  status: Status,
+): { chapterCount: number; availableChapters: number } {
   if (status === "completed") {
     const total = randInt(rng, 18, 180);
     const gap = chance(rng, 0.3) ? randInt(rng, 1, Math.min(10, total)) : 0;
@@ -690,7 +702,12 @@ function libraryStatusFor(rng: () => number): LibraryStatus {
   ]);
 }
 
-function generateFillerManga(count: number, kind: "manga" | "comic", startAt: number, used: Set<string>): SeriesSeed[] {
+function generateFillerManga(
+  count: number,
+  kind: "manga" | "comic",
+  startAt: number,
+  used: Set<string>,
+): SeriesSeed[] {
   const out: SeriesSeed[] = [];
   for (let i = 0; i < count; i++) {
     const idx = startAt + i;
@@ -721,12 +738,14 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
       [8, "erotica"],
     ]);
     const demographic: Demographic =
-      kind === "comic" ? "none" : weighted(rng, [
-        [30, "shonen"],
-        [20, "shojo"],
-        [30, "seinen"],
-        [20, "josei"],
-      ]);
+      kind === "comic"
+        ? "none"
+        : weighted(rng, [
+            [30, "shonen"],
+            [20, "shojo"],
+            [30, "seinen"],
+            [20, "josei"],
+          ]);
     const tagIds = [
       ...pickN(rng, GENRE_IDS, randInt(rng, 2, 3)),
       ...pickN(rng, THEME_IDS, randInt(rng, 1, 3)),
@@ -738,7 +757,13 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
     const { chapterCount, availableChapters } = chapterShapeFor(rng, status);
     const libraryStatus = libraryStatusFor(rng);
     const isReadingLike = libraryStatus === "reading" || libraryStatus === "re_reading";
-    const unreadCount = isReadingLike ? randInt(rng, 0, Math.min(chapterCount, 15)) : chapterCount > 0 && libraryStatus === "none" ? chapterCount : chance(rng, 0.5) ? randInt(rng, 0, chapterCount) : 0;
+    const unreadCount = isReadingLike
+      ? randInt(rng, 0, Math.min(chapterCount, 15))
+      : chapterCount > 0 && libraryStatus === "none"
+        ? chapterCount
+        : chance(rng, 0.5)
+          ? randInt(rng, 0, chapterCount)
+          : 0;
     const lastReadChapter =
       libraryStatus === "completed"
         ? chapterCount
@@ -753,7 +778,9 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
       kind,
       title,
       authors: [creatorName(rng, originCountry)],
-      artists: chance(rng, 0.35) ? [creatorName(rng, originCountry)] : [creatorName(rng, originCountry)],
+      artists: chance(rng, 0.35)
+        ? [creatorName(rng, originCountry)]
+        : [creatorName(rng, originCountry)],
       status,
       contentRating,
       demographic,
@@ -770,7 +797,8 @@ function generateFillerManga(count: number, kind: "manga" | "comic", startAt: nu
       availableChapters,
       unreadCount: Math.min(unreadCount, chapterCount),
       lastReadChapter,
-      totalChapters: status === "completed" || status === "cancelled" ? chapterCount + availableChapters : null,
+      totalChapters:
+        status === "completed" || status === "cancelled" ? chapterCount + availableChapters : null,
     });
   }
   return out;
@@ -793,8 +821,20 @@ function generateFillerGalleries(count: number, startAt: number, used: Set<strin
       [25, "explicit"],
       [20, "erotica"],
     ]);
-    const tagIds = pickN(rng, THEME_IDS.filter((t) => ["theme-illustration", "theme-fan-art", "theme-cosplay", "theme-official"].includes(t)), 1).concat(
-      chance(rng, 0.4) ? pickN(rng, FORMAT_IDS.filter((f) => f === "format-doujinshi" || f === "format-full-color"), 1) : [],
+    const tagIds = pickN(
+      rng,
+      THEME_IDS.filter((t) =>
+        ["theme-illustration", "theme-fan-art", "theme-cosplay", "theme-official"].includes(t),
+      ),
+      1,
+    ).concat(
+      chance(rng, 0.4)
+        ? pickN(
+            rng,
+            FORMAT_IDS.filter((f) => f === "format-doujinshi" || f === "format-full-color"),
+            1,
+          )
+        : [],
     );
     out.push({
       id: `gallery-${idx}`,

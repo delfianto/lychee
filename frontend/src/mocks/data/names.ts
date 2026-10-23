@@ -43,11 +43,34 @@ const JP_SURNAME = [
   "Kishida",
   "Arakawa",
 ];
-const KR_GIVEN = ["Ji-ho", "Seo-yeon", "Min-jun", "Ha-eun", "Do-yun", "Yerin", "Joon", "Somi", "Hyun-woo", "Areum"];
+const KR_GIVEN = [
+  "Ji-ho",
+  "Seo-yeon",
+  "Min-jun",
+  "Ha-eun",
+  "Do-yun",
+  "Yerin",
+  "Joon",
+  "Somi",
+  "Hyun-woo",
+  "Areum",
+];
 const KR_SURNAME = ["Kim", "Lee", "Park", "Choi", "Jung", "Kang", "Yoon", "Han", "Oh", "Seo"];
 const CN_GIVEN = ["Wei", "Mei", "Jun", "Ling", "Hao", "Xin", "Yan", "Feng", "Lian", "Chen"];
 const CN_SURNAME = ["Wang", "Li", "Zhang", "Liu", "Chen", "Yang", "Zhao", "Wu", "Sun", "Zhou"];
-const WEST_GIVEN = ["Alex", "Morgan", "Jordan", "Casey", "Riley", "Sam", "Taylor", "Drew", "Quinn", "Avery", "Rowan"];
+const WEST_GIVEN = [
+  "Alex",
+  "Morgan",
+  "Jordan",
+  "Casey",
+  "Riley",
+  "Sam",
+  "Taylor",
+  "Drew",
+  "Quinn",
+  "Avery",
+  "Rowan",
+];
 const WEST_SURNAME = [
   "Sterling",
   "Blackwood",
@@ -167,9 +190,29 @@ const MANGA_NOUN = [
   "Dominion",
   "Star",
 ];
-const MANGA_SUB = ["Reborn", "Chronicles", "Genesis", "Requiem", "Awakening", "Overture", "Aftermath", "Origins"];
+const MANGA_SUB = [
+  "Reborn",
+  "Chronicles",
+  "Genesis",
+  "Requiem",
+  "Awakening",
+  "Overture",
+  "Aftermath",
+  "Origins",
+];
 
-const COMIC_ADJ = ["Midnight", "Steel", "Neon", "Rogue", "Shattered", "Last", "Ghost", "Wired", "Fallout", "Static"];
+const COMIC_ADJ = [
+  "Midnight",
+  "Steel",
+  "Neon",
+  "Rogue",
+  "Shattered",
+  "Last",
+  "Ghost",
+  "Wired",
+  "Fallout",
+  "Static",
+];
 const COMIC_NOUN = [
   "Vanguard",
   "Precinct",

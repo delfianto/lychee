@@ -8,7 +8,13 @@ import { DOWNLOAD_DEMO_SERIES_IDS, seriesCatalog } from "./series";
 import { SCANLATION_GROUPS } from "./names";
 
 type SeriesOut = components["schemas"]["SeriesOut"];
-export type ChapterStatus = "downloaded" | "available" | "queued" | "downloading" | "paused" | "failed";
+export type ChapterStatus =
+  | "downloaded"
+  | "available"
+  | "queued"
+  | "downloading"
+  | "paused"
+  | "failed";
 
 export interface MockChapter {
   id: string | null;
@@ -44,7 +50,10 @@ const CHAPTER_TITLE_FRAGMENTS = [
 const IN_FLIGHT_STATUSES: ChapterStatus[] = ["downloading", "queued", "paused", "failed"];
 
 function isWebtoon(series: SeriesOut): boolean {
-  return series.originCountry === "kr" || series.tags.some((t) => t.id === "format-long-strip" || t.id === "format-web-comic");
+  return (
+    series.originCountry === "kr" ||
+    series.tags.some((t) => t.id === "format-long-strip" || t.id === "format-web-comic")
+  );
 }
 
 function buildChaptersForSeries(series: SeriesOut): MockChapter[] {
@@ -77,7 +86,11 @@ function buildChaptersForSeries(series: SeriesOut): MockChapter[] {
       volume: webtoon ? null : Math.ceil(n / perVolume),
       number: String(n),
       title: chance(rng, 0.25) ? pick(rng, CHAPTER_TITLE_FRAGMENTS) : null,
-      group: series.provider ? primaryGroup : (chance(rng, 0.85) ? primaryGroup : pick(rng, SCANLATION_GROUPS)),
+      group: series.provider
+        ? primaryGroup
+        : chance(rng, 0.85)
+          ? primaryGroup
+          : pick(rng, SCANLATION_GROUPS),
       language,
       uploadedAt: ageDays <= 0 ? hoursAgo(randInt(rng, 1, 20)) : daysAgo(ageDays),
       read: series.lastReadChapter != null && n <= series.lastReadChapter,

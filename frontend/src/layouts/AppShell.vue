@@ -15,7 +15,7 @@ import {
   Search,
   Settings,
   Sun,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { type Component, computed, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
@@ -80,15 +80,23 @@ const nav: NavItem[] = [
 
     <!-- App column -->
     <div class="drawer-content flex min-h-dvh flex-col bg-base-200">
-      <header class="navbar sticky top-0 z-20 border-b border-base-300 bg-base-100/90 px-2 backdrop-blur sm:px-4">
+      <header
+        class="navbar sticky top-0 z-20 border-b border-base-300 bg-base-100/90 px-2 backdrop-blur sm:px-4"
+      >
         <div class="navbar-start w-auto gap-1">
-          <label for="app-drawer" class="btn btn-square btn-ghost btn-sm lg:hidden" aria-label="Menu">
+          <label
+            for="app-drawer"
+            class="btn btn-square btn-ghost btn-sm lg:hidden"
+            aria-label="Menu"
+          >
             <Menu class="size-5" />
           </label>
           <!-- Static brand — Home is always one click away in the nav, so the
                logo doesn't double as a home link. -->
           <div class="flex select-none items-center gap-2 px-2 text-xl font-bold">
-            <Cherry class="size-6 shrink-0 text-primary" /><span class="hidden sm:inline">lychee</span>
+            <Cherry class="size-6 shrink-0 text-primary" /><span class="hidden sm:inline"
+              >lychee</span
+            >
           </div>
           <!-- Desktop nav links -->
           <nav class="ml-1 hidden items-center gap-0.5 lg:flex">
@@ -102,22 +110,39 @@ const nav: NavItem[] = [
                 :title="item.label"
                 :aria-label="item.label"
               >
-                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{ item.label }}</span>
+                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{
+                  item.label
+                }}</span>
               </RouterLink>
               <span v-else class="btn btn-ghost btn-sm gap-1.5 opacity-40">
-                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{ item.label }}</span>
+                <component :is="item.icon" class="size-4" /><span class="hidden xl:inline">{{
+                  item.label
+                }}</span>
               </span>
             </template>
           </nav>
         </div>
 
         <div class="navbar-end ml-auto w-auto gap-1">
-          <label class="input input-bordered input-sm hidden w-44 items-center gap-2 sm:flex lg:w-56">
+          <label
+            class="input input-bordered input-sm hidden w-44 items-center gap-2 sm:flex lg:w-56"
+          >
             <Search class="size-4 opacity-60" />
-            <input v-model="searchQuery" type="search" class="grow" placeholder="Search…" aria-label="Search series" @keyup.enter="goSearch" />
+            <input
+              v-model="searchQuery"
+              type="search"
+              class="grow"
+              placeholder="Search…"
+              aria-label="Search series"
+              @keyup.enter="goSearch"
+            />
           </label>
           <ActivityIndicator />
-          <button class="btn btn-circle btn-ghost btn-sm" aria-label="Random series" @click="goRandom">
+          <button
+            class="btn btn-circle btn-ghost btn-sm"
+            aria-label="Random series"
+            @click="goRandom"
+          >
             <Dices class="size-5" />
           </button>
           <button
@@ -136,11 +161,18 @@ const nav: NavItem[] = [
           >
             <Settings class="size-5" />
           </RouterLink>
-          <button v-else class="btn btn-circle btn-ghost btn-sm" aria-label="Back" @click="router.back()">
+          <button
+            v-else
+            class="btn btn-circle btn-ghost btn-sm"
+            aria-label="Back"
+            @click="router.back()"
+          >
             <ArrowLeft class="size-5" />
           </button>
           <div class="avatar avatar-placeholder">
-            <div class="w-8 rounded-full bg-neutral text-neutral-content"><span class="text-xs">U</span></div>
+            <div class="w-8 rounded-full bg-neutral text-neutral-content">
+              <span class="text-xs">U</span>
+            </div>
           </div>
         </div>
       </header>
@@ -150,7 +182,9 @@ const nav: NavItem[] = [
           <Transition name="page" mode="out-in">
             <!-- KeepAlive on main library tabs so revisiting doesn't remount + refetch.
                  Series detail / settings / list detail stay outside so they stay fresh. -->
-            <KeepAlive :include="['LibraryHome', 'LibraryView', 'GalleryView', 'ListsView', 'SearchView']">
+            <KeepAlive
+              :include="['LibraryHome', 'LibraryView', 'GalleryView', 'ListsView', 'SearchView']"
+            >
               <component :is="Component" :key="r.path" />
             </KeepAlive>
           </Transition>

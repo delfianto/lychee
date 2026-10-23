@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Labeled server path input + Browse button that opens the shared PathBrowserModal.
 // Used by Add Library and Local Import so both pick paths the same way.
-import { FolderSearch } from "lucide-vue-next";
+import { FolderSearch } from "@lucide/vue";
 import { ref } from "vue";
 
 import PathBrowserModal from "./PathBrowserModal.vue";

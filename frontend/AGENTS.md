@@ -11,8 +11,10 @@ Vue 3 SPA for lychee, a self-hosted manga/comic/ebook media server. See the
   `defineProps<{...}>()` + `withDefaults`).
 - **Language:** TypeScript, `strict: true`, `noUnusedLocals`/`noUnusedParameters`
   on (see `tsconfig.json`) — unused symbols are a build error, not a lint warning.
-- **Build/dev:** Vite 7, package manager/runner is **Bun** (not npm/yarn/pnpm —
-  `bun install`, `bun run <script>`, `bunx`).
+- **Build/dev:** Vite+ 1.4 (Vite 8 / Rolldown), with **Bun 1.4.4** as package
+  manager/runner (`bun install`, `bun run <script>`, `bunx`). Node 24 LTS runs
+  the tooling; Vite+ requires `^22.18.0 || ^24.11.0 || >=26.0.0`. A global
+  `vp` installation is optional: package scripts use the installed local CLI.
 - **Styling:** Tailwind CSS v4 (CSS-first config, no `tailwind.config.js` — see
   `src/style.css`) + DaisyUI 5.
 - **State:** Pinia (setup-store syntax — `defineStore(id, () => {...})`, not the
@@ -20,10 +22,17 @@ Vue 3 SPA for lychee, a self-hosted manga/comic/ebook media server. See the
 - **Routing:** Vue Router.
 - **API client:** `openapi-fetch`, typed from a generated OpenAPI schema.
 - **Testing:** Vitest + `@vue/test-utils`, `happy-dom` environment.
-- **No ESLint/Prettier configured yet.** The repo's `PostToolUse` formatter hook
-  is a no-op until `frontend/node_modules/.bin/{eslint,prettier}` exist — don't
-  assume either runs. Match surrounding code style by hand; `vue-tsc` is the only
-  automated gate today.
+- **Lint/format:** Oxlint and Oxfmt through Vite+ (`bun run lint`, `bun run
+  fmt`). `bun run check` checks formatting, lints, then runs `vue-tsc`. Generated
+  API types and the MSW worker are excluded from formatting.
+- **Native TypeScript:** `typescript` is an exact alias to
+  `typescript-native-bridge@6.0.3-bridge.19.tsgo.7.0.2`, matching Bannered Mare.
+  It preserves the TypeScript 6.0.3 compiler API for Vue tooling while running
+  TypeScript 7.0.2's native checker. `vue-tsc` must print `TNB ACTIVE`. Keep the
+  alias pinned and retain `vue-tsc`: stock TypeScript 7 cannot check Vue SFCs.
+  The bridge supports glibc Linux, macOS, and Windows; Alpine/musl is unsupported.
+  Vite+'s standalone type-check is disabled because it cannot resolve SFC props;
+  type-aware lint stays enabled. Do not add a blanket `*.vue` module shim.
 - **No path aliases** — imports are relative (`../types`, `./client`), not `@/…`.
 
 ## Layout
@@ -63,6 +72,7 @@ Do this in the same change as the API-affecting edit — `bun run build` runs
 schema.
 
 Three layers, don't collapse them:
+
 - **`api/client.ts`** — the raw typed client (`export const api =
   createClient<paths>()`) plus narrowed type aliases pulled from
   `components["schemas"]`. Requests are same-origin; Vite's dev server proxies
@@ -112,8 +122,8 @@ intercepting `fetch`/`EventSource` in the browser.
   reshuffling.
 
 This is dev/demo tooling only — it's not wired into `bun run test` (existing
-tests mock `api/client.ts` directly with `vi.mock`; keep doing that for unit
-tests). Regenerate nothing here after an `api:gen` — the mocks are hand-typed
+smaller unit tests mock `api/client.ts` directly with `vi.mock`; HTTP contract
+tests use test-owned MSW handlers). Regenerate nothing here after an `api:gen` — the mocks are hand-typed
 against `components["schemas"]`, so a backend contract change surfaces as a
 type error in `mocks/` the same way it would anywhere else.
 
@@ -145,15 +155,18 @@ Run from `frontend/` (or via the root `justfile`):
 bun install                 # install deps
 bun run dev --port 5173     # dev server (proxies /api → :8000)
 bun run dev:mock            # dev server against MSW-mocked data — no backend needed
-bun run typecheck           # vue-tsc --noEmit
-bun run test                # vitest run
-bun run build               # vue-tsc --noEmit && vite build (typecheck is part of build)
+bun run fmt                 # format frontend sources/config/docs
+bun run check               # format-check + lint + Vue type-check
+bun run typecheck           # vue-tsc --noEmit (native bridge)
+bun run test                # vp test run (quick iteration)
+bun run test:coverage       # whole-app coverage + enforced floors
+bun run build               # vue-tsc --noEmit && vp build (typecheck is part of build)
 bun run preview             # serve the production build
 bun run api:gen             # regenerate src/api/schema.d.ts from ../backend/openapi.json
 ```
 
-**Full CI gate** (`just fe-check`): `bun run typecheck && bun run test && bun
-run build`. Run this — or at least `typecheck` + `test` — before considering
+**Full CI gate** (`just fe-check`): `bun run check && bun run test:coverage && bun
+run build`. Run this before considering
 frontend work done. A `Stop` hook already blocks on outstanding `vue-tsc`
 errors, but tests are not hooked, so run them explicitly. For UI-visible
 changes, also start `bun run dev` and check the change in a browser — type
@@ -168,6 +181,25 @@ checks and unit tests don't verify visual/interaction correctness.
 - Component tests use `@vue/test-utils`'s `mount()` and assert on rendered
   text/emitted events, not internals — see `components/ErrorState.test.ts`.
 - `happy-dom` is the test DOM environment (not `jsdom`).
+- `src/test/setup.ts` auto-unmounts wrappers and clears DOM/storage; Vitest
+  restores spies and stubbed globals. Attach wrappers to `document.body` for
+  focus/visibility assertions. Use fake timers and controlled promises for races.
+- `api/transport.test.ts` uses real openapi-fetch requests with test-owned MSW
+  handlers (`onUnhandledFrame: "error"` in MSW 3). Existing smaller unit tests
+  still mock `api/client.ts`; the dev harness is not shared test data.
+- Coverage includes all product `.ts`/`.vue` files, including unimported screens.
+  Only tests/helpers, generated/type declarations, mock fixtures, and `main.ts`
+  are excluded. Keep that denominator; do not exclude difficult product code.
+- Global floors match TBM: **85% lines, statements, functions, and branches**,
+  including every product screen. Stronger per-file gates protect core API/state,
+  detail screens, authentication, imports, downloads, and taxonomy editing. See
+  [the testing review](../notes/testing.md) for measured results and remaining gaps.
+- `src/test/appApi.ts` provides a fresh typed, test-owned HTTP dataset per test,
+  request recording, fail-once responses, and task events. It never imports the
+  dev mock database. `src/test/views.ts` mounts real screens with Pinia/memory
+  routing; `observers.ts` controls intersection/resize signals; `player.ts` is a
+  media-player boundary fake. Use component public interfaces and visible UI,
+  not setup internals, when exercising workflows.
 
 ## Component conventions
 
@@ -180,6 +212,14 @@ checks and unit tests don't verify visual/interaction correctness.
 - Route transitions, shimmer/skeleton states, and other "polish" details are
   usually already solved somewhere in `style.css` or an existing component —
   check before adding a new one-off animation.
+
+## Dependency maintenance
+
+See [the dependency review](../notes/dependency-modernization.md) for the
+Bannered Mare comparison, version coupling, verification, and deferred work.
+Keep `vite-plus`, its `vite` alias, and the `vite` override on the same exact
+release. Tests import from `vite-plus/test`; configuration imports from
+`vite-plus`. Preserve the separate test config to avoid loading Tailwind in tests.
 
 ## Architecture reference
 
