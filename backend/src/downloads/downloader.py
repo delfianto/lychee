@@ -35,6 +35,7 @@ from src.downloads.models import DownloadTask
 from src.downloads.provider import Provider, RemoteChapter, get_provider
 from src.media.containers import write_cbz
 from src.media.encode_pool import encode_pages
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
 logger = get_logger(__name__)
@@ -346,7 +347,7 @@ def run_download_queue(
     library = resolve_manga_library(session)
     bind_series_to_manga_library(session, series, library)
     session.commit()
-    store = ThumbnailStore(storage_root / "thumbnails")
+    store = ThumbnailStore(thumbnail_root(session, storage_root))
     series_dir = Path(library.path) / _series_dir_name(series)
 
     processed = 0

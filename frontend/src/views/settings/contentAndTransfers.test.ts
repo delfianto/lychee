@@ -222,7 +222,7 @@ it("persists import preferences and saves, overwrites, applies, and deletes file
   await input(wrapper, "input[type=checkbox]", false);
   expect(wrapper.text()).toContain("Enable local import to use this");
   await input(wrapper, "input[type=checkbox]", true);
-  await wrapper.findAll("select")[0]!.setValue("60");
+  await wrapper.get('[aria-label="Import image quality"]').setValue("60");
   await input(wrapper, '[placeholder="{series} - c{chapter} (v{volume})"]', "{series}_{chapter}");
   await input(wrapper, '[placeholder="Name this pattern"]', " Custom ");
   await click(wrapper, "Save preset");
@@ -250,7 +250,7 @@ it("retries rejected imports and resets the path after successful task completio
     '[placeholder="/data/incoming/Series  or  /data/file.cbz"]',
     " /media/book.cbz ",
   );
-  await wrapper.findAll("select")[1]!.setValue("comic");
+  await wrapper.get('[aria-label="Import kind"]').setValue("comic");
   api.failNext("POST", "/api/import");
   await click(wrapper, "Import");
   expect(messages()).toContain("Rejected by server");

@@ -5,6 +5,12 @@
 
 import { delay, http, HttpResponse } from "msw";
 
+const thumbnailStorage = {
+  path: null as string | null,
+  defaultPath: "/storage/thumbnails",
+  effectivePath: "/storage/thumbnails",
+};
+
 import type { components } from "../api/schema";
 import { kindFor } from "./data/collections";
 import { collectionsDb } from "./data/collections";
@@ -578,6 +584,13 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  http.get("/api/libraries/thumbnail-storage", () => HttpResponse.json(thumbnailStorage)),
+  http.put("/api/libraries/thumbnail-storage", async ({ request }) => {
+    const body = (await request.json()) as { path: string | null };
+    thumbnailStorage.path = body.path;
+    thumbnailStorage.effectivePath = body.path ?? thumbnailStorage.defaultPath;
+    return HttpResponse.json(thumbnailStorage);
+  }),
   // --- libraries --------------------------------------------------------
   http.get("/api/libraries", async () => {
     await delay(80);

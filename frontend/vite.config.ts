@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, lazyPlugins } from "vite-plus";
+import { mockApi } from "./src/mocks/vite";
 
 const useMocks = process.env.VITE_USE_MOCKS === "true";
 
@@ -15,7 +16,7 @@ export default defineConfig({
     // Standalone tsgo cannot resolve SFC props and would report false errors.
     options: { typeAware: true, typeCheck: false },
   },
-  plugins: lazyPlugins(() => [vue(), tailwindcss()]),
+  plugins: lazyPlugins(() => [vue(), tailwindcss(), ...(useMocks ? [mockApi()] : [])]),
   server: {
     port: 5173,
     // Proxy API calls to the FastAPI backend during dev — disabled under

@@ -8,6 +8,8 @@ from src.core.persistence.database import DbSession
 from src.downloads.deps import StorageRootDep
 from src.library import service
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.media import storage as thumbnail_storage
+from src.media.schema import ThumbnailStorageOut, ThumbnailStorageUpdate
 from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
@@ -27,6 +29,16 @@ def create_library(db: DbSession, data: LibraryCreate) -> LibraryOut:
 def scan_all(db: DbSession, storage: StorageRootDep) -> TaskOut:
     """Scan every enabled library in the background; returns the task to follow via SSE."""
     return service.enqueue_scan_all(db, storage)
+
+
+@router.get("/thumbnail-storage")
+def get_thumbnail_storage(db: DbSession) -> ThumbnailStorageOut:
+    return thumbnail_storage.get_thumbnail_storage(db)
+
+
+@router.put("/thumbnail-storage")
+def update_thumbnail_storage(db: DbSession, data: ThumbnailStorageUpdate) -> ThumbnailStorageOut:
+    return thumbnail_storage.update_thumbnail_storage(db, data)
 
 
 @router.patch("/{library_id}")

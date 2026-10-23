@@ -8,13 +8,15 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.core.config import settings
+from src.core.persistence.database import DbSession
 from src.media.render_cache import RenderCache
+from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
 
-def get_thumbnail_store() -> ThumbnailStore:
+def get_thumbnail_store(db: DbSession) -> ThumbnailStore:
     """The on-disk AVIF thumbnail store (overridable in tests)."""
-    return ThumbnailStore(Path(settings.storage_path) / "thumbnails")
+    return ThumbnailStore(thumbnail_root(db))
 
 
 ThumbnailStoreDep = Annotated[ThumbnailStore, Depends(get_thumbnail_store)]

@@ -334,3 +334,17 @@ export async function fetchAbout(): Promise<About | null> {
   const { data } = await api.GET("/api/about");
   return data ?? null;
 }
+
+// --- thumbnail storage --------------------------------------------------------
+
+export async function fetchThumbnailStorage() {
+  const { data, error } = await api.GET("/api/libraries/thumbnail-storage");
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't load thumbnail storage"));
+  return data;
+}
+
+export async function saveThumbnailStorage(path: string | null) {
+  const { data, error } = await api.PUT("/api/libraries/thumbnail-storage", { body: { path } });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't save thumbnail storage"));
+  return data;
+}

@@ -53,6 +53,15 @@ being wrong for one or the other.
 path `<root>/<id[:2]>/<id>.<variant>.avif`, atomic write (temp file +
 `os.replace`), idempotent unless `overwrite=True`.
 
+Thumbnail location is configurable in **Settings → Libraries → Thumbnail storage**.
+The `thumbnail_config` singleton persists an optional absolute path; unset uses
+`STORAGE_PATH/thumbnails`. `media/storage.py` resolves that choice for both lazy
+serving and background scan/download/import/provider jobs. The API
+(`GET`/`PUT /api/libraries/thumbnail-storage`) checks that the folder can be
+created and written before saving. Switching folders leaves existing thumbnails
+in place; cache misses regenerate in the selected folder. Original media,
+canonical covers, and the page-render cache keep their existing locations.
+
 ## Covers: a separate mechanism from thumbnails
 
 `backend/src/catalog/media.py` maintains a canonical on-disk `Cover.avif`
