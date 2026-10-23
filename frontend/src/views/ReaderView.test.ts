@@ -85,9 +85,11 @@ it("honors right-to-left page keys and click zones", async () => {
   expect(wrapper.get("img").attributes("alt")).toBe("Page 2");
   await key("ArrowRight");
   expect(wrapper.get("img").attributes("alt")).toBe("Page 1");
-  await wrapper.get('[aria-label="Previous page"]').trigger("click");
+  const area = wrapper.get('[aria-label="Reading area"]');
+  vi.spyOn(area.element, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 600));
+  await area.trigger("click", { clientX: 50 });
   expect(wrapper.get("img").attributes("alt")).toBe("Page 2");
-  await wrapper.get('[aria-label="Next page"]').trigger("click");
+  await area.trigger("click", { clientX: 350 });
   expect(wrapper.get("img").attributes("alt")).toBe("Page 1");
 });
 
@@ -123,7 +125,7 @@ it("renders double and strip modes and ignores page keys in strip mode", async (
   expect(wrapper.find('[aria-label="Next page"]').exists()).toBe(false);
   await key("ArrowRight");
   expect(putProgress).not.toHaveBeenCalled();
-  await wrapper.get(".overflow-y-auto").trigger("click");
+  await wrapper.get('[aria-label="Reading area"]').trigger("click");
   expect(wrapper.get("header").isVisible()).toBe(false);
 });
 
@@ -139,9 +141,9 @@ it("applies fit and background settings and closes settings before navigating ba
   await key("Escape");
   expect(back).toHaveBeenCalledTimes(1);
   for (const [fit, css] of [
-    ["width", "w-full"],
-    ["both", "object-contain"],
-    ["original", "max-w-none"],
+    ["width", "reader-fit-width"],
+    ["both", "reader-fit-both"],
+    ["original", "reader-fit-original"],
   ] as const) {
     settings.fit = fit;
     await flushPromises();
@@ -174,4 +176,40 @@ it("ignores an older chapter load that finishes after a route change", async () 
   await flushPromises();
   expect(wrapper.get("img").attributes("src")).toBe("/api/chapters/two/pages/1");
   expect(fetchSeries).not.toHaveBeenCalledWith("old");
+});
+
+it("keeps click navigation on the scrolling surface and resets scroll for each new page or fit", async () => {
+  const { wrapper } = await render();
+  const area = wrapper.get('[aria-label="Reading area"]');
+  const element = area.element as HTMLElement;
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 600));
+  element.scrollTop = 500;
+  element.scrollLeft = 250;
+  await area.trigger("click", { clientX: 350 });
+  await flushPromises();
+  expect(wrapper.get("img").attributes("alt")).toBe("Page 2");
+  expect(element.scrollTop).toBe(0);
+  expect(element.scrollLeft).toBe(0);
+  await area.trigger("click", { clientX: 50 });
+  expect(wrapper.get("img").attributes("alt")).toBe("Page 1");
+  await area.trigger("click", { clientX: 200 });
+  expect(wrapper.get("header").isVisible()).toBe(false);
+  await area.trigger("click", { clientX: 200 });
+  expect(wrapper.get("header").isVisible()).toBe(true);
+  element.scrollTop = 500;
+  useReaderSettings().fit = "width";
+  await flushPromises();
+  expect(element.scrollTop).toBe(0);
+});
+
+it("gives the last unpaired page the whole width in double mode", async () => {
+  const { wrapper } = await render();
+  useReaderSettings().mode = "double";
+  await flushPromises();
+  const area = wrapper.get('[aria-label="Reading area"]');
+  expect((area.element as HTMLElement).style.getPropertyValue("--reader-columns")).toBe("2");
+  await wrapper.get('[aria-label="Page"]').setValue(3);
+  await flushPromises();
+  expect(wrapper.findAll("img")).toHaveLength(1);
+  expect((area.element as HTMLElement).style.getPropertyValue("--reader-columns")).toBe("1");
 });
