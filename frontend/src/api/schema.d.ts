@@ -1214,6 +1214,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/{task_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Task
+         * @description Cancel the complete operation, including its active image work.
+         */
+        post: operations["cancel_task_api_tasks__task_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/downloads": {
         parameters: {
             query?: never;
@@ -1735,6 +1755,12 @@ export interface components {
             phase?: string | null;
             /** Detail */
             detail?: string | null;
+            /** Phases */
+            phases?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Sizebytes */
             sizeBytes?: number | null;
         };
@@ -2195,6 +2221,14 @@ export interface components {
         };
         /** SyncJobOut */
         SyncJobOut: {
+            /** Taskid */
+            taskId?: string | null;
+            /** Phases */
+            phases?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Id */
             id: string;
             /** Kind */
@@ -2265,6 +2299,12 @@ export interface components {
             result?: {
                 [key: string]: unknown;
             } | null;
+            /** Phases */
+            phases?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /** TaxonomyCreate */
         TaxonomyCreate: {
@@ -4749,6 +4789,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    cancel_task_api_tasks__task_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

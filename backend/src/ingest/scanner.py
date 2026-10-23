@@ -17,6 +17,7 @@ planned — CBZ + image directories cover the common cases.)
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,14 +34,22 @@ from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.ingest.lychee_info import LYCHEE_INFO_FILENAME, LycheeInfoParseError, parse_lychee_info
 from src.ingest.parser import parse
-from src.integrations.sync import SyncCancelled, sync_jobs
+from src.integrations.sync import sync_jobs
 from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
+from src.tasks.concurrency import parallel_map
+from src.tasks.context import checkpoint, report_phase
+from src.tasks.queue import queue
 
 logger = get_logger(__name__)
 
 _ARCHIVE_KINDS = {".cbz": "cbz", ".zip": "zip"}  # the reader's supported archive kinds
 _HASH_CHUNK = 64 * 1024
+
+
+_inspections: ContextVar[dict[Path, tuple[int, float, str, int | None]] | None] = ContextVar(
+    "scan_inspections", default=None
+)
 
 
 @dataclass
@@ -82,6 +91,7 @@ def _signature(path: Path) -> tuple[int, float, str]:
         size = 0
         mtime = path.stat().st_mtime
         for media in media_files:
+            checkpoint()
             stat = media.stat()
             size += stat.st_size
             mtime = max(mtime, stat.st_mtime)
@@ -109,6 +119,7 @@ def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
     found: list[Candidate] = []
 
     def visit(directory: Path) -> None:
+        checkpoint()
         entries = sorted(
             p for p in directory.iterdir() if not p.name.startswith(".") and p.name != "temp"
         )
@@ -157,6 +168,16 @@ def _gallery_display_title(works_name: str, artist: str | None) -> str:
 
 
 def scan_library(
+    session: Session, library: Library, *, on_progress: Callable[[int, str], None] | None = None
+) -> ScanSummary:
+    token = _inspections.set({})
+    try:
+        return _scan_library(session, library, on_progress=on_progress)
+    finally:
+        _inspections.reset(token)
+
+
+def _scan_library(
     session: Session,
     library: Library,
     *,
@@ -192,30 +213,75 @@ def scan_library(
         detail=f"Scanning {root}",
     )
 
-    try:
-        for index, entry in enumerate(entries, start=1):
-            sync_jobs.check_state(scan_job.id)
-            pct = round(index / total_entries * 100)
-            _ = sync_jobs.update(
-                scan_job.id,
-                status="running",
-                progress=pct,
-                detail=f"Indexing {entry.name} in {root}",
+    # Inspect files/containers concurrently; reconcile ORM rows only on this thread.
+    # Immutable prior values cross the worker boundary, never sessions or ORM objects.
+    def candidates():
+        for entry in entries:
+            checkpoint()
+            if entry.is_dir():
+                yield from resolve_books(entry, root)
+            elif _archive_kind(entry.name):
+                yield _candidate(entry, root, root, _archive_kind(entry.name) or "cbz")
+
+    planned = []
+    for candidate in candidates():
+        prior = existing.get(candidate.rel)
+        planned.append(
+            (
+                candidate,
+                prior.file_size if prior else None,
+                prior.file_last_modified if prior else None,
+                prior.page_count if prior else None,
             )
-            if gallery and entry.is_dir():
-                _ingest_artist(session, library, entry, root, existing, seen, summary)
-            else:
-                _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
-            if on_progress is not None:
-                on_progress(pct, entry.name)
-    except SyncCancelled:
-        session.flush()
-        return summary
+        )
+
+    def inspect(item):
+        candidate, prior_size, prior_mtime, prior_pages = item
+        checkpoint()
+        size, mtime, partial_hash = _signature(candidate.path)
+        unchanged = (
+            prior_size == size
+            and prior_mtime is not None
+            and abs(
+                (prior_mtime if prior_mtime.tzinfo else prior_mtime.replace(tzinfo=UTC)).timestamp()
+                - mtime
+            )
+            < 2
+        )
+        pages = prior_pages if unchanged else _page_count(candidate)
+        return candidate.path, (size, mtime, partial_hash, pages)
+
+    cache = _inspections.get()
+    report_phase("inspect", 0, len(planned), "Inspecting files")
+    for completed, (path, result) in enumerate(
+        parallel_map(inspect, planned, workers=queue.sync_workers), 1
+    ):
+        if cache is not None:
+            cache[path] = result
+        report_phase("inspect", completed, len(planned), str(path.relative_to(root)))
+
+    for index, entry in enumerate(entries, start=1):
+        checkpoint()
+        sync_jobs.check_state(scan_job.id)
+        pct = round(index / total_entries * 100)
+        _ = sync_jobs.update(
+            scan_job.id,
+            status="running",
+            progress=round(pct * 0.5),
+            detail=f"Indexing {entry.name} in {root}",
+        )
+        if gallery and entry.is_dir():
+            _ingest_artist(session, library, entry, root, existing, seen, summary)
+        else:
+            _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
+        report_phase("index", index, total_entries, entry.name)
+        if on_progress is not None:
+            on_progress(round(pct * 0.5), entry.name)
 
     _ = sync_jobs.update(
         scan_job.id,
-        status="done",
-        progress=100,
+        status="running",
+        progress=50,
         detail=f"Indexed {summary.series_added} series, {summary.books_added} book(s)",
     )
 
@@ -365,6 +431,7 @@ def _ingest_series(
 
     chapters: list[Chapter] = []
     for candidate in candidates:
+        checkpoint()
         book = _reconcile_book(session, library, series, candidate, existing, seen, summary)
         if book is None:
             continue
@@ -453,13 +520,19 @@ def _reconcile_book(
     summary: ScanSummary,
 ) -> Book | None:
     prior = existing.get(candidate.rel)
-    size, mtime, partial_hash = _signature(candidate.path)
+    cache = _inspections.get()
+    inspected = cache.get(candidate.path) if cache is not None else None
+    if inspected is not None:
+        size, mtime, partial_hash, inspected_pages = inspected
+    else:
+        size, mtime, partial_hash = _signature(candidate.path)
+        inspected_pages = None
 
     if prior is not None:
         seen.add(candidate.rel)
         if prior.file_size == size and _same_mtime(prior, mtime):
             return prior  # unchanged — skip the container open
-        pages = _page_count(candidate)
+        pages = inspected_pages if inspected is not None else _page_count(candidate)
         if pages is None:
             return prior
         prior.file_size = size
@@ -469,7 +542,7 @@ def _reconcile_book(
         summary.books_updated += 1
         return prior
 
-    pages = _page_count(candidate)
+    pages = inspected_pages if inspected is not None else _page_count(candidate)
     if pages is None:
         return None
 

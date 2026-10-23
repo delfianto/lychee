@@ -18,7 +18,7 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.catalog.media import materialize_series_cover
+from src.catalog.media import materialize_series_cover, warm_series_covers
 from src.catalog.metadata import apply_metadata
 from src.catalog.models import Chapter, Library, Series
 from src.collections.sync import apply_list, reconcile_account_flags
@@ -37,6 +37,8 @@ from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import password_grant, refresh_grant
 from src.providers.mangadex_client import API_BASE, USER_AGENT
 from src.providers.mangadex_lists import LIST_LOCK
+from src.tasks.concurrency import parallel_map
+from src.tasks.context import checkpoint, report_phase
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -131,6 +133,7 @@ def _upsert_series(
     status: str | None,
     *,
     fetch_covers: bool,
+    warm_cover: bool = True,
 ) -> Series:
     """Create/update the Series for a MangaDex manga, matched by provider id **globally** — so
     a scanned-and-matched series is updated in place, never duplicated. Applies metadata and,
@@ -155,7 +158,7 @@ def _upsert_series(
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
     if status in _READING_STATUSES:
         series.library_status = status  # MangaDex wins on pull
-    if fetch_covers and series.cover_source:
+    if warm_cover and fetch_covers and series.cover_source:
         # Eagerly materialize so library grids don't blank while first cover request
         # hits the CDN + AVIF encode on the request path.
         store = ThumbnailStore(thumbnail_root(session))
@@ -166,6 +169,7 @@ def _upsert_series(
 def _safe_metadata(provider: MangaDexProvider, md_id: str, language: str) -> SeriesMetadata | None:
     """Fetch one manga's metadata; None on any provider error (skip, don't fail the sync)."""
     try:
+        checkpoint()
         return provider.get_metadata(md_id, language=language)
     except httpx.HTTPError, KeyError, TypeError, ValueError:
         return None
@@ -177,6 +181,7 @@ def _sync_lists(session: Session, lists: list[CustomList], series_by_id: dict[st
     reconcile_account_flags(session, lists)
     synced = 0
     for custom in lists:
+        checkpoint()
         if any(mid not in series_by_id for mid in custom.manga_ids):
             logger.warning("mdlist_incomplete_metadata", list_id=custom.provider_list_id)
             continue  # Keep the last complete membership if upstream metadata failed.
@@ -257,6 +262,15 @@ def _sync_work() -> Work:
         provider = _authed_provider(_access_token(session, config))
         library = _mangadex_library(session)
 
+        job = sync_jobs.create(
+            kind="import",
+            title="MangaDex Account",
+            source="MangaDex",
+            status="running",
+            detail="Fetching account follows and lists from MangaDex",
+        )
+        checkpoint()
+        report_phase("account", 0, 1, "Fetching account")
         on_progress(5, "Fetching account")
         follows = provider.list_follows(language=config.language)
         statuses = provider.reading_status()
@@ -275,18 +289,22 @@ def _sync_work() -> Work:
 
         series_by_id: dict[str, Series] = {}
         total = len(union_ids) or 1
-        job = sync_jobs.create(
-            kind="import",
-            title="MangaDex Account",
-            source="MangaDex",
-            status="running",
-            detail="Fetching account follows and lists from MangaDex",
-        )
+        report_phase("account", 1, 1)
+        report_phase("metadata", 0, len(union_ids), "Fetching manga metadata")
+
+        def fetch_metadata(md_id: str) -> tuple[str, SeriesMetadata | None]:
+            checkpoint()
+            with queue.sync_item_limit.slot():
+                return md_id, meta_by_id.get(md_id) or _safe_metadata(
+                    provider, md_id, config.language
+                )
+
         try:
-            for index, md_id in enumerate(sorted(union_ids), start=1):
+            for index, (md_id, meta) in enumerate(
+                parallel_map(fetch_metadata, sorted(union_ids), workers=queue.sync_workers), start=1
+            ):
                 sync_jobs.check_state(job.id)
                 pct = round(index / total * 90)
-                meta = meta_by_id.get(md_id) or _safe_metadata(provider, md_id, config.language)
                 if meta is None:
                     _ = sync_jobs.create(
                         kind="import",
@@ -304,18 +322,21 @@ def _sync_work() -> Work:
                     detail=f"Pulling {meta.title} from MangaDex",
                 )
                 series_by_id[md_id] = _upsert_series(
-                    session, library, meta, statuses.get(md_id), fetch_covers=config.fetch_covers
+                    session,
+                    library,
+                    meta,
+                    statuses.get(md_id),
+                    fetch_covers=config.fetch_covers,
+                    warm_cover=False,
                 )
                 session.commit()  # commit per series so progress is durable
+                report_phase("metadata", index, len(union_ids), meta.title)
                 on_progress(pct, meta.title)
         except SyncCancelled:
-            return {
-                "synced": len(series_by_id),
-                "lists": 0,
-                "ratings": 0,
-                "readMarked": 0,
-            }
+            raise
 
+        checkpoint()
+        report_phase("lists", 0, 1, "Syncing lists")
         on_progress(95, "Syncing lists")
         _ = sync_jobs.update(job.id, progress=95, detail="Syncing MangaDex lists")
         with LIST_LOCK:
@@ -328,24 +349,39 @@ def _sync_work() -> Work:
                 }.values()
             )
             for custom in lists:
+                checkpoint()
                 for mid in custom.manga_ids:
                     if mid not in series_by_id:
                         meta = _safe_metadata(provider, mid, config.language)
                         if meta is not None:
                             series_by_id[mid] = _upsert_series(
-                                session, library, meta, None, fetch_covers=config.fetch_covers
+                                session,
+                                library,
+                                meta,
+                                None,
+                                fetch_covers=config.fetch_covers,
+                                warm_cover=False,
                             )
             synced_lists = _sync_lists(session, lists, series_by_id)
             session.commit()
+        report_phase("lists", 1, 1)
+        report_phase("ratings", 0, 1, "Syncing ratings")
         on_progress(96, "Syncing ratings")
         rated = _sync_ratings(session, provider, series_by_id)
+        report_phase("ratings", 1, 1)
+        report_phase("reading", 0, 1, "Syncing read markers")
         on_progress(98, "Syncing read markers")
         marked = _sync_read_markers(session, provider, series_by_id)
         session.commit()
+        report_phase("reading", 1, 1)
+        if config.fetch_covers:
+            store = ThumbnailStore(thumbnail_root(session))
+            _ = warm_series_covers(session, store, [series.id for series in series_by_id.values()])
+        checkpoint()
         _ = sync_jobs.update(
             job.id,
-            status="done",
-            progress=100,
+            status="running",
+            progress=99,
             detail=f"Synced {len(series_by_id)} manga from MangaDex",
         )
         return {

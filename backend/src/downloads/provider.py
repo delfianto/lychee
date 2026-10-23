@@ -7,7 +7,7 @@ at startup, and tests register a fake one — no network in the pipeline itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, cast, runtime_checkable
@@ -52,6 +52,18 @@ class DiskDownloadProvider(Protocol):
         data_saver: bool = False,
         on_page: PageProgress | None = None,
     ) -> list[Path]: ...
+
+
+@runtime_checkable
+class StreamingDownloadProvider(Protocol):
+    def iter_pages_to(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        data_saver: bool = False,
+        on_page: PageProgress | None = None,
+    ) -> Iterator[Path]: ...
 
 
 @runtime_checkable

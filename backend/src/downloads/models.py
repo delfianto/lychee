@@ -33,6 +33,7 @@ class DownloadTask(BaseModel):
     phase: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # e.g. "12/40" pages within the current phase
     detail: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phases_json: Mapped[dict[str, dict[str, int]] | None] = mapped_column(JSON, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # What to download, so a queued/paused row survives to be fetched later.

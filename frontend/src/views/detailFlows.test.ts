@@ -12,7 +12,7 @@ import Lightbox from "../components/Lightbox.vue";
 import { useToasts } from "../lib/toast";
 vi.mock("../api/client", async (original) => ({
   ...(await original<typeof import("../api/client")>()),
-  api: (await import("../test/appApi")).testClient(),
+  api: (await import("../test/client")).testClient(),
 }));
 vi.mock("plyr", async () => ({ default: (await import("../test/player")).TestPlayer }));
 const api = useAppApi();

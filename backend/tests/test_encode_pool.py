@@ -37,3 +37,21 @@ def test_encode_pages_parallel_matches_serial(monkeypatch: pytest.MonkeyPatch) -
     # Encoding is deterministic → the parallel results are identical, and in page order.
     assert parallel == serial
     assert len(parallel) == 4
+
+
+def test_thumbnails_share_the_page_encoding_process_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.media.avif import ContentClass
+
+    monkeypatch.setattr(settings, "encode_workers", 2)
+    encode_pool.shutdown()
+    try:
+        pool = encode_pool._get_pool()
+        pages = list(encode_pool.encode_pages([_png(30)]))
+        cover = encode_pool.encode_thumbnail(_png(60), 32, ContentClass.COLOR_ART, None)
+        assert encode_pool._get_pool() is pool
+        assert Image.open(io.BytesIO(pages[0])).format == "AVIF"
+        image = Image.open(io.BytesIO(cover))
+        assert image.format == "AVIF"
+        assert max(image.size) == 32
+    finally:
+        encode_pool.shutdown()

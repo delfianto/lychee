@@ -13,6 +13,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from src.tasks.context import cooperative_wait
+
 
 class TokenBucket:
     def __init__(
@@ -43,4 +45,4 @@ class TokenBucket:
     def acquire(self, tokens: float = 1.0) -> None:
         wait = self.take(tokens)
         if wait > 0:
-            time.sleep(wait)
+            cooperative_wait(wait)

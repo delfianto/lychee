@@ -17,7 +17,10 @@ no fallback format is served.
 
 Pillow's native AVIF encoder, `speed=2` (slow, best ratio — CPU being free).
 A pure function, fanned out on a `ProcessPoolExecutor`
-(`media/encode_pool.py`).
+(`media/encode_pool.py`). Page conversion, covers, and gallery thumbnails share
+that pool, sized by `LYCHEE_ENCODE_WORKERS` (default 1, serialized in-process).
+Bounded I/O workers feed it; cancellation joins active encodes before declaring
+the owning operation stopped. See [ADR 08](08-task-runner.md).
 
 ## Content-aware presets
 

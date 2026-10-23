@@ -19,6 +19,7 @@ from src.library.paths import is_provider_path
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
+from src.tasks.context import checkpoint, report_phase
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -122,58 +123,29 @@ def _summary_dict(summary: ScanSummary) -> dict[str, Any]:
     }
 
 
-def _thumbs_work(library_id: str, storage_root: Path) -> Work:
-    """Background task: warm per-item gallery thumbs with its own 0–100% progress."""
-
-    def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, int]:
-        library = _get(session, library_id)
-        store = ThumbnailStore(thumbnail_root(session, storage_root))
-        on_progress(0, "Starting")
-        # Series covers first (fast), then item thumbs.
-        _ = warm_library_covers(session, store, library.id)
-        on_progress(5, "Series covers done")
-        n = warm_gallery_item_thumbs(session, store, library.id, on_progress=on_progress)
-        return {"thumbsGenerated": n}
-
-    return work
-
-
 def _finish_scan_phases(
     session: Session,
     library: Library,
     storage_root: Path,
     on_progress: Callable[[int, str], None] | None = None,
 ) -> None:
-    """Post-index: commit early, optional manga auto-match, cover warm, gallery thumbs task.
-
-    Gallery item thumbs run as a **separate** ``thumbs`` task so the scan task can finish
-    (catalog usable + UI refresh) while encodes show their own progress bar.
-    """
+    """Keep indexing and all required derivatives in one cancellable operation."""
     session.commit()
-
+    checkpoint()
     if library.kind != "gallery":
-        if on_progress is not None:
-            on_progress(100, "Matching metadata")
+        report_phase("metadata", 0, 1, "Matching metadata")
         catalog_matching.auto_match_library(session, library.id)
         session.commit()
-
-        if on_progress is not None:
-            on_progress(100, "Warming covers")
-        try:
-            store = ThumbnailStore(thumbnail_root(session, storage_root))
-            _ = warm_library_covers(session, store, library.id)
-            session.commit()
-        except Exception:  # noqa: BLE001
-            session.rollback()
-            logger.exception("cover_warm_failed", library_id=library.id)
-        return
-
-    # Gallery: covers + item thumbs on a dedicated task with real 0–100 progress.
-    _ = queue.submit(
-        "thumbs",
-        f"Thumbnails · {library.name}",
-        _thumbs_work(library.id, storage_root),
-    )
+        report_phase("metadata", 1, 1)
+    checkpoint()
+    store = ThumbnailStore(thumbnail_root(session, storage_root))
+    _ = warm_library_covers(session, store, library.id)
+    checkpoint()
+    if library.kind == "gallery":
+        _ = warm_gallery_item_thumbs(session, store, library.id, on_progress=on_progress)
+    session.commit()
+    if on_progress is not None:
+        on_progress(100, "Index and thumbnails complete")
 
 
 def _scan_one_work(library_id: str, storage_root: Path) -> Work:
@@ -195,6 +167,7 @@ def _scan_all_work(storage_root: Path) -> Work:
             if not is_provider_path(library.path)
         ]
         for index, library in enumerate(libraries, start=1):
+            checkpoint()
             summary = scan_library(session, library)
             total.series_added += summary.series_added
             total.books_added += summary.books_added

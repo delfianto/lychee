@@ -50,7 +50,7 @@ import {
   tag as taxonomyTag,
 } from "./data/taxonomy";
 import { coverSvg, galleryImageSvg, pageSvg, svgResponseInit } from "./images";
-import { simulateTask, subscribeTaskStream } from "./taskBus";
+import { simulateTask, subscribeTaskStream, taskSnapshots, cancelTask } from "./taskBus";
 import { decodeCursorOffset, encodeCursor, nowIso, pick, randInt, rngFor, slugify } from "./utils";
 
 type SeriesOut = components["schemas"]["SeriesOut"];
@@ -1116,7 +1116,10 @@ export const handlers = [
   }),
 
   // --- tasks / events -------------------------------------------------------
-  http.get("/api/tasks", () => HttpResponse.json([])),
+  http.get("/api/tasks", () => HttpResponse.json(taskSnapshots())),
+  http.post("/api/tasks/:id/cancel", ({ params }) =>
+    HttpResponse.json(cancelTask(String(params.id))),
+  ),
 
   http.get("/api/events", () => {
     const encoder = new TextEncoder();

@@ -5,6 +5,8 @@
 import { AlertCircle, Gauge, Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
+import PhaseProgress from "../../components/PhaseProgress.vue";
+
 import type { SyncState } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
@@ -20,6 +22,7 @@ interface SyncJobRow {
   progress: number;
   detail: string | null;
   error: string | null;
+  phases: Record<string, Record<string, number>>;
 }
 
 const sync = reactive({
@@ -38,6 +41,7 @@ const statusLabel: Record<string, string> = {
   done: "Done",
   failed: "Failed",
   cancelled: "Cancelled",
+  cancelling: "Cancelling…",
 };
 const statusBadge: Record<string, string> = {
   running: "badge-primary",
@@ -46,6 +50,7 @@ const statusBadge: Record<string, string> = {
   done: "badge-success",
   failed: "badge-error",
   cancelled: "badge-ghost",
+  cancelling: "badge-warning",
 };
 const kindLabel: Record<string, string> = {
   scan: "Index",
@@ -54,7 +59,13 @@ const kindLabel: Record<string, string> = {
 };
 
 const hasActive = computed(() =>
-  jobs.value.some((j) => j.status === "queued" || j.status === "running" || j.status === "paused"),
+  jobs.value.some(
+    (j) =>
+      j.status === "queued" ||
+      j.status === "running" ||
+      j.status === "paused" ||
+      j.status === "cancelling",
+  ),
 );
 const hasRunningOrQueued = computed(() =>
   jobs.value.some((j) => j.status === "queued" || j.status === "running"),
@@ -80,6 +91,7 @@ function applySyncState(data: SyncState | null): void {
     progress: j.progress ?? 0,
     detail: j.detail ?? null,
     error: j.error ?? null,
+    phases: j.phases ?? {},
   }));
 }
 
@@ -270,6 +282,7 @@ onMounted(() => {
               <span>{{ job.error }}</span>
             </div>
 
+            <PhaseProgress :phases="job.phases" />
             <progress
               v-if="job.status === 'running' || job.status === 'paused'"
               class="progress progress-primary mt-2 h-1.5 w-full"

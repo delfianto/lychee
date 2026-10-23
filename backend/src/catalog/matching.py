@@ -23,6 +23,7 @@ from src.downloads.provider import MetadataProvider, get_metadata_provider
 from src.integrations.models import Provider as ProviderConfig
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
+from src.tasks.context import OperationCancelled, checkpoint
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
@@ -148,8 +149,7 @@ def _auto_match_one(
     series.provider_series_id = match.provider_series_id
     meta = provider.get_metadata(match.provider_series_id, language=language)
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
-    if fetch_covers:
-        _ = materialize_series_cover(session, _thumb_store(session), series.id)
+    # The scan warms covers after committing metadata, outside the write transaction.
     return True
 
 
@@ -177,6 +177,7 @@ def auto_match_library(session: Session, library_id: str) -> int:
     )
     matched = 0
     for series in unmatched:
+        checkpoint()
         try:
             if _auto_match_one(
                 session,
@@ -186,6 +187,8 @@ def auto_match_library(session: Session, library_id: str) -> int:
                 fetch_covers=config.fetch_covers,
             ):
                 matched += 1
+        except OperationCancelled:
+            raise
         except Exception as exc:  # noqa: BLE001 - best-effort; one failure shouldn't abort the scan
             logger.warning("auto_match_failed", series=series.title, error=str(exc))
     return matched

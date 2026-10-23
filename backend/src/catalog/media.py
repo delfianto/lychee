@@ -11,26 +11,30 @@ content-hash ETag.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.catalog import adhoc
 from src.catalog.models import Book, Chapter, Library, Series
 from src.catalog.schema import GalleryMediaItem
+from src.core.config import settings
 from src.core.exceptions import BadRequestError, LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
-from src.media.avif import ContentClass, encode, load_image
+from src.media.artifacts import artifact_lock
+from src.media.avif import ContentClass
 from src.media.containers import ImageDirContainer, is_cover_file, media_kind, open_container
+from src.media.encode_pool import encode_thumbnail
 from src.media.render_cache import RenderCache, render_width
-from src.media.thumbnails import ThumbnailStore, ThumbVariant
+from src.media.thumbnails import ThumbnailStore, ThumbVariant, _atomic_write
 from src.media.video import extract_poster_png
+from src.tasks.concurrency import parallel_map
+from src.tasks.context import OperationCancelled, checkpoint, report_phase
 
 logger = get_logger(__name__)
 
@@ -132,6 +136,7 @@ def _raw_cover_source(session: Session, series_id: str) -> bytes | None:
 
     None when nothing is available/readable.
     """
+    checkpoint()
     series = session.get(Series, series_id)
     if series is None:
         return None
@@ -183,15 +188,14 @@ def _on_disk_cover(series_dir: Path) -> Path | None:
 
 def _normalize_cover_avif(data: bytes) -> bytes:
     """Resize (longest edge ≤ 640, never upscaling) + AVIF-encode arbitrary image bytes."""
-    image = load_image(data)
-    image.thumbnail((_COVER_MAX_EDGE, _COVER_MAX_EDGE))
-    return encode(image, content_class=ContentClass.COLOR_ART)
+    return encode_thumbnail(data, _COVER_MAX_EDGE, ContentClass.COLOR_ART, None)
 
 
 def _canonical_cover_bytes(session: Session, series_id: str) -> bytes | None:
     """The canonical hero cover (AVIF): the on-disk ``Cover.avif``/``cover.*``/``folder.*``
     if present (normalized when not already AVIF), else the raw source normalized. None
     when there's no cover source at all. Read-only — never writes."""
+    checkpoint()
     series = session.get(Series, series_id)
     if series is None:
         return None
@@ -206,6 +210,14 @@ def _canonical_cover_bytes(session: Session, series_id: str) -> bytes | None:
 
 
 def write_series_cover(session: Session, series_id: str, series_dir: Path) -> bool:
+    with artifact_lock(str(series_dir / _COVER_FILE)):
+        checkpoint()
+        if (series_dir / _COVER_FILE).is_file():
+            return False
+        return _write_series_cover(session, series_id, series_dir)
+
+
+def _write_series_cover(session: Session, series_id: str, series_dir: Path) -> bool:
     """Write ``<series_dir>/Cover.avif`` (normalized AVIF of the raw source) so a managed
     series' cover is a portable file beside its books. Best-effort (swallows failures);
     returns whether it wrote."""
@@ -214,6 +226,8 @@ def write_series_cover(session: Session, series_id: str, series_dir: Path) -> bo
         return False
     try:
         _write_bytes_atomic(series_dir / _COVER_FILE, _normalize_cover_avif(raw))
+    except OperationCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001 - cover writing must never break import/download
         logger.warning("cover_write_failed", series_id=series_id, error=str(exc))
         return False
@@ -221,10 +235,8 @@ def write_series_cover(session: Session, series_id: str, series_dir: Path) -> bo
 
 
 def _write_bytes_atomic(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.tmp")
-    _ = tmp.write_bytes(data)
-    os.replace(tmp, path)
+    checkpoint()
+    _atomic_write(path, data)
 
 
 def generate_series_cover(
@@ -243,6 +255,8 @@ def generate_series_cover(
         return False
     try:
         store.generate(series_id, source, ThumbVariant.COVER, overwrite=overwrite)
+    except OperationCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001 - warming must never break the download/scan
         logger.warning("cover_generate_failed", series_id=series_id, error=str(exc))
         return False
@@ -250,6 +264,14 @@ def generate_series_cover(
 
 
 def materialize_series_cover(
+    session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
+) -> bool:
+    with artifact_lock(f"source:{store.root}:{series_id}"):
+        checkpoint()
+        return _materialize_series_cover(session, store, series_id, overwrite=overwrite)
+
+
+def _materialize_series_cover(
     session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
 ) -> bool:
     """Download/resolve the cover source once and write both thumbnail variants (cover +
@@ -272,6 +294,8 @@ def materialize_series_cover(
         raw = source
     try:
         store.generate_all(series_id, raw, overwrite=overwrite)
+    except OperationCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001 - cover warm must never break callers
         logger.warning("cover_materialize_failed", series_id=series_id, error=str(exc))
         return False
@@ -299,10 +323,27 @@ def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str
 
 def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
     """Warm cover + detail thumbnails for every series in a library (best-effort)."""
+    series_ids = list(session.scalars(select(Series.id).where(Series.library_id == library_id)))
+    return warm_series_covers(session, store, series_ids)
+
+
+def warm_series_covers(session: Session, store: ThumbnailStore, series_ids: list[str]) -> int:
+    """Warm independent covers concurrently without sharing ORM sessions."""
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    def warm(series_id: str) -> bool:
+        checkpoint()
+        with factory() as worker_session:
+            return materialize_series_cover(worker_session, store, series_id)
+
+    total = len(series_ids)
+    report_phase("covers", 0, total, "Generating covers")
     warmed = 0
-    for series_id in session.scalars(select(Series.id).where(Series.library_id == library_id)):
-        if materialize_series_cover(session, store, series_id):
-            warmed += 1
+    for completed, generated in enumerate(
+        parallel_map(warm, series_ids, workers=settings.encode_workers), 1
+    ):
+        warmed += int(generated)
+        report_phase("covers", completed, total, f"Covers {completed}/{total}")
     return warmed
 
 
@@ -436,6 +477,8 @@ def ensure_gallery_item_thumb(
                 content_class=ContentClass.PHOTO,
                 overwrite=overwrite,
             )
+    except OperationCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001 - best-effort warm / on-demand
         logger.warning("gallery_thumb_failed", series_id=series_id, index=index, error=str(exc))
         return False
@@ -485,20 +528,30 @@ def warm_gallery_item_thumbs(
     )
     if not series_ids:
         return 0
-    warmed = 0
-    total = len(series_ids)
-    for n, series_id in enumerate(series_ids, start=1):
+    jobs = []
+    for series_id in series_ids:
+        checkpoint()
         book = _first_book(session, series_id)
-        if book is None or book.page_count <= 0:
-            if on_progress is not None:
-                on_progress(round(n / total * 100), f"Series {n}/{total}")
-            continue
-        for index in range(book.page_count):
-            if ensure_gallery_item_thumb(session, store, series_id, index):
-                warmed += 1
+        if book is not None:
+            jobs.extend((series_id, index) for index in range(book.page_count))
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    def warm(item: tuple[str, int]) -> bool:
+        checkpoint()
+        with factory() as worker_session:
+            return ensure_gallery_item_thumb(worker_session, store, *item)
+
+    total = len(jobs)
+    report_phase("thumbnails", 0, total, "Generating gallery thumbnails")
+    warmed = 0
+    for completed, generated in enumerate(
+        parallel_map(warm, jobs, workers=settings.encode_workers), 1
+    ):
+        warmed += int(generated)
+        detail = f"Thumbnails {completed}/{total} · {warmed} new"
+        report_phase("thumbnails", completed, total, detail)
         if on_progress is not None:
-            # Honest 0–100 across series so ActivityIndicator moves during encodes.
-            on_progress(round(n / total * 100), f"Thumbs {n}/{total} series · {warmed} new")
+            on_progress(50 + round(completed / max(total, 1) * 50), detail)
     return warmed
 
 

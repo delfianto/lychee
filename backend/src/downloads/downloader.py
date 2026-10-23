@@ -31,14 +31,21 @@ from src.catalog.media import generate_series_cover, write_series_cover
 from src.catalog.models import Book, Chapter, Library, Series
 from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
-from src.downloads.cancel import DownloadCancelled, check_cancelled, clear_cancel, is_cancelled
+from src.downloads.cancel import DownloadCancelled, check_cancelled, is_cancelled
 from src.downloads.models import DownloadTask
-from src.downloads.provider import DiskDownloadProvider, Provider, RemoteChapter, get_provider
+from src.downloads.provider import (
+    DiskDownloadProvider,
+    Provider,
+    RemoteChapter,
+    StreamingDownloadProvider,
+    get_provider,
+)
 from src.media.containers import write_cbz
 from src.media.encode_pool import encode_pages
 from src.media.staging import workspace
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
+from src.tasks.context import OperationCancelled, current_operation, report_phase
 
 logger = get_logger(__name__)
 _CLAIM_LOCK = threading.Lock()
@@ -178,6 +185,29 @@ def _parse_published(value: str | None) -> datetime | None:
         return None
 
 
+def _phase(session: Session, task: DownloadTask, name: str, done: int, total: int) -> None:
+    check_cancelled(task.series_id)
+    phases = dict(task.phases_json or {})
+    phases[name] = {"completed": done, "total": total}
+    if name == "fetching" and total > 0 and phases.get("encoding", {}).get("total", 0) == 0:
+        phases["encoding"] = {"completed": 0, "total": total}
+    task.phases_json = phases
+    task.phase = name
+    task.detail = f"{done}/{total}"
+    weights = {"fetching": 45, "encoding": 45, "thumbnails": 10}
+    task.progress = min(
+        99,
+        round(
+            sum(
+                weights.get(key, 0) * value["completed"] / max(value["total"], 1)
+                for key, value in phases.items()
+            )
+        ),
+    )
+    session.commit()
+    report_phase(name, done, total, f"{task.chapter_label}: {name} {done}/{total}")
+
+
 def _download_chapter(
     session: Session,
     *,
@@ -191,54 +221,67 @@ def _download_chapter(
 ) -> Chapter:
     label = task.chapter_label
 
+    total_pages = 0
+
     def _on_fetch(done: int, total: int) -> None:
-        check_cancelled(series.id)
-        task.phase = "fetching"
-        task.detail = f"{done}/{total}"
-        task.progress = int(done / max(total, 1) * 50)
+        nonlocal total_pages
+        total_pages = total
+        _phase(session, task, "fetching", done, total)
         if on_progress is not None:
             on_progress(task.progress, f"Fetching {label} ({done}/{total})")
-        session.commit()
 
-    task.phase = "fetching"
-    task.detail = None
-    task.progress = 0
-    session.commit()
+    task.phases_json = {
+        "fetching": {"completed": 0, "total": 0},
+        "encoding": {"completed": 0, "total": 0},
+        "thumbnails": {"completed": 0, "total": 1},
+    }
+    _phase(session, task, "fetching", 0, 0)
 
     rel = chapter_path_rel(series, remote)
     dest = Path(library.path) / rel
     with workspace(Path(library.path), prefix="download") as work:
-        if isinstance(provider, DiskDownloadProvider):
-            pages = provider.fetch_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+        pages = []
+        if isinstance(provider, StreamingDownloadProvider):
+            sources = provider.iter_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+        elif isinstance(provider, DiskDownloadProvider):
+            sources = iter(
+                provider.fetch_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+            )
         else:
-            pages = []
             for index, data in enumerate(
                 provider.fetch_pages(remote, data_saver=data_saver, on_page=_on_fetch)
             ):
                 path = work / f"{index:04d}.source"
                 path.write_bytes(data)
                 pages.append(path)
-        check_cancelled(series.id)
-        if not pages:
-            raise BadRequestError("The provider returned no readable pages")
-        total = len(pages)
+            sources = iter(pages)
+        if not isinstance(provider, StreamingDownloadProvider):
+            pages = list(sources)
+            total_pages = len(pages)
+            sources = iter(pages)
+            _phase(session, task, "fetching", total_pages, total_pages)
+
+        def raw_pages():
+            for path in sources:
+                check_cancelled(series.id)
+                yield path.read_bytes()
 
         def _on_encode(done: int) -> None:
-            check_cancelled(series.id)
-            task.phase = "encoding"
-            task.detail = f"{done}/{total}"
-            task.progress = 50 + int(done / total * 50)
+            _phase(session, task, "encoding", done, total_pages)
             if on_progress is not None:
-                on_progress(task.progress, f"Encoding {label} ({done}/{total})")
-            session.commit()
+                on_progress(task.progress, f"Encoding {label} ({done}/{total_pages})")
 
-        task.phase = "encoding"
-        task.detail = f"0/{total}"
-        session.commit()
         staged = work / "chapter.cbz"
-        page_count, size = write_cbz(
-            staged, encode_pages(path.read_bytes() for path in pages), on_page=_on_encode
-        )
+        encoded = encode_pages(raw_pages())
+        try:
+            page_count, size = write_cbz(staged, encoded, on_page=_on_encode)
+        finally:
+            encoded.close()
+            close = getattr(sources, "close", None)
+            if close is not None:
+                close()
+        if page_count == 0:
+            raise BadRequestError("The provider returned no readable pages")
         check_cancelled(series.id)
         dest.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(dest)  # same library filesystem: publish the complete archive atomically
@@ -263,7 +306,7 @@ def _download_chapter(
         language=remote.language,
         group_name=remote.group_name,
         source_uploaded_at=_parse_published(remote.published_at),
-        page_count=len(pages),
+        page_count=page_count,
         provider=provider.id,
         provider_chapter_id=remote.provider_chapter_id,
     )
@@ -371,7 +414,14 @@ def run_download_queue(
     on_progress: Callable[[int, str], None] | None = None,
 ) -> int:
     """Drain the series' ``queued`` rows one at a time into the manga library."""
-    clear_cancel(series_id)  # fresh run isn't cancelled unless cancel-all fires mid-flight
+    operation = current_operation.get()
+    if operation is not None:
+
+        def check_series() -> None:
+            if is_cancelled(series_id):
+                raise DownloadCancelled(f"download cancelled for series {series_id}")
+
+        operation.checks.append(check_series)
     series = session.get(Series, series_id)
     if series is None:
         return 0
@@ -402,31 +452,47 @@ def run_download_queue(
             row.detail = None
             row.error = None
             session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
+        row_id = row.id
         try:
             if not row.remote_json:
                 raise ValueError("queued download is missing chapter data")
             remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
-            _download_chapter(
-                session,
-                series=series,
-                library=library,
-                remote=remote,
-                provider=provider,
-                task=row,
-                data_saver=data_saver,
-                on_progress=on_progress,
-            )
+            if row.chapter_id is None:
+                _download_chapter(
+                    session,
+                    series=series,
+                    library=library,
+                    remote=remote,
+                    provider=provider,
+                    task=row,
+                    data_saver=data_saver,
+                    on_progress=on_progress,
+                )
+            _phase(session, row, "thumbnails", 0, 1)
+            _ = write_series_cover(session, series_id, series_dir)
+            check_cancelled(series_id)
+            _ = generate_series_cover(session, store, series_id)
+            _phase(session, row, "thumbnails", 1, 1)
             row.status = "done"
             row.progress = 100
             row.phase = None
             row.detail = None
-        except DownloadCancelled:
-            row.status = "failed"
-            row.error = "cancelled"
-            row.phase = None
-            row.detail = None
+        except OperationCancelled:
+            # DELETE may have removed the active row already. An UPDATE tolerates
+            # that race while ORM flushing a deleted instance would fail.
+            session.rollback()
+            session.execute(
+                update(DownloadTask)
+                .where(DownloadTask.id == row_id)
+                .values(
+                    status="cancelled",
+                    error="cancelled",
+                    phase=None,
+                    detail=None,
+                )
+            )
             session.commit()
-            break
+            raise
         except Exception as exc:  # noqa: BLE001 - record failure on the row, keep draining
             row.status = "failed"
             row.error = str(exc)
@@ -434,13 +500,11 @@ def run_download_queue(
             row.detail = None
         session.commit()  # persist the row's final status so the table settles
         if row.status == "done":
-            # portable Cover.avif beside the series folder, then the derived grid thumbnail
-            _ = write_series_cover(session, series_id, series_dir)
-            _ = generate_series_cover(session, store, series_id)
             processed += 1
             if on_progress is not None:
                 on_progress(100, row.chapter_label)
         if is_cancelled(series_id):
             break
-    clear_cancel(series_id)
+    if is_cancelled(series_id):
+        raise DownloadCancelled(f"download cancelled for series {series_id}")
     return processed

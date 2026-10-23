@@ -88,9 +88,12 @@ thumbnail store / render cache), overridden in tests via
 `app.dependency_overrides`.
 
 **Background work** (`src/tasks/queue.py`) runs on a small `ThreadPoolExecutor`
-(one worker by default — SQLite has one writer, so more workers wouldn't help
-write throughput), each job getting its own DB session via a `sessionmaker`
-handed to `queue.configure()`. A route validates, calls `queue.submit(...)`,
+(separate download and sync pools with live concurrency limits, default 1), each
+job getting its own DB session via a `sessionmaker`
+handed to `queue.configure()`. Child workers own separate sessions; image work
+shares a bounded process pool. Operations retain ownership through thumbnail
+generation and propagate cancellation via `tasks/context.py`. A route validates,
+calls `queue.submit(...)`,
 and returns `202` with a task id; the browser follows progress over SSE
 (`/api/events`, `src/tasks/events.py`'s `broker`). Tests point the queue at
 their temp-DB session factory — see `tests/conftest.py`. See

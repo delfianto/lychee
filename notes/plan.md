@@ -981,3 +981,16 @@ numbered volumes, and the FE has no label for `volume: null`.
   is never moved; converted imports retain their internal Lychee series/book keys.
 
 See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync details.
+
+### Coordinated download and scan pipelines
+
+- [x] Bounded concurrent MangaDex file fetching, feeding conversion in page order.
+- [x] One CPU pool for page conversion, covers, and gallery thumbnails.
+- [x] Parallel file/container inspection; ORM reconciliation stays on its owner thread.
+- [x] Scans own their thumbnail work; cancellation stops post-index stages too.
+- [x] Download phase counters survive reconnect/restart in the chapter queue rows.
+- [x] Phase sub-bars in downloads, sync, and the global activity list; whole-operation
+      cancellation and reconnect snapshots. Completion waits for child workers.
+- Worker concurrency preferences and generic task history remain in-memory;
+  restarting resets operation limits to 1. Running native encodes finish before
+  cancellation completes; active HTTP requests retain their timeout boundary.

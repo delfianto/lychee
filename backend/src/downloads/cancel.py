@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import threading
 
+from src.tasks.context import OperationCancelled, checkpoint
+
 _lock = threading.Lock()
 _cancelled_series: set[str] = set()
 
 
-class DownloadCancelled(Exception):
+class DownloadCancelled(OperationCancelled):
     """Raised when a download is cancelled mid-chapter."""
 
 
@@ -38,5 +40,6 @@ def is_cancelled(series_id: str) -> bool:
 
 
 def check_cancelled(series_id: str) -> None:
+    checkpoint()
     if is_cancelled(series_id):
         raise DownloadCancelled(f"download cancelled for series {series_id}")
