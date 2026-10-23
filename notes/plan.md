@@ -976,8 +976,8 @@ numbered volumes, and the FE has no label for `volume: null`.
 - Downloads and converted imports use a fixed per-library `temp/` workspace, excluded
   from scans. Source pages and archive encoding stay there until a completed CBZ can
   be published with an atomic rename. Upload staging is `imports/temp/upload-*`.
-- Fresh MangaDex downloads use title-based folders rather than the virtual MangaDex
-  UUID. Existing populated UUID download folders stay in place. Scanned local media
+- MangaDex downloads use stable MangaDex UUID folders rather than titles. Existing
+  title folders are not migrated. Scanned local media
   is never moved; converted imports retain their internal Lychee series/book keys.
 
 See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync details.

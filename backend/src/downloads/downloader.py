@@ -8,7 +8,7 @@ A download runs in two phases so it can be paused and resumed:
 * :func:`run_download_queue` drains those rows one at a time — for each, fetch
   page bytes from the provider, encode each to AVIF (discarding the original),
   pack them into the **manga library** as
-  ``{Series Title}/Vol.XX/Ch.YY.cbz``, and create the Chapter.
+  ``{MangaDex UUID}/Vol.XX/Ch.YY.cbz`` for MangaDex series, and create the Chapter.
 
 Downloads require an enabled ``kind=manga`` library with a real filesystem path.
 """
@@ -105,18 +105,13 @@ def _safe_fs_name(name: str, *, fallback: str = "Untitled") -> str:
 
 
 def _series_dir_name(series: Series) -> str:
-    """Human-readable series folder name (not the nanoid id)."""
+    """Use stable MangaDex IDs for managed downloads; retain other series' paths."""
+    if series.provider == "mangadex" and series.provider_series_id:
+        return _safe_fs_name(series.provider_series_id, fallback=series.id)
     # Reuse an existing single-segment human path_rel when it isn't just the bare id.
     if series.path_rel and "/" not in series.path_rel.strip("/"):
         candidate = series.path_rel.strip("/")
-        virtual_id = candidate == series.provider_series_id
-        # Keep an existing download location stable; fresh provider imports store
-        # the MangaDex UUID as their virtual path, which is not a folder name.
-        root = Path(series.library.path)
-        existing_downloads = (
-            root.is_absolute() and any((root / candidate).rglob("*.cbz")) if virtual_id else False
-        )
-        if candidate and candidate != series.id and (not virtual_id or existing_downloads):
+        if candidate and candidate != series.id:
             return _safe_fs_name(candidate, fallback=_safe_fs_name(series.title))
     return _safe_fs_name(series.title, fallback=series.id)
 
@@ -135,7 +130,7 @@ def _chapter_file_name(number: str, title: str | None = None) -> str:
 
 
 def chapter_path_rel(series: Series, remote: RemoteChapter) -> str:
-    """Relative path under the manga library: ``Series Name/Vol.XX/Ch.YY.cbz``."""
+    """Relative path under the manga library: ``Series Folder/Vol.XX/Ch.YY.cbz``."""
     return "/".join(
         [
             _series_dir_name(series),
@@ -152,7 +147,7 @@ def chapter_path_rel(series: Series, remote: RemoteChapter) -> str:
 
 
 def bind_series_to_manga_library(session: Session, series: Series, library: Library) -> None:
-    """Point the series at the manga library with a human-readable folder name."""
+    """Point the series at the manga library using its download folder name."""
     folder = _series_dir_name(series)
     if series.library_id != library.id:
         series.library_id = library.id

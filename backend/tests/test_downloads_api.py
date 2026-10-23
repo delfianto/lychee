@@ -486,20 +486,23 @@ def test_encoding_failure_cleans_temp_without_publishing(
     assert all(row["status"] == "failed" for row in client.get("/api/downloads").json())
 
 
-def test_fresh_mangadex_uuid_path_uses_title_but_keeps_existing_downloads(
-    db_session: Session, tmp_path: Path
+@pytest.mark.parametrize("existing_path", [None, "uuid", "Human title"])
+def test_mangadex_download_path_uses_uuid_regardless_of_title_or_existing_path(
+    db_session: Session, tmp_path: Path, existing_path: str | None
 ) -> None:
-    from src.downloads.downloader import _series_dir_name
+    from src.downloads.downloader import bind_series_to_manga_library
 
     library = ensure_manga_library(db_session, tmp_path)
     series = make_series(db_session, title="Human title", kind="manga")
     series.library_id = library.id
+    series.provider = "mangadex"
     series.provider_series_id = "f6fc7b4d-085b-4075-9263-345631e6ac93"
-    series.path_rel = series.provider_series_id
+    series.path_rel = series.provider_series_id if existing_path == "uuid" else existing_path
     db_session.commit()
-    assert _series_dir_name(series) == "Human title"
-    assert series.path_rel is not None
-    existing = tmp_path / "f6fc7b4d-085b-4075-9263-345631e6ac93"
-    existing.mkdir()
-    (existing / "existing.cbz").write_bytes(b"existing")
-    assert _series_dir_name(series) == series.provider_series_id
+    bind_series_to_manga_library(db_session, series, library)
+    assert series.path_rel == series.provider_series_id
+    remote = RemoteChapter("chapter-id", "1", 1, None, "en")
+    expected = f"{series.provider_series_id}/Vol.01/Ch.1.cbz"
+    assert chapter_path_rel(series, remote) == expected
+    series.title = "Renamed manga"
+    assert chapter_path_rel(series, remote) == expected

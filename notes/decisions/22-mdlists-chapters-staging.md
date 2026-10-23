@@ -62,7 +62,7 @@ For a manga library rooted at `/library/manga`:
 
 ```text
 /library/manga/temp/download-<job>/    # incomplete source pages + archive
-/library/manga/<Title>/Vol.01/Ch.1.cbz # completed archive
+/library/manga/<MangaDex UUID>/Vol.01/Ch.1.cbz # completed archive
 ```
 
 For converted imports under the storage root `/library`:
@@ -73,9 +73,10 @@ For converted imports under the storage root `/library`:
 /library/imports/<series-id>/<book-key>.cbz
 ```
 
-MangaDex IDs remain provider identifiers in the database. Fresh downloads choose a
-sanitized title folder, with an internal ID suffix on collision. Existing populated
-UUID folders are reused to avoid silently moving files. Scans index local originals
-in place. Transcoded imports use internal Lychee series IDs and source-derived book
-keys; these are not MangaDex identifiers. This change does not migrate existing
-folders or rewrite scanned originals.
+MangaDex downloads use the MangaDex UUID as their series folder, independent of the
+current title or previous `path_rel`. This keeps filesystem names deterministic
+across metadata changes and fresh imports. The initial title-folder policy was
+reverted in favor of stable provider identity. Existing title folders are not moved
+or migrated; their contents must be cleared and downloaded again when resetting a
+library. Scans index local originals in place. Transcoded imports use internal
+Lychee series IDs and source-derived book keys; these are not MangaDex identifiers.
