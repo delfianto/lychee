@@ -118,6 +118,18 @@ describe("library registration and scans", () => {
 });
 
 describe("tracker authorization", () => {
+  it("keeps the site redirect and URL-code instructions for MyAnimeList", async () => {
+    const { wrapper } = await renderView(TrackerConnectModal, {
+      props: { tracker: { id: "myanimelist", name: "MyAnimeList", authKind: "oauth" } },
+    });
+    expect(wrapper.get<HTMLInputElement>('[placeholder="Redirect URI"]').element.value).toBe(
+      window.location.origin,
+    );
+    await input(wrapper, '[placeholder="Client ID"]', "client");
+    await input(wrapper, '[placeholder="Client secret"]', "secret");
+    await click(wrapper, "Get authorize link");
+    expect(wrapper.text()).toContain("from the redirect URL");
+  });
   it("retries OAuth setup and callback failures, preserving the state nonce", async () => {
     const { wrapper } = await renderView(TrackerConnectModal, {
       props: { tracker: { id: "anilist", name: "AniList", authKind: "oauth" } },
@@ -136,7 +148,7 @@ describe("tracker authorization", () => {
     await click(wrapper, "Complete");
     expect(api.writes().at(-1)?.body).toEqual({
       code: "code",
-      redirectUri: "http://localhost",
+      redirectUri: "https://anilist.co/api/v2/oauth/pin",
       state: "nonce",
     });
     expect(wrapper.getComponent(TrackerConnectModal).emitted("connected")).toHaveLength(1);
