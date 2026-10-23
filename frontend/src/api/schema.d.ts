@@ -1359,6 +1359,8 @@ export interface components {
             stats: components["schemas"]["DashboardStats"];
             /** Continuereading */
             continueReading: components["schemas"]["SeriesOut"][];
+            /** Readinglist */
+            readingList: components["schemas"]["SeriesOut"][];
             /** Recentupdates */
             recentUpdates: components["schemas"]["RecentUpdateOut"][];
             /** Recentlyadded */

@@ -56,6 +56,7 @@ describe("read mapping through HTTP", () => {
         HttpResponse.json({
           stats: { series: 1, unreadChapters: 1, reading: 0 },
           continueReading: [item],
+          readingList: [item],
           recentUpdates: [
             { series: item, volume: 1, chapter: "2", updatedAt: new Date().toISOString() },
           ],
@@ -71,6 +72,7 @@ describe("read mapping through HTTP", () => {
       userRating: 7,
       tags: [{ id: "action", group: "genre" }],
     });
+    expect(result.readingList[0]?.id).toBe("s1");
     expect(result.recentUpdates[0]?.updatedAt).toBe("now");
     expect(result.recentlyAdded[0]?.title).toBe("s1");
     server.use(http.get(`${root}/api/dashboard`, denied));

@@ -120,6 +120,7 @@ export async function deleteChapterLocal(chapterId: string): Promise<DeleteChapt
 export interface DashboardData {
   stats: { series: number; unreadChapters: number; reading: number };
   continueReading: Series[];
+  readingList: Series[];
   recentUpdates: RecentUpdate[];
   recentlyAdded: Series[];
 }
@@ -130,6 +131,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return {
     stats: data.stats,
     continueReading: data.continueReading.map(toSeries),
+    readingList: data.readingList.map(toSeries),
     recentUpdates: data.recentUpdates.map(toUpdate),
     recentlyAdded: data.recentlyAdded.map(toSeries),
   };

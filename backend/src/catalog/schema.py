@@ -180,5 +180,6 @@ class DashboardStats(CamelModel):
 class DashboardOut(CamelModel):
     stats: DashboardStats
     continue_reading: list[SeriesOut]
+    reading_list: list[SeriesOut]
     recent_updates: list[RecentUpdateOut]
     recently_added: list[SeriesOut]

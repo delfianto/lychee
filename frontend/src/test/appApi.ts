@@ -278,6 +278,7 @@ export function useAppApi() {
         return json({
           stats: { series: db.series.length, unreadChapters: 2, reading: 1 },
           continueReading: db.series.filter((s) => s.kind !== "gallery"),
+          readingList: db.series.filter((s) => s.libraryStatus === "reading").slice(0, 12),
           recentUpdates: db.series.slice(0, 1).map((series) => ({
             series,
             volume: 1,

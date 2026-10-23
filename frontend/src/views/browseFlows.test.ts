@@ -1,7 +1,7 @@
 import { flushPromises } from "@vue/test-utils";
 import { http, HttpResponse } from "msw";
 import { expect, it, vi } from "vite-plus/test";
-import { useAppApi, makeSeries } from "../test/appApi";
+import { useAppApi, makeSeries, taskEvent } from "../test/appApi";
 import { renderView, click, input } from "../test/views";
 import LibraryHome from "./LibraryHome.vue";
 import LibraryView from "./LibraryView.vue";
@@ -18,6 +18,49 @@ vi.mock("../api/client", async (original) => ({
   api: (await import("../test/appApi")).testClient(),
 }));
 const api = useAppApi();
+
+it("shows the synced reading shelf without local progress and refreshes when sync finishes", async () => {
+  api.db.series = [
+    makeSeries("remote", { title: "Synced title", chapterCount: 0, unreadCount: 0 }),
+  ];
+  api.server.use(
+    http.get("http://localhost/api/dashboard", () =>
+      HttpResponse.json({
+        stats: { series: api.db.series.length, unreadChapters: 0, reading: api.db.series.length },
+        continueReading: [],
+        readingList: api.db.series,
+        recentUpdates: [],
+        recentlyAdded: [],
+      }),
+    ),
+  );
+  const { wrapper } = await renderView(LibraryHome);
+  expect(wrapper.text()).toContain("On your reading list");
+  expect(wrapper.text()).toContain("Synced title");
+  expect(wrapper.text()).not.toContain("Continue reading");
+  expect(wrapper.text()).not.toContain("Recent updates");
+  expect(wrapper.get('[aria-label="See your full reading list"]').attributes("href")).toBe(
+    "/reading",
+  );
+  expect(wrapper.find('a[href="/series/remote"]').exists()).toBe(true);
+  api.db.series.push(makeSeries("next", { title: "Newly synced title", chapterCount: 0 }));
+  taskEvent("import");
+  await vi.waitFor(() => expect(wrapper.text()).toContain("Newly synced title"));
+  wrapper.unmount();
+  const requestCount = api.requests.length;
+  taskEvent("import");
+  await flushPromises();
+  expect(api.requests.length).toBe(requestCount);
+});
+
+it("hides the reading-list rail when the shelf is empty", async () => {
+  api.db.series.forEach((series) => {
+    series.libraryStatus = "completed";
+  });
+  const { wrapper } = await renderView(LibraryHome);
+  expect(wrapper.text()).not.toContain("On your reading list");
+  expect(wrapper.text()).toContain("Recently added");
+});
 
 it("renders dashboard content, retries a failure, and guides an empty library to settings", async () => {
   api.failNext("GET", "/api/dashboard");
