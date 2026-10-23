@@ -21,6 +21,7 @@ interface LibraryRow {
   path: string;
   series: number;
   lastScan: string;
+  managed: boolean;
 }
 const libraries = ref<LibraryRow[]>([]);
 const showAdd = ref(false);
@@ -34,21 +35,34 @@ async function loadLibraries(): Promise<void> {
     id: l.id,
     name: l.name,
     path: l.path,
+    managed: /^[a-z][a-z0-9+.-]*:/i.test(l.path.trim()),
     series: l.seriesCount,
     lastScan: l.lastScan ? relativeTime(l.lastScan) : "never",
   }));
 }
 async function scanAll(): Promise<void> {
-  await scanAllLibraries();
-  toast("Scan started"); // libraries refresh when the scan.done event arrives
+  try {
+    await scanAllLibraries();
+    toast("Scan started");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't start scan", "error");
+  }
 }
 async function scanOne(id: string): Promise<void> {
-  await scanLibrary(id);
-  toast("Scan started");
+  try {
+    await scanLibrary(id);
+    toast("Scan started");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't start scan", "error");
+  }
 }
 async function removeLibrary(id: string): Promise<void> {
-  await deleteLibrary(id);
-  await loadLibraries();
+  try {
+    await deleteLibrary(id);
+    await loadLibraries();
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't remove library", "error");
+  }
 }
 async function onLibraryAdded(): Promise<void> {
   showAdd.value = false;
@@ -60,7 +74,7 @@ const disposeDone = onTaskDone((task) => {
   if (task.kind === "scan") {
     void loadLibraries();
     toast(
-      task.status === "done" ? "Scan complete" : "Scan failed",
+      task.status === "done" ? "Scan complete" : `Scan failed: ${task.detail ?? "Unknown error"}`,
       task.status === "done" ? "success" : "error",
     );
     return;
@@ -100,13 +114,24 @@ onMounted(loadLibraries);
             <div class="font-medium">{{ lib.name }}</div>
             <div class="truncate font-mono text-xs text-base-content/60">{{ lib.path }}</div>
             <div class="text-xs text-base-content/50">
-              {{ lib.series }} series · scanned {{ lib.lastScan }}
+              {{ lib.series }} series
+              <template v-if="lib.managed"> · Managed by account sync</template>
+              <template v-else> · scanned {{ lib.lastScan }}</template>
             </div>
           </div>
-          <button class="btn btn-ghost btn-sm" :disabled="scanning" @click="scanOne(lib.id)">
+          <button
+            v-if="!lib.managed"
+            class="btn btn-ghost btn-sm"
+            :disabled="scanning"
+            @click="scanOne(lib.id)"
+          >
             Scan
           </button>
-          <button class="btn btn-ghost btn-sm text-error" @click="removeLibrary(lib.id)">
+          <button
+            v-if="!lib.managed"
+            class="btn btn-ghost btn-sm text-error"
+            @click="removeLibrary(lib.id)"
+          >
             Remove
           </button>
         </div>

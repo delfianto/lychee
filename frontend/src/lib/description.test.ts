@@ -13,6 +13,29 @@ const SAMPLE = `Moteuchi Kei is a shut-in who spends his life playing "Isekai Ha
 `;
 
 describe("parseMangaDescription", () => {
+  it("recognizes the blank MangaDex tag heading and preserves the full synopsis", () => {
+    const text =
+      "A collection of stories:\r\n\r\n1-3. First story\r\nA long synopsis.\r\n\r\n||TAGS|\r\n|:-|:-\r\n|MALE| action, comedy\r\n|FEMALE| drama\r\n|OTHER| anthology, uncensored";
+    const parsed = parseMangaDescription(text);
+    expect(parsed.synopsis).toBe("A collection of stories:\n\n1-3. First story\nA long synopsis.");
+    expect(parsed.synopsisHtml).not.toContain("||TAGS|");
+    expect(parsed.tagGroups).toEqual([
+      { namespace: "MALE", tags: ["action", "comedy"] },
+      { namespace: "FEMALE", tags: ["drama"] },
+      { namespace: "OTHER", tags: ["anthology", "uncensored"] },
+    ]);
+    expect(synopsisOnly(text)).not.toContain("uncensored");
+  });
+
+  it("keeps prose after a tag table and does not discard incomplete tables", () => {
+    const parsed = parseMangaDescription(
+      "Intro.\n\n|| Tags |\n|:-|:-\n|OTHER| anthology\n\nTranslator's note.",
+    );
+    expect(parsed.synopsis).toBe("Intro.\n\nTranslator's note.");
+    const incomplete = "Intro.\n\n||TAGS|\n|:-|:-\nUnfinished.";
+    expect(parseMangaDescription(incomplete).synopsis).toBe(incomplete);
+  });
+
   it("splits synopsis from the namespace table", () => {
     const p = parseMangaDescription(SAMPLE);
     expect(p.synopsis).toContain("Moteuchi Kei");
