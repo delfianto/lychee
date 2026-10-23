@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 @plugin "daisyui" {
-  themes: dark --default, light;
+  themes:
+    dark --default,
+    light;
 }
 
 /* Popular community themes, authored from their published palettes as full

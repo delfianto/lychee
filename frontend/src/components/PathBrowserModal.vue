@@ -11,7 +11,7 @@ import {
   HardDrive,
   LoaderCircle,
   X,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import type { FsEntry, FsListing } from "../api/client";
@@ -180,8 +180,13 @@ onUnmounted(() => {
       aria-modal="true"
       @click.self="emit('close')"
     >
-      <div ref="modalBox" class="modal-box flex max-h-[min(36rem,90vh)] max-w-xl flex-col gap-0 p-0">
-        <div class="flex items-start justify-between gap-3 border-b border-base-content/10 px-5 py-4">
+      <div
+        ref="modalBox"
+        class="modal-box flex max-h-[min(36rem,90vh)] max-w-xl flex-col gap-0 p-0"
+      >
+        <div
+          class="flex items-start justify-between gap-3 border-b border-base-content/10 px-5 py-4"
+        >
           <div class="min-w-0">
             <h3 class="text-lg font-bold">{{ title }}</h3>
             <p class="mt-0.5 text-xs text-base-content/50">
@@ -210,7 +215,9 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="shrink-0 rounded px-1 py-0.5 hover:bg-base-content/10"
-                :class="i === crumbs.length - 1 ? 'font-medium text-base-content' : 'text-base-content/60'"
+                :class="
+                  i === crumbs.length - 1 ? 'font-medium text-base-content' : 'text-base-content/60'
+                "
                 :disabled="i === crumbs.length - 1"
                 @click="openDir(crumb.path)"
               >
@@ -256,14 +263,22 @@ onUnmounted(() => {
                 <span v-if="createBusy" class="loading loading-spinner loading-xs" />
                 Create
               </button>
-              <button type="button" class="btn btn-ghost btn-sm" :disabled="createBusy" @click="cancelCreate">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="createBusy"
+                @click="cancelCreate"
+              >
                 Cancel
               </button>
             </div>
             <p v-if="createError" class="px-1 text-xs text-error">{{ createError }}</p>
           </div>
 
-          <div v-if="loading" class="flex items-center justify-center gap-2 py-16 text-sm text-base-content/50">
+          <div
+            v-if="loading"
+            class="flex items-center justify-center gap-2 py-16 text-sm text-base-content/50"
+          >
             <LoaderCircle class="size-4 animate-spin" />Loading…
           </div>
           <div v-else-if="error" class="px-3 py-12 text-center text-sm text-error">{{ error }}</div>
@@ -273,7 +288,10 @@ onUnmounted(() => {
           >
             Empty folder
           </div>
-          <ul v-else-if="listing && listing.entries.length > 0" class="menu menu-sm w-full gap-0.5 p-0">
+          <ul
+            v-else-if="listing && listing.entries.length > 0"
+            class="menu menu-sm w-full gap-0.5 p-0"
+          >
             <li v-if="listing.parent">
               <button type="button" class="rounded-lg font-mono" @click="openDir(listing.parent)">
                 <FolderOpen class="size-4 text-base-content/50" />
@@ -306,7 +324,9 @@ onUnmounted(() => {
             {{ selectedFile ?? listing?.path ?? "—" }}
           </div>
           <div class="flex justify-end gap-2">
-            <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">Cancel</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">
+              Cancel
+            </button>
             <button
               type="button"
               class="btn btn-primary btn-sm gap-1"

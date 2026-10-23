@@ -13,17 +13,12 @@ import {
   SkipForward,
   Sun,
   Type,
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { type Component, ref, watch } from "vue";
 
 import SegmentedToggle from "../../components/SegmentedToggle.vue";
 import { useDensity, useListsDefaultTab } from "../../lib/density";
-import {
-  DEFAULT_FONT_SIZE,
-  MAX_FONT_SIZE,
-  MIN_FONT_SIZE,
-  useFontSize,
-} from "../../lib/fontSize";
+import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, useFontSize } from "../../lib/fontSize";
 import { useReaderSettings } from "../../lib/readerSettings";
 import { THEMES, type Mode, useTheme } from "../../lib/theme";
 
@@ -149,7 +144,9 @@ function onFontSizeUp(): void {
     <!-- Appearance + Reader side by side -->
     <div class="grid gap-6 lg:grid-cols-2">
       <section class="flex flex-col gap-3">
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Appearance</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Appearance
+        </h3>
         <div class="card grow bg-base-100">
           <div class="card-body gap-4 p-4">
             <div class="flex items-center justify-between gap-4">
@@ -157,10 +154,17 @@ function onFontSizeUp(): void {
                 <Sun class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <div class="text-sm font-medium">Mode</div>
-                  <div class="text-xs text-base-content/50">Flip between your light &amp; dark theme</div>
+                  <div class="text-xs text-base-content/50">
+                    Flip between your light &amp; dark theme
+                  </div>
                 </div>
               </div>
-              <SegmentedToggle :model-value="mode" :options="themeOptions" aria-label="Theme" @update:model-value="setMode" />
+              <SegmentedToggle
+                :model-value="mode"
+                :options="themeOptions"
+                aria-label="Theme"
+                @update:model-value="setMode"
+              />
             </div>
             <label class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
@@ -181,7 +185,9 @@ function onFontSizeUp(): void {
                 <Layers class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <div class="text-sm font-medium">Default lists tab</div>
-                  <div class="text-xs text-base-content/50">Which kind opens first on the Lists page</div>
+                  <div class="text-xs text-base-content/50">
+                    Which kind opens first on the Lists page
+                  </div>
                 </div>
               </div>
               <select v-model="listsDefaultTab" class="select select-bordered select-sm w-28">
@@ -212,7 +218,9 @@ function onFontSizeUp(): void {
                 <Type class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
                   <div class="text-sm font-medium">Font size</div>
-                  <div class="text-xs text-base-content/50">Scales text and spacing across the app</div>
+                  <div class="text-xs text-base-content/50">
+                    Scales text and spacing across the app
+                  </div>
                 </div>
               </div>
               <button
@@ -240,7 +248,9 @@ function onFontSizeUp(): void {
                 @input="applyFontSize(Number(($event.target as HTMLInputElement).value))"
               />
               <span class="text-base text-base-content/50">A</span>
-              <span class="w-10 shrink-0 text-right text-xs font-medium tabular-nums">{{ draftFontSize }}px</span>
+              <span class="w-10 shrink-0 text-right text-xs font-medium tabular-nums"
+                >{{ draftFontSize }}px</span
+              >
             </div>
             <p
               class="rounded-box surface-border bg-base-200/50 p-3 leading-relaxed text-base-content/80"
@@ -253,10 +263,16 @@ function onFontSizeUp(): void {
       </section>
 
       <section class="flex flex-col gap-3">
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Reader defaults</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Reader defaults
+        </h3>
         <div class="card grow bg-base-100">
           <div class="card-body gap-4 p-4">
-            <div v-for="grp in readerGroups" :key="grp.key" class="flex items-center justify-between gap-4">
+            <div
+              v-for="grp in readerGroups"
+              :key="grp.key"
+              class="flex items-center justify-between gap-4"
+            >
               <div class="flex items-start gap-3">
                 <component :is="grp.icon" class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
@@ -286,7 +302,11 @@ function onFontSizeUp(): void {
                   </div>
                 </div>
               </div>
-              <input v-model="reader.videoAutoPlay" type="checkbox" class="toggle toggle-primary toggle-sm" />
+              <input
+                v-model="reader.videoAutoPlay"
+                type="checkbox"
+                class="toggle toggle-primary toggle-sm"
+              />
             </div>
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
@@ -298,7 +318,11 @@ function onFontSizeUp(): void {
                   </div>
                 </div>
               </div>
-              <input v-model="reader.videoAutoNext" type="checkbox" class="toggle toggle-primary toggle-sm" />
+              <input
+                v-model="reader.videoAutoNext"
+                type="checkbox"
+                class="toggle toggle-primary toggle-sm"
+              />
             </div>
           </div>
         </div>
@@ -312,7 +336,9 @@ function onFontSizeUp(): void {
       <div class="card bg-base-100">
         <div class="card-body gap-4 p-4">
           <div v-for="group in themeGroups" :key="group.label" class="flex flex-col gap-2">
-            <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">{{ group.label }}</div>
+            <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">
+              {{ group.label }}
+            </div>
             <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               <button
                 v-for="t in group.themes"

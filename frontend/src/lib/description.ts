@@ -57,7 +57,10 @@ export function synopsisOnly(raw: string | null | undefined): string {
 }
 
 function parseNamespaceTable(afterHeader: string): DescriptionTagGroup[] {
-  const lines = afterHeader.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = afterHeader
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const groups: DescriptionTagGroup[] = [];
 
   for (const line of lines) {
@@ -76,7 +79,7 @@ function parseNamespaceTable(afterHeader: string): DescriptionTagGroup[] {
     if (cells.length < 2) continue;
     const namespace = cells[0];
     // Skip header repeats and alignment-only cells (|:-|:- → ":-")
-    if (!namespace || /^namespace$/i.test(namespace) || /^[\s:\-]+$/.test(namespace)) continue;
+    if (!namespace || /^namespace$/i.test(namespace) || /^[\s:-]+$/.test(namespace)) continue;
     const tags = cells
       .slice(1)
       .join("|") // tag cell can contain pipes rarely — join remainder
@@ -121,7 +124,7 @@ export function markdownToHtml(src: string): string {
   html = html.replace(/(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)/g, "<em>$1</em>");
 
   // Horizontal rules
-  html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, "<hr class=\"my-2 border-base-300\" />");
+  html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="my-2 border-base-300" />');
 
   // Paragraphs: double newlines
   const blocks = html.split(/\n{2,}/).map((block) => {

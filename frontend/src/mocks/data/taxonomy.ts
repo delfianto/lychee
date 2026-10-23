@@ -86,7 +86,13 @@ const FORMATS = [
 ] as const;
 
 const CONTENT = ["gore", "sexual-violence"] as const;
-export const CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic", "explicit"] as const;
+export const CONTENT_RATINGS = [
+  "safe",
+  "suggestive",
+  "erotica",
+  "pornographic",
+  "explicit",
+] as const;
 export const DEMOGRAPHICS = ["shonen", "shojo", "seinen", "josei"] as const;
 
 const DISPLAY_OVERRIDES: Record<string, string> = {
@@ -98,7 +104,13 @@ const DISPLAY_OVERRIDES: Record<string, string> = {
 };
 
 function humanize(slug: string): string {
-  return DISPLAY_OVERRIDES[slug] ?? slug.split("-").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" ");
+  return (
+    DISPLAY_OVERRIDES[slug] ??
+    slug
+      .split("-")
+      .map((w) => w[0]?.toUpperCase() + w.slice(1))
+      .join(" ")
+  );
 }
 
 interface DefAlias {
@@ -147,7 +159,11 @@ export const CONTENT_IDS = CONTENT.map((s) => `content-${s}`);
 
 // A couple of rows start disabled so the Content settings tab has something
 // to demonstrate the enable/disable toggle against.
-const DISABLED_AT_SEED = new Set(["format-self-published", "content-sexual-violence", "theme-reverse-harem"]);
+const DISABLED_AT_SEED = new Set([
+  "format-self-published",
+  "content-sexual-violence",
+  "theme-reverse-harem",
+]);
 
 let extraTags: Def[] = [];
 

@@ -42,7 +42,9 @@ export async function updateProvider(
 }
 
 export async function disconnectProvider(id: string): Promise<void> {
-  await api.POST("/api/providers/{provider_id}/disconnect", { params: { path: { provider_id: id } } });
+  await api.POST("/api/providers/{provider_id}/disconnect", {
+    params: { path: { provider_id: id } },
+  });
 }
 
 /** Best-effort, fire-and-forget (matches existing UI: kicked off, not awaited). */
@@ -63,7 +65,9 @@ export async function connectMangaDex(data: MangaDexConnectData): Promise<void> 
     body: data,
   });
   if (error) {
-    throw new Error(apiErrorMessage(error, "Connect failed — check credentials & LYCHEE_SECRET_KEY"));
+    throw new Error(
+      apiErrorMessage(error, "Connect failed — check credentials & LYCHEE_SECRET_KEY"),
+    );
   }
 }
 
@@ -94,7 +98,9 @@ export async function beginTrackerConnect(
     body: data,
   });
   if (error || !out) {
-    throw new Error(apiErrorMessage(error, "Couldn't start auth — check credentials & LYCHEE_SECRET_KEY"));
+    throw new Error(
+      apiErrorMessage(error, "Couldn't start auth — check credentials & LYCHEE_SECRET_KEY"),
+    );
   }
   return out.authorizeUrl;
 }
@@ -142,9 +148,16 @@ export async function deleteLibrary(id: string): Promise<void> {
   await api.DELETE("/api/libraries/{library_id}", { params: { path: { library_id: id } } });
 }
 
-export async function addLibrary(data: { name: string; path: string; kind: string }): Promise<void> {
+export async function addLibrary(data: {
+  name: string;
+  path: string;
+  kind: string;
+}): Promise<void> {
   const { error } = await api.POST("/api/libraries", { body: data });
-  if (error) throw new Error(apiErrorMessage(error, "Couldn't add library — check the path exists on the server"));
+  if (error)
+    throw new Error(
+      apiErrorMessage(error, "Couldn't add library — check the path exists on the server"),
+    );
 }
 
 // --- server path browser --------------------------------------------------------
@@ -175,7 +188,10 @@ export async function fetchTaxonomy(): Promise<TaxonomyItem[]> {
 }
 
 export async function setTaxonomyEnabled(id: string, enabled: boolean): Promise<void> {
-  await api.PATCH("/api/taxonomy/{tag_id}", { params: { path: { tag_id: id } }, body: { enabled } });
+  await api.PATCH("/api/taxonomy/{tag_id}", {
+    params: { path: { tag_id: id } },
+    body: { enabled },
+  });
 }
 
 /** Renames a tag's display label — allowed for system rows too (id/group stay fixed). */
@@ -194,7 +210,9 @@ export async function createTaxonomyTag(name: string, category: string): Promise
 }
 
 export async function deleteTaxonomyTag(id: string): Promise<void> {
-  const { error } = await api.DELETE("/api/taxonomy/{tag_id}", { params: { path: { tag_id: id } } });
+  const { error } = await api.DELETE("/api/taxonomy/{tag_id}", {
+    params: { path: { tag_id: id } },
+  });
   if (error) throw new Error(apiErrorMessage(error, "Couldn't delete tag"));
 }
 
@@ -240,7 +258,9 @@ export async function retryDownload(id: string): Promise<void> {
 }
 
 export async function pauseDownload(id: string): Promise<DownloadTask[] | null> {
-  const { data } = await api.POST("/api/downloads/{task_id}/pause", { params: { path: { task_id: id } } });
+  const { data } = await api.POST("/api/downloads/{task_id}/pause", {
+    params: { path: { task_id: id } },
+  });
   return data ?? null;
 }
 
@@ -291,7 +311,9 @@ export async function updateImportConfig(patch: {
 export async function startImport(path: string, kind: string): Promise<void> {
   const { error } = await api.POST("/api/import", { body: { path, kind } });
   if (error) {
-    throw new Error(apiErrorMessage(error, "Import failed — check the path and that import is enabled"));
+    throw new Error(
+      apiErrorMessage(error, "Import failed — check the path and that import is enabled"),
+    );
   }
 }
 

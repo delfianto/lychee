@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Recently-updated and Unread-chapters are the same feed view, differing only
 // in which chapters fetchUpdates() returns and a bit of copy.
-import { LayoutList, List } from "lucide-vue-next";
+import { LayoutList, List } from "@lucide/vue";
 import { type Component, onMounted, ref } from "vue";
 
 import { fetchUpdates } from "../api/queries";
@@ -31,13 +31,21 @@ onMounted(async () => {
   <div class="flex flex-col gap-4 p-4 sm:p-6">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="text-3xl font-bold">{{ unreadOnly ? "Unread chapters" : "Recently updated" }}</h1>
+        <h1 class="text-3xl font-bold">
+          {{ unreadOnly ? "Unread chapters" : "Recently updated" }}
+        </h1>
         <p class="text-sm text-base-content/60">
           <template v-if="loading">Loading…</template>
-          <template v-else>{{ entries.length }} {{ unreadOnly ? "unread chapters" : "chapter updates" }}</template>
+          <template v-else
+            >{{ entries.length }} {{ unreadOnly ? "unread chapters" : "chapter updates" }}</template
+          >
         </p>
       </div>
-      <SegmentedToggle v-model="view" :options="viewOptions" :aria-label="unreadOnly ? 'View' : 'Update view'" />
+      <SegmentedToggle
+        v-model="view"
+        :options="viewOptions"
+        :aria-label="unreadOnly ? 'View' : 'Update view'"
+      />
     </div>
     <div v-if="loading" class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg text-primary" />

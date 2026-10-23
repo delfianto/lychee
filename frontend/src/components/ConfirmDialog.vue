@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X } from "lucide-vue-next";
+import { X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { useFocusTrap } from "../lib/focusTrap";
@@ -52,7 +52,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="open" class="modal modal-open" role="alertdialog" aria-modal="true" @click.self="emit('cancel')">
+  <div
+    v-if="open"
+    class="modal modal-open"
+    role="alertdialog"
+    aria-modal="true"
+    @click.self="emit('cancel')"
+  >
     <div ref="modalBox" class="modal-box max-w-md">
       <div class="mb-3 flex items-start justify-between gap-3">
         <h3 class="text-lg font-bold leading-snug">{{ title }}</h3>

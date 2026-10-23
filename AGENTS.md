@@ -9,7 +9,7 @@ API and (in production) the built frontend.
 
 ```
 lychee/
-├── backend/    Python 3.14 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite — see backend/AGENTS.md
+├── backend/    Python 3.14 · FastAPI · SQLAlchemy 2.1 · Alembic · SQLite — see backend/AGENTS.md
 ├── frontend/   Vue 3 · TypeScript · Vite · Tailwind v4 · DaisyUI 5 · Bun — see frontend/AGENTS.md
 ├── mcp/        MCP server (agent-tool access to the library) — a client of the backend's
 │               REST API, not part of the one deployable — see mcp/AGENTS.md, notes/plan.md PART J

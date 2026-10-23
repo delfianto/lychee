@@ -4,7 +4,7 @@ Self-hosted **manga / comic / ebook** media server.
 
 Monorepo:
 
-- **`backend/`** — Python 3.14 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite
+- **`backend/`** — Python 3.14 · FastAPI · SQLAlchemy 2.1 · Alembic · SQLite
 - **`frontend/`** — Vue 3 · TypeScript · Vite · Tailwind CSS v4 · DaisyUI 5 (Bun)
 - **`notes/`** — reference research + architecture decision records ([ADRs](notes/decisions/) 01–18)
 
@@ -18,6 +18,13 @@ just fe-install && just fe-dev     # frontend → http://localhost:5173
 ```
 
 `just` (or `just --list`) shows every recipe (backend / database / frontend).
+
+## Tests and coverage
+
+Run `just check` for formatting, lint, types, tests, and coverage gates across
+backend, frontend, and MCP. Use `just be-coverage`, `just fe-coverage`, or
+`just mcp-coverage` for reports. See [the testing review](notes/testing.md) for
+measured coverage, test patterns, and remaining gaps.
 
 ## Architecture
 

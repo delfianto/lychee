@@ -28,7 +28,10 @@ const parsed = computed(() => parseMangaDescription(props.text));
     />
 
     <!-- Namespace tag table — structured, not pipe soup -->
-    <div v-if="showTagTable && parsed.tagGroups.length" class="overflow-x-auto rounded-box border border-base-300">
+    <div
+      v-if="showTagTable && parsed.tagGroups.length"
+      class="overflow-x-auto rounded-box border border-base-300"
+    >
       <table class="table table-sm">
         <thead>
           <tr class="bg-base-200/60 text-xs uppercase tracking-wide text-base-content/60">
@@ -38,7 +41,9 @@ const parsed = computed(() => parseMangaDescription(props.text));
         </thead>
         <tbody>
           <tr v-for="g in parsed.tagGroups" :key="g.namespace">
-            <td class="align-top font-semibold uppercase text-base-content/70">{{ g.namespace }}</td>
+            <td class="align-top font-semibold uppercase text-base-content/70">
+              {{ g.namespace }}
+            </td>
             <td>
               <div class="flex flex-wrap gap-1">
                 <span

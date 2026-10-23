@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search } from "lucide-vue-next";
+import { Search } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 
 import { fetchGalleries } from "../api/queries";
@@ -61,13 +61,27 @@ const filtered = computed(() => {
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="query" type="search" class="grow" placeholder="Search title, artist, character…" aria-label="Search galleries" />
+        <input
+          v-model="query"
+          type="search"
+          class="grow"
+          placeholder="Search title, artist, character…"
+          aria-label="Search galleries"
+        />
       </label>
-      <select v-model="artist" class="select select-bordered select-sm" aria-label="Filter by artist">
+      <select
+        v-model="artist"
+        class="select select-bordered select-sm"
+        aria-label="Filter by artist"
+      >
         <option value="">All artists</option>
         <option v-for="a in artists" :key="a">{{ a }}</option>
       </select>
-      <select v-model="source" class="select select-bordered select-sm" aria-label="Filter by series">
+      <select
+        v-model="source"
+        class="select select-bordered select-sm"
+        aria-label="Filter by series"
+      >
         <option value="">All series</option>
         <option v-for="s in sources" :key="s">{{ s }}</option>
       </select>

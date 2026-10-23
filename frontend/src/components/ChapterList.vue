@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Download, Loader2, MessageSquare, Trash2 } from "lucide-vue-next";
+import { ChevronDown, Download, Loader2, MessageSquare, Trash2 } from "@lucide/vue";
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -156,7 +156,9 @@ const deleteConfirmLabel = () => {
 };
 
 const hasAvailable = () =>
-  props.volumes.some((g) => g.chapters.some((c) => c.status === "available" || c.status === "failed"));
+  props.volumes.some((g) =>
+    g.chapters.some((c) => c.status === "available" || c.status === "failed"),
+  );
 
 const hasAny = () => props.volumes.some((g) => g.chapters.length > 0);
 
@@ -209,16 +211,19 @@ const statusLabel: Record<string, string> = {
           <Download v-else class="size-4" />Download available
         </button>
         <button class="btn btn-ghost btn-sm ml-auto gap-1" @click="toggleOrder">
-          {{ order === "desc" ? "Newest" : "Oldest" }}<ChevronDown class="size-4" :class="{ 'rotate-180': order === 'asc' }" />
+          {{ order === "desc" ? "Newest" : "Oldest"
+          }}<ChevronDown class="size-4" :class="{ 'rotate-180': order === 'asc' }" />
         </button>
       </div>
 
       <div v-if="!hasAny()" class="py-10 text-center text-sm text-base-content/60">
         <template v-if="matched && synced">
-          MangaDex lists no chapters for this title — it may have been removed or isn't
-          available in your selected language.
+          MangaDex lists no chapters for this title — it may have been removed or isn't available in
+          your selected language.
         </template>
-        <template v-else-if="matched">No chapters listed yet — try refreshing metadata or sync.</template>
+        <template v-else-if="matched"
+          >No chapters listed yet — try refreshing metadata or sync.</template
+        >
         <template v-else>No chapters in the library for this series.</template>
       </div>
 
@@ -262,9 +267,10 @@ const statusLabel: Record<string, string> = {
                 <Loader2 v-if="c.status === 'downloading'" class="mr-0.5 size-3 animate-spin" />
                 {{ statusLabel[c.status] }}
               </span>
-              <span class="hidden w-16 shrink-0 text-right text-xs text-base-content/60 sm:inline">{{
-                c.uploadedAt
-              }}</span>
+              <span
+                class="hidden w-16 shrink-0 text-right text-xs text-base-content/60 sm:inline"
+                >{{ c.uploadedAt }}</span
+              >
               <span
                 class="hidden w-12 shrink-0 items-center justify-end gap-1 text-xs text-base-content/50 md:inline-flex"
               >
@@ -318,7 +324,13 @@ const statusLabel: Record<string, string> = {
     <!-- Art -->
     <template v-else>
       <div v-if="artCovers.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        <img v-for="(c, i) in artCovers" :key="i" :src="c" :alt="`Related art ${i + 1}`" class="cover w-full rounded-box object-cover" />
+        <img
+          v-for="(c, i) in artCovers"
+          :key="i"
+          :src="c"
+          :alt="`Related art ${i + 1}`"
+          class="cover w-full rounded-box object-cover"
+        />
       </div>
       <div v-else class="py-8 text-center text-sm text-base-content/60">No extra art.</div>
     </template>

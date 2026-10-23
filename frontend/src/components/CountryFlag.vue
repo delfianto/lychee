@@ -22,5 +22,11 @@ const label = computed(() => props.cc.toUpperCase());
 </script>
 
 <template>
-  <img v-if="src" :src="src" :alt="label" :title="label" class="inline-block h-4 w-auto shrink-0 rounded-sm" />
+  <img
+    v-if="src"
+    :src="src"
+    :alt="label"
+    :title="label"
+    class="inline-block h-4 w-auto shrink-0 rounded-sm"
+  />
 </template>

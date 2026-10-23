@@ -8,7 +8,7 @@ FastAPI service for lychee, a self-hosted manga/comic/ebook media server. See th
 
 - **Runtime:** Python 3.14, managed by [`uv`](https://docs.astral.sh/uv/) (`backend/.venv`).
 - **Framework:** FastAPI (async), served by `uvicorn`.
-- **Persistence:** SQLAlchemy 2.0 (sync ORM) + Alembic migrations, SQLite (WAL mode).
+- **Persistence:** SQLAlchemy 2.1 (sync ORM) + Alembic migrations, SQLite (WAL mode).
 - **Validation:** Pydantic v2 / pydantic-settings.
 - **Logging:** `structlog` (console renderer in dev, JSON in production — `LOG_FORMAT`).
 - **Quality gate:** ruff (lint + format), basedpyright (`standard` mode), pytest.
@@ -160,6 +160,11 @@ basedpyright errors — but pytest is not hooked, so run it explicitly.
   file await/poll task completion before assuming otherwise (patterns differ
   by domain; look at `tests/test_scan_api.py` or `tests/test_downloads_api.py`
   for scan/download-shaped flows).
+
+- `just be-coverage` reports coverage across all `src/` code with branches,
+  enforcing an 85% combined statement/branch floor. `just be-check` and CI run
+  it after formatting, lint, and types. HTML/XML/JSON reports live in `coverage/`.
+  See [the testing review](../notes/testing.md) for baseline metrics and gaps.
 
 ## Config
 

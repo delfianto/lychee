@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Heart, Images, Pencil, Play } from "lucide-vue-next";
+import { Heart, Images, Pencil, Play } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
@@ -12,6 +12,7 @@ import Lightbox from "../components/Lightbox.vue";
 import { contentRatingClass } from "../lib/display";
 import { ratingLabel } from "../lib/ratingLabels";
 import { createStaleGuard } from "../lib/staleGuard";
+import { toast } from "../lib/toast";
 import type { GalleryMediaItem, Series } from "../types";
 
 const route = useRoute();
@@ -38,12 +39,24 @@ async function load(id: string): Promise<void> {
   }
 }
 const reload = (): void => void load(String(route.params.id));
-watch(() => route.params.id, (id) => void load(String(id)), { immediate: true });
+watch(
+  () => route.params.id,
+  (id) => void load(String(id)),
+  { immediate: true },
+);
 
+const favoriteWrites = createStaleGuard();
 function toggleFavorite(): void {
   if (!gallery.value) return;
+  const target = gallery.value;
+  const id = target.id;
+  const token = favoriteWrites.next();
+  const previous = favorite.value;
   favorite.value = !favorite.value;
-  void patchSeries(gallery.value.id, { favorite: favorite.value });
+  void patchSeries(id, { favorite: favorite.value }).catch(() => {
+    if (gallery.value === target && favoriteWrites.isCurrent(token)) favorite.value = previous;
+    toast("Couldn't save favorite", "error");
+  });
 }
 
 const editOpen = ref(false);
@@ -94,7 +107,9 @@ function thumbSrc(item: GalleryMediaItem): string {
             </div>
           </div>
 
-          <p v-if="gallery.description" class="text-sm text-base-content/80">{{ gallery.description }}</p>
+          <p v-if="gallery.description" class="text-sm text-base-content/80">
+            {{ gallery.description }}
+          </p>
 
           <dl class="flex flex-col gap-1.5 text-sm">
             <div v-if="gallery.artists.length" class="flex gap-2">
@@ -108,19 +123,30 @@ function thumbSrc(item: GalleryMediaItem): string {
             <div v-if="gallery.characters?.length" class="flex gap-2">
               <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Characters</dt>
               <dd class="flex flex-wrap gap-1">
-                <span v-for="c in gallery.characters" :key="c" class="badge badge-ghost badge-sm">{{ c }}</span>
+                <span v-for="c in gallery.characters" :key="c" class="badge badge-ghost badge-sm">{{
+                  c
+                }}</span>
               </dd>
             </div>
             <div v-if="gallery.tags.length" class="flex gap-2">
               <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Tags</dt>
               <dd class="flex flex-wrap gap-1">
-                <span v-for="tg in gallery.tags" :key="tg.id" class="badge badge-outline badge-sm">{{ tg.name }}</span>
+                <span
+                  v-for="tg in gallery.tags"
+                  :key="tg.id"
+                  class="badge badge-outline badge-sm"
+                  >{{ tg.name }}</span
+                >
               </dd>
             </div>
           </dl>
 
           <div class="mt-auto flex flex-wrap items-center gap-2">
-            <button class="btn btn-primary btn-sm gap-2" :disabled="!items.length" @click="openAt(0)">
+            <button
+              class="btn btn-primary btn-sm gap-2"
+              :disabled="!items.length"
+              @click="openAt(0)"
+            >
               <Images class="size-4" />View
             </button>
             <button
@@ -145,7 +171,9 @@ function thumbSrc(item: GalleryMediaItem): string {
           v-for="item in items"
           :key="item.index"
           class="group relative aspect-square overflow-hidden rounded-box surface-border"
-          :aria-label="item.kind === 'video' ? `Play video ${item.index + 1}` : `Open image ${item.index + 1}`"
+          :aria-label="
+            item.kind === 'video' ? `Play video ${item.index + 1}` : `Open image ${item.index + 1}`
+          "
           @click="openAt(item.index)"
         >
           <CoverImage
@@ -156,7 +184,9 @@ function thumbSrc(item: GalleryMediaItem): string {
             v-if="item.kind === 'video'"
             class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25"
           >
-            <span class="flex size-10 items-center justify-center rounded-full bg-black/55 text-white shadow">
+            <span
+              class="flex size-10 items-center justify-center rounded-full bg-black/55 text-white shadow"
+            >
               <Play class="size-5 fill-current" />
             </span>
           </span>
@@ -170,7 +200,12 @@ function thumbSrc(item: GalleryMediaItem): string {
         @update:index="idx = $event"
         @close="open = false"
       />
-      <EditSeriesModal v-if="editOpen" :series="gallery" @close="editOpen = false" @saved="onEdited" />
+      <EditSeriesModal
+        v-if="editOpen"
+        :series="gallery"
+        @close="editOpen = false"
+        @saved="onEdited"
+      />
     </template>
   </div>
 </template>

@@ -1,11 +1,21 @@
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 const useMocks = process.env.VITE_USE_MOCKS === "true";
 
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  fmt: {
+    ignorePatterns: ["public/**", "src/api/schema.d.ts"],
+  },
+  lint: {
+    jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
+    rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    // vue-tsc checks scripts and Vue templates through the native bridge.
+    // Standalone tsgo cannot resolve SFC props and would report false errors.
+    options: { typeAware: true, typeCheck: false },
+  },
+  plugins: lazyPlugins(() => [vue(), tailwindcss()]),
   server: {
     port: 5173,
     // Proxy API calls to the FastAPI backend during dev — disabled under

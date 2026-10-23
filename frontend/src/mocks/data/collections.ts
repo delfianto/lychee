@@ -38,7 +38,11 @@ const SEEDS: CollectionSeed[] = [
     id: "list-completed-masterpieces",
     name: "Completed Masterpieces",
     description: "Finished series worth recommending without hedging.",
-    seriesIds: idsFor("The Cartographer's Daughter", "Court of Hollow Petals", "The Last Cicada Summer"),
+    seriesIds: idsFor(
+      "The Cartographer's Daughter",
+      "Court of Hollow Petals",
+      "The Last Cicada Summer",
+    ),
   },
   {
     id: "list-weekend-binge",
@@ -56,7 +60,12 @@ const SEEDS: CollectionSeed[] = [
     id: "list-comic-pull",
     name: "Comic Pull List",
     description: "What's on order down at the shop.",
-    seriesIds: idsFor("Vanguard Protocol", "Precinct 9 Blackout", "Static Horizon", "The Vendetta Files"),
+    seriesIds: idsFor(
+      "Vanguard Protocol",
+      "Precinct 9 Blackout",
+      "Static Horizon",
+      "The Vendetta Files",
+    ),
   },
   {
     id: "list-art-favorites",
@@ -72,13 +81,19 @@ const SEEDS: CollectionSeed[] = [
     id: "list-mixed-shelf",
     name: "Recommend to a Friend",
     description: "One of each kind, for when someone asks where to start.",
-    seriesIds: idsFor("Wraith of the Nine Tails", "Vanguard Protocol", "Glasswing Idols Cosplay Archive"),
+    seriesIds: idsFor(
+      "Wraith of the Nine Tails",
+      "Vanguard Protocol",
+      "Glasswing Idols Cosplay Archive",
+    ),
   },
 ];
 
 export function kindFor(seriesIds: string[]): string | null {
   const kinds = new Set(
-    seriesIds.map((id) => seriesCatalog.find((s) => s.id === id)?.kind).filter((k): k is string => Boolean(k)),
+    seriesIds
+      .map((id) => seriesCatalog.find((s) => s.id === id)?.kind)
+      .filter((k): k is string => Boolean(k)),
   );
   if (kinds.size === 0) return null;
   if (kinds.size > 1) return "mixed";

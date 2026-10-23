@@ -63,7 +63,9 @@ function toUpdate(u: ApiUpdate): RecentUpdate {
  *  backend's actual reason instead of a generic hardcoded string. */
 export function apiErrorMessage(error: unknown, fallback: string): string {
   const body = error as { error?: { message?: string }; detail?: string } | undefined;
-  return body?.error?.message ?? (typeof body?.detail === "string" ? body.detail : null) ?? fallback;
+  return (
+    body?.error?.message ?? (typeof body?.detail === "string" ? body.detail : null) ?? fallback
+  );
 }
 
 function toChapter(c: ApiChapter): Chapter {
@@ -97,7 +99,7 @@ export async function queueDownload(
 }
 
 export interface DeleteChapterResult {
-  mode: "provider" | "local" | string;
+  mode: string;
   redownloadable: boolean;
   seriesId: string;
 }
@@ -178,10 +180,12 @@ const _GROUP_LABEL: Record<string, string> = {
 export async function fetchTagGroups(): Promise<TagGroup[]> {
   const { data } = await api.GET("/api/taxonomy", { params: { query: { pageSize: 500 } } });
   const items = data?.items ?? [];
-  return _FILTER_GROUPS.map((g) => ({
-    group: _GROUP_LABEL[g],
-    tags: items.filter((i) => i.category === g).map((i) => ({ id: i.id, name: i.name })),
-  })).filter((g) => g.tags.length > 0);
+  return _FILTER_GROUPS
+    .map((g) => ({
+      group: _GROUP_LABEL[g],
+      tags: items.filter((i) => i.category === g).map((i) => ({ id: i.id, name: i.name })),
+    }))
+    .filter((g) => g.tags.length > 0);
 }
 
 export interface RatingLabels {
@@ -280,7 +284,11 @@ export function useSeriesList() {
 // --- series detail -------------------------------------------------------------
 
 export async function patchSeries(id: string, body: SeriesUpdate): Promise<void> {
-  await api.PATCH("/api/series/{series_id}", { params: { path: { series_id: id } }, body });
+  const { error } = await api.PATCH("/api/series/{series_id}", {
+    params: { path: { series_id: id } },
+    body,
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn't save changes"));
 }
 
 export interface MatchCandidate {
@@ -405,7 +413,9 @@ export async function fetchArt(id: string): Promise<string[]> {
 // --- gallery -------------------------------------------------------------------
 
 /** All gallery-kind series (few enough to filter client-side + derive facets). */
-export async function fetchCollection(id: string): Promise<{ name: string; series: Series[] } | null> {
+export async function fetchCollection(
+  id: string,
+): Promise<{ name: string; series: Series[] } | null> {
   const { data, error } = await api.GET("/api/collections/{collection_id}", {
     params: { path: { collection_id: id } },
   });
@@ -422,7 +432,9 @@ export async function fetchGalleries(): Promise<Series[]> {
 }
 
 /** Every media item of a gallery (follows the cursor to the end). */
-export async function fetchGalleryImages(id: string): Promise<import("../types").GalleryMediaItem[]> {
+export async function fetchGalleryImages(
+  id: string,
+): Promise<import("../types").GalleryMediaItem[]> {
   const items: import("../types").GalleryMediaItem[] = [];
   let cursor: string | undefined;
   do {

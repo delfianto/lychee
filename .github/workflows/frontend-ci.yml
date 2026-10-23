@@ -3,9 +3,9 @@ name: frontend-ci
 on:
   push:
     branches: [main]
-    paths: ["frontend/**", ".github/workflows/frontend-ci.yml"]
+    paths: ["frontend/**", "justfile", ".github/workflows/frontend-ci.yml"]
   pull_request:
-    paths: ["frontend/**", ".github/workflows/frontend-ci.yml"]
+    paths: ["frontend/**", "justfile", ".github/workflows/frontend-ci.yml"]
   workflow_dispatch:
 
 concurrency:
@@ -21,24 +21,38 @@ defaults:
 
 jobs:
   frontend:
-    name: Frontend type-check + test + build
+    name: Frontend format + lint + type-check + test + build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Setup Node (Vite+ and native TypeScript bridge)
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.4.4"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type-check (vue-tsc)
-        run: bun run typecheck
+      - name: Format, lint, and Vue type-check
+        run: bun run check
 
-      - name: Test (vitest)
-        run: bun run test
+      - name: Test and coverage
+        run: bun run test:coverage
+
+      - name: Upload coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Build
         run: bun run build

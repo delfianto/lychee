@@ -2,7 +2,7 @@
 // The "add library" dialog: register a folder on the server as a library root, with
 // a name and kind. Path can be typed or picked via the shared storage browser.
 // Emits `added` on success (parent reloads + closes).
-import { FolderPlus, X } from "lucide-vue-next";
+import { FolderPlus, X } from "@lucide/vue";
 import { reactive, ref } from "vue";
 
 import { addLibrary } from "../../api/settingsQueries";
@@ -51,13 +51,18 @@ async function add(): Promise<void> {
       </div>
       <div class="flex flex-col gap-3">
         <p class="text-xs text-base-content/50">
-          Register a folder on the server as a library root — lychee scans it for series &amp; chapters.
+          Register a folder on the server as a library root — lychee scans it for series &amp;
+          chapters.
         </p>
         <!-- Shared row layout: flex-1 field + fixed-width trailing control, same gap-2. -->
         <div class="flex items-end gap-2">
           <div class="flex min-w-0 flex-1 flex-col gap-1">
             <label class="text-xs text-base-content/60">Name</label>
-            <input v-model="form.name" class="input input-bordered input-sm w-full" placeholder="e.g. Manga" />
+            <input
+              v-model="form.name"
+              class="input input-bordered input-sm w-full"
+              placeholder="e.g. Manga"
+            />
           </div>
           <div class="flex w-28 shrink-0 flex-col gap-1">
             <label class="text-xs text-base-content/60">Kind</label>

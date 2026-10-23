@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircle } from "lucide-vue-next";
+import { LoaderCircle } from "@lucide/vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import type { Series } from "../types";
@@ -29,9 +29,12 @@ function maybeLoadMore(): void {
 }
 
 // After a page finishes loading, keep going if the sentinel is still on screen.
-watch(() => props.loading, (busy) => {
-  if (!busy) maybeLoadMore();
-});
+watch(
+  () => props.loading,
+  (busy) => {
+    if (!busy) maybeLoadMore();
+  },
+);
 
 let observer: IntersectionObserver | null = null;
 onMounted(() => {

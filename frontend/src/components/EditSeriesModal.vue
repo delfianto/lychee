@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, X } from "lucide-vue-next";
+import { Plus, X } from "@lucide/vue";
 import { onMounted, reactive, ref } from "vue";
 
 import { fetchTagGroups, patchSeries, type TagGroup } from "../api/queries";
@@ -34,7 +34,8 @@ const form = reactive({
   characters: [...(props.series.characters ?? [])],
   tagIds: (props.series.tags ?? []).map((t) => t.id),
 });
-const yearInput = ref(props.series.year?.toString() ?? "");
+// Vue's v-model on type=number coerces nonempty input to a number.
+const yearInput = ref<string | number>(props.series.year ?? "");
 
 // Option lists.
 const statuses = Object.keys(statusLabel) as PublicationStatus[];
@@ -91,7 +92,7 @@ async function save(): Promise<void> {
     toast("Title can't be empty", "error");
     return;
   }
-  const year = yearInput.value.trim();
+  const year = String(yearInput.value).trim();
   const payload: SeriesUpdate = {
     title: form.title.trim(),
     description: form.description.trim() || null,
@@ -148,7 +149,9 @@ async function save(): Promise<void> {
             <div class="flex flex-wrap gap-1">
               <span v-for="(a, i) in form.authors" :key="a" class="badge badge-neutral gap-1">
                 {{ a }}
-                <button aria-label="Remove" @click="removeChip(form.authors, i)"><X class="size-3" /></button>
+                <button aria-label="Remove" @click="removeChip(form.authors, i)">
+                  <X class="size-3" />
+                </button>
               </span>
             </div>
             <input
@@ -166,7 +169,9 @@ async function save(): Promise<void> {
             <div class="flex flex-wrap gap-1">
               <span v-for="(a, i) in form.artists" :key="a" class="badge badge-neutral gap-1">
                 {{ a }}
-                <button aria-label="Remove" @click="removeChip(form.artists, i)"><X class="size-3" /></button>
+                <button aria-label="Remove" @click="removeChip(form.artists, i)">
+                  <X class="size-3" />
+                </button>
               </span>
             </div>
             <input
@@ -182,14 +187,20 @@ async function save(): Promise<void> {
         <template v-if="isGallery">
           <label class="form-control">
             <span class="label-text mb-1 text-xs text-base-content/60">Series (franchise)</span>
-            <input v-model="form.source" class="input input-bordered w-full" placeholder="e.g. Genshin Impact" />
+            <input
+              v-model="form.source"
+              class="input input-bordered w-full"
+              placeholder="e.g. Genshin Impact"
+            />
           </label>
           <div>
             <span class="label-text mb-1 block text-xs text-base-content/60">Characters</span>
             <div class="flex flex-wrap gap-1">
               <span v-for="(c, i) in form.characters" :key="c" class="badge badge-neutral gap-1">
                 {{ c }}
-                <button aria-label="Remove" @click="removeChip(form.characters, i)"><X class="size-3" /></button>
+                <button aria-label="Remove" @click="removeChip(form.characters, i)">
+                  <X class="size-3" />
+                </button>
               </span>
             </div>
             <input
@@ -229,7 +240,9 @@ async function save(): Promise<void> {
           <label v-if="!isGallery" class="form-control">
             <span class="label-text mb-1 text-xs text-base-content/60">Demographic</span>
             <select v-model="form.demographic" class="select select-bordered">
-              <option v-for="d in demographics" :key="d" :value="d">{{ demographicLabel(d) }}</option>
+              <option v-for="d in demographics" :key="d" :value="d">
+                {{ demographicLabel(d) }}
+              </option>
             </select>
           </label>
         </div>
@@ -245,7 +258,9 @@ async function save(): Promise<void> {
             <span v-if="!form.tagIds.length" class="text-xs text-base-content/40">No tags</span>
           </div>
           <div class="dropdown">
-            <div tabindex="0" role="button" class="btn btn-sm gap-1"><Plus class="size-4" />Add tags</div>
+            <div tabindex="0" role="button" class="btn btn-sm gap-1">
+              <Plus class="size-4" />Add tags
+            </div>
             <div
               tabindex="0"
               class="dropdown-content z-10 mt-1 max-h-72 w-72 overflow-y-auto rounded-box bg-base-100 p-3 shadow"

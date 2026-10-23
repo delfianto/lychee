@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { markdownToHtml, parseMangaDescription, synopsisOnly } from "./description";
 
@@ -36,7 +36,7 @@ describe("parseMangaDescription", () => {
 
 describe("markdownToHtml", () => {
   it("escapes HTML and formats basic markdown", () => {
-    const html = markdownToHtml('Hello **world** & <script>alert(1)</script>');
+    const html = markdownToHtml("Hello **world** & <script>alert(1)</script>");
     expect(html).toContain("<strong>world</strong>");
     expect(html).toContain("&amp;");
     expect(html).toContain("&lt;script&gt;");

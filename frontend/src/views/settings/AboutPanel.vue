@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Settings → About: version/platform/uptime + a library-at-a-glance summary.
-import { Cherry } from "lucide-vue-next";
+import { Cherry } from "@lucide/vue";
 import { computed, onMounted, reactive, ref } from "vue";
 
 import { fetchDashboard, fetchLibrarySummaries } from "../../api/queries";
@@ -48,7 +48,9 @@ onMounted(loadAbout);
     <div class="card bg-base-100">
       <div class="card-body gap-4 p-5">
         <div class="flex flex-wrap items-center gap-4">
-          <div class="flex size-14 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+          <div
+            class="flex size-14 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary"
+          >
             <Cherry class="size-8" />
           </div>
           <div class="min-w-0 grow">
@@ -56,7 +58,9 @@ onMounted(loadAbout);
               <h2 class="text-2xl font-bold">lychee</h2>
               <span class="badge badge-primary badge-sm">v{{ about.version }}</span>
             </div>
-            <p class="text-sm text-base-content/60">Self-hosted manga, comic &amp; art-gallery server.</p>
+            <p class="text-sm text-base-content/60">
+              Self-hosted manga, comic &amp; art-gallery server.
+            </p>
           </div>
         </div>
       </div>
@@ -79,7 +83,11 @@ onMounted(loadAbout);
       <div class="card bg-base-100">
         <div class="card-body p-4">
           <dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
-            <div v-for="row in serverInfo" :key="row.label" class="flex items-center justify-between gap-4">
+            <div
+              v-for="row in serverInfo"
+              :key="row.label"
+              class="flex items-center justify-between gap-4"
+            >
               <dt class="text-base-content/50">{{ row.label }}</dt>
               <dd class="font-medium">{{ row.value }}</dd>
             </div>

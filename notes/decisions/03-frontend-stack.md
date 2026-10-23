@@ -16,15 +16,19 @@ A decoupled Vue 3 SPA, fully API-driven (no server-rendered pages):
 - **API client:** `openapi-fetch`, typed from `frontend/src/api/schema.d.ts`
   (generated from `backend/openapi.json` via `bun run api:gen`) — regenerated
   in the same change as any backend router/schema edit.
-- **Build/tooling:** Vite 7, Bun as package manager/runner (not npm/yarn/pnpm).
+- **Build/tooling:** Vite+ 1.4 (Vite 8 / Rolldown), Bun 1.4.4 as package
+  manager/runner, Node 24 LTS for tooling. See
+  [the dependency review](../dependency-modernization.md) for the October 2026 update.
 - **Testing:** Vitest + `@vue/test-utils`, `happy-dom` environment, colocated
   `*.test.ts` files.
 - **Realtime:** one shared `EventSource` (`api/events.ts`'s
   `connectTaskStream()`) consuming backend SSE for scan/download/task
   progress — no polling anywhere.
-- **No path aliases** (relative imports only). **No ESLint/Prettier
-  configured yet** — `vue-tsc` is the only automated gate; a `PostToolUse`
-  formatter hook is a no-op until those bins exist.
+- **No path aliases** (relative imports only). **Lint/format:** Oxlint and
+  Oxfmt through Vite+. `bun run check` checks formatting, lints, and runs
+  `vue-tsc` using a pinned TypeScript native bridge (TS 7.0.2 checker with
+  the TS 6.0.3 API required by Vue). Standalone Vite+ type checking is disabled
+  because it cannot resolve Vue SFC props; `vue-tsc` checks scripts and templates.
 - **Convention:** canonical Tailwind class forms (`shrink-0`, `grow`, not
   `flex-shrink-0`), DaisyUI component classes over raw arbitrary values.
 

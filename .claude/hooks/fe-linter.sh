@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PostToolUse(Edit|Write): format/lint-fix edited *frontend* files, if a formatter is set up.
-# Path-scoped to frontend/. Non-blocking; a no-op until eslint/prettier are configured.
+# PostToolUse(Edit|Write): format/lint-fix edited frontend files through local Vite+.
+# Path-scoped to frontend/. Non-blocking; skips generated assets.
 set -euo pipefail
 
 input=$(cat)
@@ -11,14 +11,19 @@ case "$file" in
   *) exit 0 ;;
 esac
 [ -f "$file" ] || exit 0
+case "$file" in
+  */src/api/schema.d.ts|*/public/*|*/bun.lock) exit 0 ;;
+esac
 
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 bin="$root/frontend/node_modules/.bin"
 
-if [ -x "$bin/eslint" ]; then
-  ( cd "$root/frontend" && "$bin/eslint" --fix "$file" ) >/dev/null 2>&1 || true
-fi
-if [ -x "$bin/prettier" ]; then
-  "$bin/prettier" --write "$file" >/dev/null 2>&1 || true
+if [ -x "$bin/vp" ]; then
+  ( cd "$root/frontend" && "$bin/vp" fmt "$file" ) >/dev/null 2>&1 || true
+  case "$file" in
+    *.ts|*.js|*.vue)
+      ( cd "$root/frontend" && "$bin/vp" lint --fix "$file" ) >/dev/null 2>&1 || true
+      ;;
+  esac
 fi
 exit 0

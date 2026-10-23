@@ -28,7 +28,9 @@ const trackers = [
         </div>
         <div>
           <div class="text-xs text-base-content/60">Demographic</div>
-          <span class="badge badge-sm badge-outline">{{ demographicLabel(series.demographic) }}</span>
+          <span class="badge badge-sm badge-outline">{{
+            demographicLabel(series.demographic)
+          }}</span>
         </div>
         <div>
           <div class="text-xs text-base-content/60">Content rating</div>
@@ -38,21 +40,30 @@ const trackers = [
         </div>
         <div>
           <div class="text-xs text-base-content/60">Publication</div>
-          <div>{{ cap(series.status) }}<template v-if="series.year"> · {{ series.year }}</template></div>
+          <div>
+            {{ cap(series.status) }}<template v-if="series.year"> · {{ series.year }}</template>
+          </div>
         </div>
       </div>
 
       <div class="flex flex-col gap-2">
         <div class="text-xs text-base-content/60">Tags</div>
         <div class="flex flex-wrap gap-1">
-          <span v-for="t in series.tags" :key="t.id" class="badge badge-outline badge-sm">{{ t.name }}</span>
+          <span v-for="t in series.tags" :key="t.id" class="badge badge-outline badge-sm">{{
+            t.name
+          }}</span>
         </div>
       </div>
 
       <div class="flex flex-col gap-2">
         <div class="text-xs text-base-content/60">Tracking</div>
         <div class="flex flex-wrap gap-1">
-          <a v-for="tr in trackers" :key="tr.label" :href="tr.href" class="badge badge-sm badge-outline">
+          <a
+            v-for="tr in trackers"
+            :key="tr.label"
+            :href="tr.href"
+            class="badge badge-sm badge-outline"
+          >
             {{ tr.label }}
           </a>
         </div>

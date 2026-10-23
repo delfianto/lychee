@@ -6,22 +6,22 @@ requires-python = ">=3.14"
 
 dependencies = [
     # Web framework
-    "fastapi==0.141.1",
+    "fastapi==0.161.1",
     "uvicorn[standard]==0.54.0",
     # Persistence
-    "sqlalchemy==2.1.1",
-    "alembic==1.20.0",
+    "sqlalchemy==2.1.6",
+    "alembic==1.20.1",
     # Validation / settings
-    "pydantic==2.13.5",
-    "pydantic-settings==2.15.0",
-    "python-dotenv==1.2.3",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.1",
+    "python-dotenv==1.2.4",
     # Logging
     "structlog==26.1.0",
     # ID generation
     "nanoid==2.0.0",
     # Media / images — AVIF encode + decode/resize. Native AVIF ships in the
     # Pillow ≥11.3 wheels (bundled libavif), so no system libs.
-    "pillow==12.3.0",
+    "pillow==13.0.0",
     # Providers / trackers — HTTP client for MangaDex / AniList / ….
     "httpx==0.28.1",
     # Secrets encryption at rest (provider/tracker tokens).
@@ -37,8 +37,8 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
-    "ruff==0.16.9",
-    "basedpyright==1.40.1",
+    "ruff==0.17.2",
+    "basedpyright==1.40.2",
 ]
 
 # This is an application, not a distributable package — uv manages the env + deps,
@@ -83,3 +83,13 @@ pythonPlatform = "Linux"
 dev = [
     "types-pyyaml>=6.0.12.20260724",
 ]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+precision = 2
+show_missing = true
+skip_covered = true

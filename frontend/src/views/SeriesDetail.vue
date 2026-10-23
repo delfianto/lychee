@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookMarked, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "lucide-vue-next";
+import { BookMarked, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "@lucide/vue";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
@@ -163,25 +163,57 @@ async function onDeleteChapter(chapterId: string, done?: () => void): Promise<vo
   }
 }
 
+const favoriteWrites = createStaleGuard();
+const statusWrites = createStaleGuard();
+const ratingWrites = createStaleGuard();
+
 function toggleFavorite(): void {
   if (!series.value) return;
+  const target = series.value;
+  const id = target.id;
+  const token = favoriteWrites.next();
+  const previous = favorite.value;
   favorite.value = !favorite.value;
-  void patchSeries(series.value.id, { favorite: favorite.value });
+  void patchSeries(id, { favorite: favorite.value }).catch(() => {
+    if (series.value === target && favoriteWrites.isCurrent(token)) favorite.value = previous;
+    toast("Couldn't save favorite", "error");
+  });
 }
 function setStatus(status: LibraryStatus): void {
   if (!series.value) return;
+  const target = series.value;
+  const id = target.id;
+  const token = statusWrites.next();
+  const previous = libraryStatus.value;
   libraryStatus.value = status;
-  void patchSeries(series.value.id, { libraryStatus: status });
+  void patchSeries(id, { libraryStatus: status }).catch(() => {
+    if (series.value === target && statusWrites.isCurrent(token)) libraryStatus.value = previous;
+    toast("Couldn't save reading status", "error");
+  });
 }
 function setRating(n: number): void {
   if (!series.value) return;
+  const target = series.value;
+  const id = target.id;
+  const token = ratingWrites.next();
+  const previous = userRating.value;
   userRating.value = n;
-  void patchSeries(series.value.id, { rating: n });
+  void patchSeries(id, { rating: n }).catch(() => {
+    if (series.value === target && ratingWrites.isCurrent(token)) userRating.value = previous;
+    toast("Couldn't save rating", "error");
+  });
 }
 function clearRating(): void {
   if (!series.value) return;
+  const target = series.value;
+  const id = target.id;
+  const token = ratingWrites.next();
+  const previous = userRating.value;
   userRating.value = null;
-  void patchSeries(series.value.id, { rating: null });
+  void patchSeries(id, { rating: null }).catch(() => {
+    if (series.value === target && ratingWrites.isCurrent(token)) userRating.value = previous;
+    toast("Couldn't clear rating", "error");
+  });
 }
 
 // --- Edit metadata ---
@@ -237,9 +269,7 @@ const statusLabel = computed(
   () => statuses.find((s) => s.value === libraryStatus.value)?.label ?? "None",
 );
 /** Track button: show current shelf label, or "Track" when untracked. */
-const trackLabel = computed(() =>
-  libraryStatus.value === "none" ? "Track" : statusLabel.value,
-);
+const trackLabel = computed(() => (libraryStatus.value === "none" ? "Track" : statusLabel.value));
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 </script>
 
@@ -250,217 +280,244 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
       <span class="loading loading-spinner loading-lg text-primary" />
     </div>
     <template v-else-if="series">
-    <!-- HERO -->
-    <section class="relative">
-      <!-- Blurred backdrop, clipped here so it can't bleed but the dropdowns above still overflow. -->
-      <div class="absolute inset-0 overflow-hidden">
-        <img
-          :src="series.coverUrl"
-          alt=""
-          aria-hidden="true"
-          class="absolute inset-0 h-full w-full object-cover opacity-30 blur-3xl"
-        />
-        <div class="absolute inset-0 bg-base-200/70"></div>
-      </div>
+      <!-- HERO -->
+      <section class="relative">
+        <!-- Blurred backdrop, clipped here so it can't bleed but the dropdowns above still overflow. -->
+        <div class="absolute inset-0 overflow-hidden">
+          <img
+            :src="series.coverUrl"
+            alt=""
+            aria-hidden="true"
+            class="absolute inset-0 h-full w-full object-cover opacity-30 blur-3xl"
+          />
+          <div class="absolute inset-0 bg-base-200/70"></div>
+        </div>
 
-      <div class="relative flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
-        <CoverImage
-          :src="series.coverUrl"
-          :alt="series.title"
-          priority
-          class="cover w-36 shrink-0 rounded-box shadow-lg sm:w-48"
-        />
-        <div class="flex min-w-0 grow flex-col gap-3">
-          <div class="flex flex-col gap-1">
-            <h1 class="flex items-center gap-2 text-3xl font-bold">
-              <CountryFlag v-if="series.originCountry" :cc="series.originCountry" />
-              {{ series.title }}
-            </h1>
-            <p class="text-sm text-base-content/70">{{ series.authors.join(", ") }}</p>
-            <div class="flex flex-wrap items-center gap-2 text-xs">
-              <span class="flex items-center gap-1.5">
-                <span class="size-2 rounded-full" :class="statusColor[series.status]"></span>
-                {{ cap(series.status) }}
-              </span>
-              <span v-if="series.year" class="text-base-content/60">· {{ series.year }}</span>
-              <span
-                v-if="series.rating"
-                class="tooltip flex items-center gap-1"
-                data-tip="Community rating (MangaDex)"
-              >
-                <Star class="size-3.5 fill-current text-warning" />
-                <span class="font-medium text-base-content/80">{{ series.rating.toFixed(2) }}</span>
-              </span>
-              <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
-                {{ ratingLabel(series.contentRating) }}
-              </span>
+        <div class="relative flex flex-col gap-4 p-4 sm:flex-row sm:gap-6 sm:p-6">
+          <CoverImage
+            :src="series.coverUrl"
+            :alt="series.title"
+            priority
+            class="cover w-36 shrink-0 rounded-box shadow-lg sm:w-48"
+          />
+          <div class="flex min-w-0 grow flex-col gap-3">
+            <div class="flex flex-col gap-1">
+              <h1 class="flex items-center gap-2 text-3xl font-bold">
+                <CountryFlag v-if="series.originCountry" :cc="series.originCountry" />
+                {{ series.title }}
+              </h1>
+              <p class="text-sm text-base-content/70">{{ series.authors.join(", ") }}</p>
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="flex items-center gap-1.5">
+                  <span class="size-2 rounded-full" :class="statusColor[series.status]"></span>
+                  {{ cap(series.status) }}
+                </span>
+                <span v-if="series.year" class="text-base-content/60">· {{ series.year }}</span>
+                <span
+                  v-if="series.rating"
+                  class="tooltip flex items-center gap-1"
+                  data-tip="Community rating (MangaDex)"
+                >
+                  <Star class="size-3.5 fill-current text-warning" />
+                  <span class="font-medium text-base-content/80">{{
+                    series.rating.toFixed(2)
+                  }}</span>
+                </span>
+                <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
+                  {{ ratingLabel(series.contentRating) }}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <!-- Synopsis (Markdown + structured Namespace/Tags table from MangaDex) -->
-          <div v-if="series.description">
-            <SeriesDescription
-              :text="series.description"
-              :clamp="!expanded"
-              :show-tag-table="expanded"
-            />
-            <button class="btn btn-ghost btn-xs mt-1" @click="expanded = !expanded">
-              {{ expanded ? "Show less" : "Show more" }}
-            </button>
-          </div>
+            <!-- Synopsis (Markdown + structured Namespace/Tags table from MangaDex) -->
+            <div v-if="series.description">
+              <SeriesDescription
+                :text="series.description"
+                :clamp="!expanded"
+                :show-tag-table="expanded"
+              />
+              <button class="btn btn-ghost btn-xs mt-1" @click="expanded = !expanded">
+                {{ expanded ? "Show less" : "Show more" }}
+              </button>
+            </div>
 
-          <!-- Action row: left tools · right: new-count + track + metadata -->
-          <div class="mt-auto flex flex-wrap items-center gap-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
-                <BookOpen class="size-4" />
-                Start reading
-              </RouterLink>
+            <!-- Action row: left tools · right: new-count + track + metadata -->
+            <div class="mt-auto flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <RouterLink :to="`/read/${series.id}`" class="btn btn-primary btn-sm gap-2">
+                  <BookOpen class="size-4" />
+                  Start reading
+                </RouterLink>
 
-              <!-- Your rating (1–10) -->
-              <div class="dropdown">
-                <div tabindex="0" role="button" class="btn btn-sm gap-1">
-                  <Star class="size-4" :class="userRating ? 'fill-current text-warning' : ''" />
-                  {{ userRating ? `${userRating}/10` : "Rate" }}
-                </div>
-                <div tabindex="0" class="dropdown-content z-10 mt-1 rounded-box bg-base-100 p-3 shadow">
-                  <div class="mb-1 text-xs text-base-content/60">Your rating</div>
-                  <div class="flex items-center gap-0.5" @mouseleave="hoverRating = 0">
+                <!-- Your rating (1–10) -->
+                <div class="dropdown">
+                  <div tabindex="0" role="button" class="btn btn-sm gap-1">
+                    <Star class="size-4" :class="userRating ? 'fill-current text-warning' : ''" />
+                    {{ userRating ? `${userRating}/10` : "Rate" }}
+                  </div>
+                  <div
+                    tabindex="0"
+                    class="dropdown-content z-10 mt-1 rounded-box bg-base-100 p-3 shadow"
+                  >
+                    <div class="mb-1 text-xs text-base-content/60">Your rating</div>
+                    <div class="flex items-center gap-0.5" @mouseleave="hoverRating = 0">
+                      <button
+                        v-for="n in 10"
+                        :key="n"
+                        class="p-0.5"
+                        :aria-label="`Rate ${n} of 10`"
+                        @mouseenter="hoverRating = n"
+                        @click="setRating(n)"
+                      >
+                        <Star
+                          class="size-4"
+                          :class="
+                            (hoverRating || userRating || 0) >= n
+                              ? 'fill-current text-warning'
+                              : 'text-base-content/30'
+                          "
+                        />
+                      </button>
+                    </div>
                     <button
-                      v-for="n in 10"
-                      :key="n"
-                      class="p-0.5"
-                      :aria-label="`Rate ${n} of 10`"
-                      @mouseenter="hoverRating = n"
-                      @click="setRating(n)"
+                      v-if="userRating"
+                      class="btn btn-ghost btn-xs mt-2 w-full"
+                      @click="clearRating"
                     >
-                      <Star
-                        class="size-4"
-                        :class="(hoverRating || userRating || 0) >= n ? 'fill-current text-warning' : 'text-base-content/30'"
-                      />
+                      Clear rating
                     </button>
                   </div>
-                  <button v-if="userRating" class="btn btn-ghost btn-xs mt-2 w-full" @click="clearRating">
-                    Clear rating
-                  </button>
                 </div>
+
+                <!-- Favorite -->
+                <button
+                  class="btn btn-square btn-sm"
+                  :class="{ 'text-error': favorite }"
+                  aria-label="Favorite"
+                  @click="toggleFavorite"
+                >
+                  <Heart class="size-4" :class="{ 'fill-current': favorite }" />
+                </button>
+
+                <!-- Add to list -->
+                <AddToListMenu :series-id="series.id" />
+
+                <!-- Edit metadata -->
+                <button class="btn btn-sm gap-2" @click="editOpen = true">
+                  <Pencil class="size-4" />Edit
+                </button>
               </div>
 
-              <!-- Favorite -->
-              <button
-                class="btn btn-square btn-sm"
-                :class="{ 'text-error': favorite }"
-                aria-label="Favorite"
-                @click="toggleFavorite"
-              >
-                <Heart class="size-4" :class="{ 'fill-current': favorite }" />
-              </button>
-
-              <!-- Add to list -->
-              <AddToListMenu :series-id="series.id" />
-
-              <!-- Edit metadata -->
-              <button class="btn btn-sm gap-2" @click="editOpen = true">
-                <Pencil class="size-4" />Edit
-              </button>
-            </div>
-
-            <!-- Right cluster: new badge + Track (shelf) + metadata source -->
-            <div class="ml-auto flex flex-wrap items-center gap-2">
-              <span
-                v-if="(series.availableChapters ?? 0) > 0"
-                class="badge badge-warning gap-1"
-                :title="`${series.availableChapters} new chapters available upstream`"
-              >
-                {{ series.availableChapters }} new
-              </span>
-              <div class="join">
-                <!-- Track = shelf status -->
-                <div class="dropdown dropdown-end">
-                  <div
-                    tabindex="0"
-                    role="button"
-                    class="btn btn-sm join-item gap-1.5"
-                    :class="libraryStatus !== 'none' ? 'btn-primary' : ''"
-                  >
-                    <BookMarked class="size-4" />{{ trackLabel }}
+              <!-- Right cluster: new badge + Track (shelf) + metadata source -->
+              <div class="ml-auto flex flex-wrap items-center gap-2">
+                <span
+                  v-if="(series.availableChapters ?? 0) > 0"
+                  class="badge badge-warning gap-1"
+                  :title="`${series.availableChapters} new chapters available upstream`"
+                >
+                  {{ series.availableChapters }} new
+                </span>
+                <div class="join">
+                  <!-- Track = shelf status -->
+                  <div class="dropdown dropdown-end">
+                    <div
+                      tabindex="0"
+                      role="button"
+                      class="btn btn-sm join-item gap-1.5"
+                      :class="libraryStatus !== 'none' ? 'btn-primary' : ''"
+                    >
+                      <BookMarked class="size-4" />{{ trackLabel }}
+                    </div>
+                    <ul
+                      tabindex="0"
+                      class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
+                    >
+                      <li v-for="s in statuses" :key="s.value">
+                        <a
+                          :class="{ 'menu-active': s.value === libraryStatus }"
+                          @click="setStatus(s.value)"
+                        >
+                          {{ s.label === "None" ? "Not tracking" : s.label }}
+                        </a>
+                      </li>
+                    </ul>
                   </div>
-                  <ul
-                    tabindex="0"
-                    class="menu dropdown-content z-10 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
-                  >
-                    <li v-for="s in statuses" :key="s.value">
-                      <a
-                        :class="{ 'menu-active': s.value === libraryStatus }"
-                        @click="setStatus(s.value)"
-                      >
-                        {{ s.label === "None" ? "Not tracking" : s.label }}
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-                <div class="dropdown dropdown-end">
-                  <div
-                    tabindex="0"
-                    role="button"
-                    class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
-                    data-tip="Metadata source"
-                    aria-label="Metadata source"
-                  >
-                    <RefreshCw class="size-4" />
+                  <div class="dropdown dropdown-end">
+                    <div
+                      tabindex="0"
+                      role="button"
+                      class="btn btn-square btn-sm join-item tooltip tooltip-bottom"
+                      data-tip="Metadata source"
+                      aria-label="Metadata source"
+                    >
+                      <RefreshCw class="size-4" />
+                    </div>
+                    <ul
+                      tabindex="0"
+                      class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow"
+                    >
+                      <li>
+                        <a @click="openMatch"><Link2 class="size-4" />Match on MangaDex…</a>
+                      </li>
+                      <li :class="{ 'menu-disabled': !isMatched }">
+                        <a @click="isMatched && refreshMeta()"
+                          ><RefreshCw class="size-4" />Refresh metadata</a
+                        >
+                      </li>
+                      <li v-if="isMatched">
+                        <a class="text-error" @click="unlinkMeta"
+                          ><X class="size-4" />Unlink source</a
+                        >
+                      </li>
+                    </ul>
                   </div>
-                  <ul tabindex="0" class="menu dropdown-content z-10 mt-1 w-56 rounded-box bg-base-100 p-2 shadow">
-                    <li><a @click="openMatch"><Link2 class="size-4" />Match on MangaDex…</a></li>
-                    <li :class="{ 'menu-disabled': !isMatched }">
-                      <a @click="isMatched && refreshMeta()"><RefreshCw class="size-4" />Refresh metadata</a>
-                    </li>
-                    <li v-if="isMatched">
-                      <a class="text-error" @click="unlinkMeta"><X class="size-4" />Unlink source</a>
-                    </li>
-                  </ul>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- BODY: info column (left) · chapters (right) -->
+      <div class="flex flex-col gap-6 px-4 pb-6 sm:px-6 lg:flex-row">
+        <aside class="shrink-0 lg:w-72">
+          <SeriesInfoPanel :series="series" />
+        </aside>
+        <div class="min-w-0 grow">
+          <ChapterList
+            :volumes="volumes"
+            :related="related"
+            :art-covers="artCovers"
+            :series-id="series.id"
+            :matched="isMatched"
+            :synced="chaptersSynced"
+            :language="chapterLanguage"
+            :order="chapterOrder"
+            @download="downloadChapter"
+            @download-all="downloadAll"
+            @delete-chapter="onDeleteChapter"
+            @update:language="onLanguageChange"
+            @update:order="onOrderChange"
+          />
+        </div>
       </div>
-    </section>
 
-    <!-- BODY: info column (left) · chapters (right) -->
-    <div class="flex flex-col gap-6 px-4 pb-6 sm:px-6 lg:flex-row">
-      <aside class="shrink-0 lg:w-72">
-        <SeriesInfoPanel :series="series" />
-      </aside>
-      <div class="min-w-0 grow">
-        <ChapterList
-          :volumes="volumes"
-          :related="related"
-          :art-covers="artCovers"
-          :series-id="series.id"
-          :matched="isMatched"
-          :synced="chaptersSynced"
-          :language="chapterLanguage"
-          :order="chapterOrder"
-          @download="downloadChapter"
-          @download-all="downloadAll"
-          @delete-chapter="onDeleteChapter"
-          @update:language="onLanguageChange"
-          @update:order="onOrderChange"
-        />
-      </div>
-    </div>
+      <!-- Match-on-MangaDex modal -->
+      <MatchSeriesModal
+        v-if="matchOpen && series"
+        :series-id="series.id"
+        :initial-query="series.title"
+        @close="matchOpen = false"
+        @matched="onMatched"
+      />
 
-    <!-- Match-on-MangaDex modal -->
-    <MatchSeriesModal
-      v-if="matchOpen && series"
-      :series-id="series.id"
-      :initial-query="series.title"
-      @close="matchOpen = false"
-      @matched="onMatched"
-    />
-
-    <!-- Edit metadata modal -->
-    <EditSeriesModal v-if="editOpen" :series="series" @close="editOpen = false" @saved="onEdited" />
+      <!-- Edit metadata modal -->
+      <EditSeriesModal
+        v-if="editOpen"
+        :series="series"
+        @close="editOpen = false"
+        @saved="onEdited"
+      />
     </template>
   </div>
 </template>

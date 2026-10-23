@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-vue-next";
+import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "@lucide/vue";
 import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
@@ -11,7 +11,13 @@ import SeriesCollection from "../components/SeriesCollection.vue";
 import { type Density, useDensity } from "../lib/density";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import { toast } from "../lib/toast";
-import type { BrowseFilters, ContentRating, Demographic, LibraryStatus, PublicationStatus } from "../types";
+import type {
+  BrowseFilters,
+  ContentRating,
+  Demographic,
+  LibraryStatus,
+  PublicationStatus,
+} from "../types";
 
 defineOptions({ name: "LibraryView" });
 
@@ -92,13 +98,26 @@ function tagName(id: string): string {
 
 const activeChips = computed(() => {
   const chips: { key: string; label: string; remove: () => void }[] = [];
-  if (filters.query) chips.push({ key: "q", label: `“${filters.query}”`, remove: () => (filters.query = "") });
+  if (filters.query)
+    chips.push({ key: "q", label: `“${filters.query}”`, remove: () => (filters.query = "") });
   for (const [id, state] of Object.entries(filters.tags))
-    chips.push({ key: `t-${id}`, label: `${state === "exclude" ? "−" : "+"} ${tagName(id)}`, remove: () => delete filters.tags[id] });
-  for (const r of filters.ratings) chips.push({ key: `r-${r}`, label: ratingLabel(r), remove: () => filters.ratings.delete(r) });
-  for (const d of filters.demographics) chips.push({ key: `d-${d}`, label: demographicLabel(d), remove: () => filters.demographics.delete(d) });
-  for (const s of filters.statuses) chips.push({ key: `s-${s}`, label: s, remove: () => filters.statuses.delete(s) });
-  for (const rs of filters.readStates) chips.push({ key: `rs-${rs}`, label: rs, remove: () => filters.readStates.delete(rs) });
+    chips.push({
+      key: `t-${id}`,
+      label: `${state === "exclude" ? "−" : "+"} ${tagName(id)}`,
+      remove: () => delete filters.tags[id],
+    });
+  for (const r of filters.ratings)
+    chips.push({ key: `r-${r}`, label: ratingLabel(r), remove: () => filters.ratings.delete(r) });
+  for (const d of filters.demographics)
+    chips.push({
+      key: `d-${d}`,
+      label: demographicLabel(d),
+      remove: () => filters.demographics.delete(d),
+    });
+  for (const s of filters.statuses)
+    chips.push({ key: `s-${s}`, label: s, remove: () => filters.statuses.delete(s) });
+  for (const rs of filters.readStates)
+    chips.push({ key: `rs-${rs}`, label: rs, remove: () => filters.readStates.delete(rs) });
   return chips;
 });
 
@@ -218,7 +237,13 @@ watch(
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
-        <input v-model="filters.query" type="search" class="grow" placeholder="Search this library…" aria-label="Search this library" />
+        <input
+          v-model="filters.query"
+          type="search"
+          class="grow"
+          placeholder="Search this library…"
+          aria-label="Search this library"
+        />
       </label>
       <button
         class="btn btn-sm gap-1.5"
@@ -241,7 +266,11 @@ watch(
     </div>
 
     <!-- Shelf-status tabs -->
-    <div v-if="showTabs" role="tablist" class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border">
+    <div
+      v-if="showTabs"
+      role="tablist"
+      class="tabs tabs-box max-w-full self-start overflow-x-auto surface-border"
+    >
       <button
         v-for="tab in statusTabs"
         :key="tab.value"
@@ -265,7 +294,11 @@ watch(
         @click="applyPreset(p)"
       >
         {{ p.name }}
-        <button class="opacity-60 hover:opacity-100" aria-label="Delete preset" @click.stop="deletePreset(p.name)">
+        <button
+          class="opacity-60 hover:opacity-100"
+          aria-label="Delete preset"
+          @click.stop="deletePreset(p.name)"
+        >
           <X class="size-3" />
         </button>
       </span>
@@ -306,8 +339,12 @@ watch(
           class="input input-bordered input-sm max-w-xs"
           @keyup.enter="savePreset"
         />
-        <button class="btn btn-primary btn-sm" :disabled="!presetName.trim()" @click="savePreset">Save</button>
-        <button class="btn btn-ghost btn-sm ml-auto" @click="resetFilters">Clear all filters</button>
+        <button class="btn btn-primary btn-sm" :disabled="!presetName.trim()" @click="savePreset">
+          Save
+        </button>
+        <button class="btn btn-ghost btn-sm ml-auto" @click="resetFilters">
+          Clear all filters
+        </button>
       </div>
     </div>
 

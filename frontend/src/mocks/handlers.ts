@@ -111,7 +111,8 @@ function sortSeriesList(list: SeriesOut[], sort: string | null): SeriesOut[] {
       return arr.sort((a, b) => b.unreadCount - a.unreadCount);
     case "recentlyUpdated":
       return arr.sort(
-        (a, b) => new Date(b.chaptersSyncedAt ?? 0).getTime() - new Date(a.chaptersSyncedAt ?? 0).getTime(),
+        (a, b) =>
+          new Date(b.chaptersSyncedAt ?? 0).getTime() - new Date(a.chaptersSyncedAt ?? 0).getTime(),
       );
     default:
       return arr; // recentlyAdded: catalog insertion order
@@ -131,9 +132,13 @@ function filterSeries(url: URL): SeriesOut[] {
     if (!matchesCsv(s.demographic, q.get("demographics"))) return false;
     if (!matchesCsv(s.status, q.get("pubStatus"))) return false;
     if (!matchesReadState(s, q.get("readState"))) return false;
-    if (q.get("artist") && !s.artists.some((a) => a.toLowerCase().includes(q.get("artist")!.toLowerCase())))
+    if (
+      q.get("artist") &&
+      !s.artists.some((a) => a.toLowerCase().includes(q.get("artist")!.toLowerCase()))
+    )
       return false;
-    if (q.get("source") && !(s.source ?? "").toLowerCase().includes(q.get("source")!.toLowerCase())) return false;
+    if (q.get("source") && !(s.source ?? "").toLowerCase().includes(q.get("source")!.toLowerCase()))
+      return false;
     return true;
   });
 }
@@ -147,7 +152,9 @@ function recentUpdates(unreadOnly: boolean, limit: number) {
     .slice(0, limit)
     .map((c) => {
       const series = seriesById(c.seriesId);
-      return series ? { series, volume: c.volume, chapter: c.number, updatedAt: c.uploadedAt } : null;
+      return series
+        ? { series, volume: c.volume, chapter: c.number, updatedAt: c.uploadedAt }
+        : null;
     })
     .filter((u): u is NonNullable<typeof u> => u !== null);
 }
@@ -213,12 +220,15 @@ export const handlers = [
     if (body.description !== undefined) series.description = body.description;
     if (body.year !== undefined) series.year = body.year;
     if (body.status !== undefined && body.status !== null) series.status = body.status;
-    if (body.contentRating !== undefined && body.contentRating !== null) series.contentRating = body.contentRating;
-    if (body.demographic !== undefined && body.demographic !== null) series.demographic = body.demographic;
+    if (body.contentRating !== undefined && body.contentRating !== null)
+      series.contentRating = body.contentRating;
+    if (body.demographic !== undefined && body.demographic !== null)
+      series.demographic = body.demographic;
     if (body.originCountry !== undefined) series.originCountry = body.originCountry;
     if (body.authors !== undefined && body.authors !== null) series.authors = body.authors;
     if (body.artists !== undefined && body.artists !== null) series.artists = body.artists;
-    if (body.tagIds !== undefined && body.tagIds !== null) series.tags = body.tagIds.map(taxonomyTag);
+    if (body.tagIds !== undefined && body.tagIds !== null)
+      series.tags = body.tagIds.map(taxonomyTag);
     if (body.source !== undefined) series.source = body.source;
     if (body.characters !== undefined) series.characters = body.characters;
     await delay(150);
@@ -324,7 +334,8 @@ export const handlers = [
 
   http.get("/api/series/:series_id/images", async ({ params, request }) => {
     const series = seriesById(params.series_id as string);
-    if (!series || !series.imageCount) return apiError(404, "series_not_found", "Gallery not found.");
+    if (!series || !series.imageCount)
+      return apiError(404, "series_not_found", "Gallery not found.");
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? 100);
     const offset = decodeCursorOffset(url.searchParams.get("cursor"));
@@ -370,7 +381,10 @@ export const handlers = [
     const series = seriesById(params.series_id as string);
     if (!series) return apiError(404, "series_not_found", "Series not found.");
     const index = Number(params.index);
-    return new HttpResponse(galleryImageSvg(series.id, "video", index, 900, 1200), svgResponseInit());
+    return new HttpResponse(
+      galleryImageSvg(series.id, "video", index, 900, 1200),
+      svgResponseInit(),
+    );
   }),
 
   http.get("/api/series/:series_id/images/:index", ({ params }) => {
@@ -387,7 +401,10 @@ export const handlers = [
     const series = seriesById(chapter.seriesId);
     const page = Number(params.n);
     const label = `${series?.title ?? "Unknown"} — Ch. ${chapter.number}`;
-    return new HttpResponse(pageSvg(chapter.id ?? chapter.seriesId, label, page, chapter.pageCount), svgResponseInit());
+    return new HttpResponse(
+      pageSvg(chapter.id ?? chapter.seriesId, label, page, chapter.pageCount),
+      svgResponseInit(),
+    );
   }),
 
   // --- chapters -----------------------------------------------------------
@@ -479,7 +496,12 @@ export const handlers = [
     await delay(80);
     const all = buildTaxonomyItems(seriesCatalog);
     const start = (page - 1) * pageSize;
-    return HttpResponse.json({ items: all.slice(start, start + pageSize), total: all.length, page, pageSize });
+    return HttpResponse.json({
+      items: all.slice(start, start + pageSize),
+      total: all.length,
+      page,
+      pageSize,
+    });
   }),
 
   http.post("/api/taxonomy", async ({ request }) => {
@@ -487,7 +509,18 @@ export const handlers = [
     const id = `${body.category}-${slugify(body.name)}`;
     addTaxonomyDef({ id, name: body.name, category: body.category, system: false, aliases: [] });
     await delay(150);
-    return HttpResponse.json({ id, name: body.name, category: body.category, uses: 0, enabled: true, system: false, aliases: [] }, { status: 201 });
+    return HttpResponse.json(
+      {
+        id,
+        name: body.name,
+        category: body.category,
+        uses: 0,
+        enabled: true,
+        system: false,
+        aliases: [],
+      },
+      { status: 201 },
+    );
   }),
 
   http.post("/api/taxonomy/refresh", async () => {
@@ -498,7 +531,13 @@ export const handlers = [
       result: { newTags: 1 },
       onDone: () => {
         if (!buildTaxonomyItems(seriesCatalog).some((t) => t.id === "theme-urban-fantasy")) {
-          addTaxonomyDef({ id: "theme-urban-fantasy", name: "Urban Fantasy", category: "theme", system: false, aliases: [] });
+          addTaxonomyDef({
+            id: "theme-urban-fantasy",
+            name: "Urban Fantasy",
+            category: "theme",
+            system: false,
+            aliases: [],
+          });
         }
       },
     });
@@ -626,9 +665,12 @@ export const handlers = [
     const body = (await request.json()) as components["schemas"]["ProviderUpdate"];
     if (body.enabled !== undefined && body.enabled !== null) provider.enabled = body.enabled;
     if (body.language !== undefined && body.language !== null) provider.language = body.language;
-    if (body.autoMatch !== undefined && body.autoMatch !== null) provider.autoMatch = body.autoMatch;
-    if (body.fetchCovers !== undefined && body.fetchCovers !== null) provider.fetchCovers = body.fetchCovers;
-    if (body.dataSaver !== undefined && body.dataSaver !== null) provider.dataSaver = body.dataSaver;
+    if (body.autoMatch !== undefined && body.autoMatch !== null)
+      provider.autoMatch = body.autoMatch;
+    if (body.fetchCovers !== undefined && body.fetchCovers !== null)
+      provider.fetchCovers = body.fetchCovers;
+    if (body.dataSaver !== undefined && body.dataSaver !== null)
+      provider.dataSaver = body.dataSaver;
     await delay(150);
     return HttpResponse.json(provider);
   }),
@@ -674,7 +716,8 @@ export const handlers = [
     const tracker = trackersDb.find((t) => t.id === params.tracker_id);
     if (!tracker) return apiError(404, "tracker_not_found", "Tracker not found.");
     const body = (await request.json()) as components["schemas"]["TrackerUpdate"];
-    if (body.syncOnRead !== undefined && body.syncOnRead !== null) tracker.syncOnRead = body.syncOnRead;
+    if (body.syncOnRead !== undefined && body.syncOnRead !== null)
+      tracker.syncOnRead = body.syncOnRead;
     await delay(120);
     return HttpResponse.json(tracker);
   }),
@@ -732,7 +775,8 @@ export const handlers = [
       onDone: (t) => {
         syncState.syncing = false;
         syncState.lastSync = nowIso();
-        syncState.newChapters = (t.result?.newChapters as number | undefined) ?? randInt(rngFor(nowIso()), 0, 12);
+        syncState.newChapters =
+          (t.result?.newChapters as number | undefined) ?? randInt(rngFor(nowIso()), 0, 12);
       },
       result: { newChapters: randInt(rngFor("sync" + nowIso()), 0, 12) },
     });
@@ -799,7 +843,12 @@ export const handlers = [
     if (!collection) return apiError(404, "collection_not_found", "List not found.");
     await delay(120);
     const series = collection.seriesIds.map(seriesById).filter((s): s is SeriesOut => Boolean(s));
-    return HttpResponse.json({ id: collection.id, name: collection.name, description: collection.description, series });
+    return HttpResponse.json({
+      id: collection.id,
+      name: collection.name,
+      description: collection.description,
+      series,
+    });
   }),
 
   http.patch("/api/collections/:collection_id", async ({ params, request }) => {
@@ -877,7 +926,8 @@ export const handlers = [
 
     if (body.action) {
       if (body.action === "pause-all") {
-        for (const row of downloadsDb) if (row.status === "downloading" || row.status === "queued") row.status = "paused";
+        for (const row of downloadsDb)
+          if (row.status === "downloading" || row.status === "queued") row.status = "paused";
       } else if (body.action === "cancel-all") {
         for (let i = downloadsDb.length - 1; i >= 0; i--) {
           if (downloadsDb[i]?.status !== "done") downloadsDb.splice(i, 1);
@@ -889,10 +939,12 @@ export const handlers = [
     }
 
     const series = body.seriesId ? seriesById(body.seriesId) : undefined;
-    if (!series) return apiError(422, "invalid_request", "seriesId is required to queue a download.");
+    if (!series)
+      return apiError(422, "invalid_request", "seriesId is required to queue a download.");
     const chapterLabel = body.providerChapterIds?.length
       ? `${body.providerChapterIds.length} chapter${body.providerChapterIds.length > 1 ? "s" : ""}`
-      : (chaptersDb.find((c) => c.seriesId === series.id && c.status === "available")?.number ?? "New chapters");
+      : (chaptersDb.find((c) => c.seriesId === series.id && c.status === "available")?.number ??
+        "New chapters");
     const row: DownloadTaskOut = {
       id: nextDownloadId(),
       series,
@@ -961,7 +1013,12 @@ export const handlers = [
     const url = new URL(request.url);
     const path = url.searchParams.get("path") || fsRoot();
     await delay(100);
-    return HttpResponse.json({ root: fsRoot(), path, parent: fsParentOf(path), entries: fsTree.get(path) ?? [] });
+    return HttpResponse.json({
+      root: fsRoot(),
+      path,
+      parent: fsParentOf(path),
+      entries: fsTree.get(path) ?? [],
+    });
   }),
 
   http.post("/api/fs/mkdir", async ({ request }) => {

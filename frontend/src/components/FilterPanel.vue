@@ -3,10 +3,9 @@ import type { TagGroup } from "../api/queries";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import type { BrowseFilters, ContentRating, Demographic, PublicationStatus } from "../types";
 
-const props = withDefaults(
-  defineProps<{ filters: BrowseFilters; tagGroups?: TagGroup[] }>(),
-  { tagGroups: () => [] },
-);
+const props = withDefaults(defineProps<{ filters: BrowseFilters; tagGroups?: TagGroup[] }>(), {
+  tagGroups: () => [],
+});
 const emit = defineEmits<{
   "set-tag-mode": [mode: "and" | "or"];
   "toggle-tag": [id: string];
@@ -18,7 +17,13 @@ const emit = defineEmits<{
 
 // All five: manga/comic use "pornographic" (MangaDex's own term), galleries use
 // their own "explicit" top tier — a mixed-kind browse view can show either.
-const ratingOptions: ContentRating[] = ["safe", "suggestive", "erotica", "pornographic", "explicit"];
+const ratingOptions: ContentRating[] = [
+  "safe",
+  "suggestive",
+  "erotica",
+  "pornographic",
+  "explicit",
+];
 const demographicOptions: Demographic[] = ["shonen", "shojo", "seinen", "josei"];
 const statusOptions: PublicationStatus[] = ["ongoing", "completed", "hiatus", "cancelled"];
 const readStateOptions: { value: string; label: string }[] = [
@@ -40,14 +45,32 @@ function tagClass(id: string): string {
       <div class="flex items-center gap-2">
         <span class="text-sm font-semibold">Tags</span>
         <div class="join ml-auto">
-          <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'and' }" @click="emit('set-tag-mode', 'and')">AND</button>
-          <button class="btn join-item btn-xs" :class="{ 'btn-active': filters.tagMode === 'or' }" @click="emit('set-tag-mode', 'or')">OR</button>
+          <button
+            class="btn join-item btn-xs"
+            :class="{ 'btn-active': filters.tagMode === 'and' }"
+            @click="emit('set-tag-mode', 'and')"
+          >
+            AND
+          </button>
+          <button
+            class="btn join-item btn-xs"
+            :class="{ 'btn-active': filters.tagMode === 'or' }"
+            @click="emit('set-tag-mode', 'or')"
+          >
+            OR
+          </button>
         </div>
       </div>
       <div v-for="g in tagGroups" :key="g.group" class="flex flex-col gap-1">
         <span class="text-xs text-base-content/60">{{ g.group }}</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="t in g.tags" :key="t.id" class="btn btn-xs" :class="tagClass(t.id)" @click="emit('toggle-tag', t.id)">
+          <button
+            v-for="t in g.tags"
+            :key="t.id"
+            class="btn btn-xs"
+            :class="tagClass(t.id)"
+            @click="emit('toggle-tag', t.id)"
+          >
             {{ t.name }}
           </button>
         </div>
@@ -59,7 +82,13 @@ function tagClass(id: string): string {
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Content rating</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="r in ratingOptions" :key="r" class="btn btn-xs" :class="filters.ratings.has(r) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-rating', r)">
+          <button
+            v-for="r in ratingOptions"
+            :key="r"
+            class="btn btn-xs"
+            :class="filters.ratings.has(r) ? 'btn-primary' : 'btn-ghost'"
+            @click="emit('toggle-rating', r)"
+          >
             {{ ratingLabel(r) }}
           </button>
         </div>
@@ -67,7 +96,13 @@ function tagClass(id: string): string {
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Demographic</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="d in demographicOptions" :key="d" class="btn btn-xs" :class="filters.demographics.has(d) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-demographic', d)">
+          <button
+            v-for="d in demographicOptions"
+            :key="d"
+            class="btn btn-xs"
+            :class="filters.demographics.has(d) ? 'btn-primary' : 'btn-ghost'"
+            @click="emit('toggle-demographic', d)"
+          >
             {{ demographicLabel(d) }}
           </button>
         </div>
@@ -75,7 +110,13 @@ function tagClass(id: string): string {
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Publication status</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="s in statusOptions" :key="s" class="btn btn-xs capitalize" :class="filters.statuses.has(s) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-status', s)">
+          <button
+            v-for="s in statusOptions"
+            :key="s"
+            class="btn btn-xs capitalize"
+            :class="filters.statuses.has(s) ? 'btn-primary' : 'btn-ghost'"
+            @click="emit('toggle-status', s)"
+          >
             {{ s }}
           </button>
         </div>
@@ -83,7 +124,13 @@ function tagClass(id: string): string {
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold">Read status</span>
         <div class="flex flex-wrap gap-1">
-          <button v-for="rs in readStateOptions" :key="rs.value" class="btn btn-xs" :class="filters.readStates.has(rs.value) ? 'btn-primary' : 'btn-ghost'" @click="emit('toggle-read-state', rs.value)">
+          <button
+            v-for="rs in readStateOptions"
+            :key="rs.value"
+            class="btn btn-xs"
+            :class="filters.readStates.has(rs.value) ? 'btn-primary' : 'btn-ghost'"
+            @click="emit('toggle-read-state', rs.value)"
+          >
             {{ rs.label }}
           </button>
         </div>

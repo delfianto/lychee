@@ -1,5 +1,5 @@
 import { RouterLinkStub, mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { Chapter, VolumeGroup } from "../types";
 import ChapterList from "./ChapterList.vue";
@@ -33,7 +33,10 @@ describe("ChapterList gating predicates (rendered as button presence)", () => {
     const available = chapter({ number: "1", status: "available", providerChapterId: "p1" });
     const downloaded = chapter({ number: "2", status: "downloaded", id: "c2" });
     const downloading = chapter({ number: "3", status: "downloading", providerChapterId: "p3" });
-    const wrapper = mount(ChapterList, { ...mountOpts, props: { volumes: volumes(available, downloaded, downloading) } });
+    const wrapper = mount(ChapterList, {
+      ...mountOpts,
+      props: { volumes: volumes(available, downloaded, downloading) },
+    });
 
     expect(wrapper.find("[aria-label='Download chapter']").exists()).toBe(true);
     expect(wrapper.findAll("[aria-label='Download chapter']")).toHaveLength(1); // only the available one
@@ -42,9 +45,14 @@ describe("ChapterList gating predicates (rendered as button presence)", () => {
   it("shows a delete button only for downloaded chapters with a local id", () => {
     const downloaded = chapter({ number: "1", status: "downloaded", id: "c1" });
     const remoteOnly = chapter({ number: "2", status: "available", providerChapterId: "p2" });
-    const wrapper = mount(ChapterList, { ...mountOpts, props: { volumes: volumes(downloaded, remoteOnly) } });
+    const wrapper = mount(ChapterList, {
+      ...mountOpts,
+      props: { volumes: volumes(downloaded, remoteOnly) },
+    });
 
-    const deleteButtons = wrapper.findAll("button[title*='Delete'], button[title*='Remove download']");
+    const deleteButtons = wrapper.findAll(
+      "button[title*='Delete'], button[title*='Remove download']",
+    );
     expect(deleteButtons).toHaveLength(1);
   });
 
@@ -54,7 +62,10 @@ describe("ChapterList gating predicates (rendered as button presence)", () => {
     // is exclusive), so assert indirectly: a failed chapter (canDownload, not in-flight)
     // is enabled, matching the isInFlight/canDownload predicates being independent checks.
     const failed = chapter({ number: "2", status: "failed", providerChapterId: "p2" });
-    const wrapper = mount(ChapterList, { ...mountOpts, props: { volumes: volumes(queued, failed) } });
+    const wrapper = mount(ChapterList, {
+      ...mountOpts,
+      props: { volumes: volumes(queued, failed) },
+    });
     const btn = wrapper.find("[aria-label='Download chapter']");
     expect(btn.attributes("disabled")).toBeUndefined(); // the failed one, re-downloadable
   });
@@ -99,7 +110,10 @@ describe("ChapterList emitted-event contracts", () => {
   });
 
   it("emits update:order when the sort button is clicked", async () => {
-    const wrapper = mount(ChapterList, { ...mountOpts, props: { volumes: volumes(), order: "desc" } });
+    const wrapper = mount(ChapterList, {
+      ...mountOpts,
+      props: { volumes: volumes(), order: "desc" },
+    });
     const sortBtn = wrapper.findAll("button").find((b) => b.text().includes("Newest"));
     await sortBtn!.trigger("click");
     expect(wrapper.emitted("update:order")).toEqual([["asc"]]);

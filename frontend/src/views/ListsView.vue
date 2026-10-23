@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Layers, Plus, Trash2 } from "lucide-vue-next";
+import { Layers, Plus, Trash2 } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -81,7 +81,10 @@ function covers(seriesIds: string[]): string[] {
     </div>
 
     <!-- Inline create -->
-    <div v-if="creating" class="flex flex-wrap items-center gap-2 rounded-box surface-border bg-base-100 p-3">
+    <div
+      v-if="creating"
+      class="flex flex-wrap items-center gap-2 rounded-box surface-border bg-base-100 p-3"
+    >
       <input
         v-model="newName"
         type="text"
@@ -89,7 +92,9 @@ function covers(seriesIds: string[]): string[] {
         class="input input-bordered input-sm max-w-xs"
         @keyup.enter="create"
       />
-      <button class="btn btn-primary btn-sm" :disabled="!newName.trim()" @click="create">Create</button>
+      <button class="btn btn-primary btn-sm" :disabled="!newName.trim()" @click="create">
+        Create
+      </button>
       <button class="btn btn-ghost btn-sm" @click="creating = false">Cancel</button>
     </div>
 
@@ -107,7 +112,13 @@ function covers(seriesIds: string[]): string[] {
           class="block overflow-hidden rounded-box surface-border bg-base-100 transition hover:shadow-md"
         >
           <div class="grid aspect-video grid-cols-2 grid-rows-2 gap-0.5 bg-base-300">
-            <img v-for="(c, i) in covers(l.seriesIds)" :key="i" :src="c" alt="" class="h-full w-full object-cover" />
+            <img
+              v-for="(c, i) in covers(l.seriesIds)"
+              :key="i"
+              :src="c"
+              alt=""
+              class="h-full w-full object-cover"
+            />
             <div
               v-if="!l.seriesIds.length"
               class="col-span-2 row-span-2 flex items-center justify-center text-base-content/30"

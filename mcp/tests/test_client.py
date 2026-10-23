@@ -95,3 +95,23 @@ async def test_patch_series_drops_none_fields_and_maps_camelcase():
     assert series.favorite is True
     assert captured == {"favorite": True, "tagIds": ["genre-action"]}
     await client.aclose()
+
+
+def test_error_message_handles_non_json_and_non_object_responses():
+    request = httpx.Request("GET", "http://test/api/series")
+    response = httpx.Response(502, text="gateway unavailable " * 30, request=request)
+    message = _error_message("GET", "/api/series", response)
+    assert message == f"GET /api/series -> 502: {response.text[:200]}"
+    response = httpx.Response(400, json=["bad request"], request=request)
+    assert "bad request" in _error_message("GET", "/api/series", response)
+
+
+async def test_shared_client_is_created_once_and_can_be_closed(monkeypatch):
+    from src import client as client_module
+
+    monkeypatch.setattr(client_module, "_client", None)
+    first = client_module.get_client()
+    try:
+        assert client_module.get_client() is first
+    finally:
+        await first.aclose()

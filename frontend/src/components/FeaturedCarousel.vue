@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight } from "@lucide/vue";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -47,7 +47,9 @@ function progress(s: Series | undefined): number {
           </span>
         </div>
 
-        <p class="line-clamp-2 text-sm text-base-content/70">{{ synopsisOnly(current.description) }}</p>
+        <p class="line-clamp-2 text-sm text-base-content/70">
+          {{ synopsisOnly(current.description) }}
+        </p>
 
         <div class="mt-auto flex flex-col gap-2">
           <div class="flex items-center gap-3">
@@ -57,7 +59,8 @@ function progress(s: Series | undefined): number {
               max="100"
             ></progress>
             <span class="text-xs text-base-content/70">
-              Ch. {{ current.lastReadChapter ?? 0 }} / {{ current.totalChapters ?? current.chapterCount }}
+              Ch. {{ current.lastReadChapter ?? 0 }} /
+              {{ current.totalChapters ?? current.chapterCount }}
             </span>
           </div>
           <RouterLink :to="`/read/${current.id}`" class="btn btn-primary btn-sm w-fit">

@@ -1,12 +1,19 @@
 <script setup lang="ts">
 // Settings → Metadata provider (MangaDex) config toggles. The account (connect /
 // import follows / disconnect) lives in the Accounts panel alongside the trackers.
-import { Download, Globe, Image, Languages, Wand2 } from "lucide-vue-next";
+import { Download, Globe, Image, Languages, Wand2 } from "@lucide/vue";
 import { onMounted, reactive, watch } from "vue";
 
 import { fetchProviders, updateProvider } from "../../api/settingsQueries";
 
-const provider = reactive({ id: "mangadex", enabled: true, language: "en", autoMatch: true, fetchCovers: true, dataSaver: false });
+const provider = reactive({
+  id: "mangadex",
+  enabled: true,
+  language: "en",
+  autoMatch: true,
+  fetchCovers: true,
+  dataSaver: false,
+});
 const providerLanguages = ["en", "ja", "ko", "zh"];
 let providerLoaded = false;
 
@@ -44,7 +51,9 @@ onMounted(async () => {
 
 <template>
   <section class="flex flex-col gap-3">
-    <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Metadata providers</h3>
+    <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+      Metadata providers
+    </h3>
     <div class="card grow bg-base-100">
       <div class="card-body gap-4 p-4">
         <div class="flex items-center justify-between gap-4">
@@ -52,17 +61,25 @@ onMounted(async () => {
             <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">MangaDex</div>
-              <div class="text-xs text-base-content/50">Primary metadata source &amp; optional chapter downloader</div>
+              <div class="text-xs text-base-content/50">
+                Primary metadata source &amp; optional chapter downloader
+              </div>
             </div>
           </div>
-          <input v-model="provider.enabled" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          <input
+            v-model="provider.enabled"
+            type="checkbox"
+            class="toggle toggle-primary toggle-sm"
+          />
         </div>
         <label class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
             <Languages class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">Preferred language</div>
-              <div class="text-xs text-base-content/50">Fetch metadata &amp; chapters in this language</div>
+              <div class="text-xs text-base-content/50">
+                Fetch metadata &amp; chapters in this language
+              </div>
             </div>
           </div>
           <select v-model="provider.language" class="select select-bordered select-sm w-28">
@@ -74,30 +91,48 @@ onMounted(async () => {
             <Wand2 class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">Auto-match on scan</div>
-              <div class="text-xs text-base-content/50">Match new series to MangaDex automatically after each scan</div>
+              <div class="text-xs text-base-content/50">
+                Match new series to MangaDex automatically after each scan
+              </div>
             </div>
           </div>
-          <input v-model="provider.autoMatch" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          <input
+            v-model="provider.autoMatch"
+            type="checkbox"
+            class="toggle toggle-primary toggle-sm"
+          />
         </label>
         <label class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
             <Image class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">Download covers</div>
-              <div class="text-xs text-base-content/50">Fetch cover art from the provider when a series has none</div>
+              <div class="text-xs text-base-content/50">
+                Fetch cover art from the provider when a series has none
+              </div>
             </div>
           </div>
-          <input v-model="provider.fetchCovers" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          <input
+            v-model="provider.fetchCovers"
+            type="checkbox"
+            class="toggle toggle-primary toggle-sm"
+          />
         </label>
         <label class="flex items-center justify-between gap-4">
           <div class="flex items-start gap-3">
             <Download class="mt-0.5 size-5 shrink-0 text-primary" />
             <div>
               <div class="text-sm font-medium">Data saver</div>
-              <div class="text-xs text-base-content/50">Download smaller, compressed pages instead of original quality</div>
+              <div class="text-xs text-base-content/50">
+                Download smaller, compressed pages instead of original quality
+              </div>
             </div>
           </div>
-          <input v-model="provider.dataSaver" type="checkbox" class="toggle toggle-primary toggle-sm" />
+          <input
+            v-model="provider.dataSaver"
+            type="checkbox"
+            class="toggle toggle-primary toggle-sm"
+          />
         </label>
       </div>
     </div>
