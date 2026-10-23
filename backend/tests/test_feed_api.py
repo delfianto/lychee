@@ -62,17 +62,30 @@ def test_dashboard_shape(client: TestClient, db_session: Session) -> None:
         unread=3,
         library_status="reading",
     )
+    make_series(db_session, title="Comic Issue", kind="comic", chapter_count=1, unread=0)
     make_series(db_session, title="Gallery", kind="gallery", image_count=5)
     db_session.commit()
 
     data = client.get("/api/dashboard").json()
-    assert data["stats"]["series"] == 1  # galleries excluded from the count
+    assert data["stats"]["series"] == 2  # galleries excluded from the count
     assert data["stats"]["unreadChapters"] == 3
     assert data["stats"]["reading"] == 1
     assert [s["title"] for s in data["continueReading"]] == ["In Progress"]
     assert [s["title"] for s in data["readingList"]] == ["In Progress"]
-    assert len(data["recentUpdates"]) == 10
-    assert {s["title"] for s in data["recentlyAdded"]} == {"In Progress", "Gallery"}
+    assert len(data["recentUpdates"]) == 11
+    assert [s["title"] for s in data["recentlyAdded"]] == ["In Progress"]
+
+    all_kinds = client.get(
+        "/api/dashboard", params={"recentlyAddedKinds": "manga,comics,gallery"}
+    ).json()
+    assert {s["title"] for s in all_kinds["recentlyAdded"]} == {
+        "In Progress",
+        "Comic Issue",
+        "Gallery",
+    }
+
+    none_kinds = client.get("/api/dashboard", params={"recentlyAddedKinds": "none"}).json()
+    assert none_kinds["recentlyAdded"] == []
 
 
 def test_dashboard_reading_list_without_local_chapters(

@@ -11,6 +11,10 @@ const thumbnailStorage = {
   effectivePath: "/storage/thumbnails",
 };
 
+const downloadConfig = {
+  parallelDownloads: 2,
+};
+
 import type { components } from "../api/schema";
 import { kindFor } from "./data/collections";
 import { collectionsDb } from "./data/collections";
@@ -129,7 +133,7 @@ function sortSeriesList(list: SeriesOut[], sort: string | null): SeriesOut[] {
 function filterSeries(url: URL): SeriesOut[] {
   const q = url.searchParams;
   return seriesCatalog.filter((s) => {
-    if (q.get("kind") && s.kind !== q.get("kind")) return false;
+    if (!matchesCsv(s.kind ?? "manga", q.get("kind"))) return false;
     if (q.get("shelf") && s.libraryStatus !== q.get("shelf")) return false;
     if (q.get("favorite") === "true" && !s.favorite) return false;
     if (q.get("favorite") === "false" && s.favorite) return false;
@@ -416,11 +420,16 @@ export const handlers = [
 
   // --- chapters -----------------------------------------------------------
   http.get("/api/chapters/:chapter_id", async ({ params }) => {
-    const chapter = chapterById(params.chapter_id as string);
+    const reqId = params.chapter_id as string;
+    const chapter = chapterById(reqId);
     if (!chapter) return apiError(404, "chapter_not_found", "Chapter not found.");
     await delay(100);
     return HttpResponse.json({
-      id: chapter.id,
+      id:
+        chapter.id ??
+        (chapter.providerChapterId
+          ? `adhoc:${chapter.seriesId}:${chapter.providerChapterId}`
+          : reqId),
       seriesId: chapter.seriesId,
       volume: chapter.volume,
       number: chapter.number,
@@ -431,6 +440,22 @@ export const handlers = [
       comments: chapter.comments,
       read: chapter.read,
       uploadedAt: chapter.uploadedAt,
+    });
+  }),
+
+  http.post("/api/chapters/:chapter_id/buffer", async ({ params, request }) => {
+    const reqId = params.chapter_id as string;
+    const chapter = chapterById(reqId);
+    if (!chapter) return apiError(404, "chapter_not_found", "Chapter not found.");
+    const body = (await request.json()) as components["schemas"]["ChapterBufferRequest"];
+    const start = Math.max(1, body.startPage ?? 1);
+    const count = Math.max(1, Math.min(20, body.preloadPages ?? 4));
+    const last = Math.min(chapter.pageCount, start + count - 1);
+    await delay(60);
+    return HttpResponse.json({
+      chapterId: reqId,
+      pageCount: chapter.pageCount,
+      bufferedPages: Array.from({ length: Math.max(0, last - start + 1) }, (_, i) => start + i),
     });
   }),
 
@@ -459,7 +484,9 @@ export const handlers = [
   ),
 
   // --- dashboard / updates / search ---------------------------------------
-  http.get("/api/dashboard", async () => {
+  http.get("/api/dashboard", async ({ request }) => {
+    const url = new URL(request.url);
+    const kinds = url.searchParams.get("recentlyAddedKinds") ?? "manga";
     await delay(150);
     const continueReading = seriesCatalog.filter(
       (s) => s.libraryStatus === "reading" || s.libraryStatus === "re_reading",
@@ -476,7 +503,7 @@ export const handlers = [
         .sort((a, b) => a.title.localeCompare(b.title))
         .slice(0, 12),
       recentUpdates: recentUpdates(false, 8),
-      recentlyAdded: seriesCatalog.slice(0, 12),
+      recentlyAdded: seriesCatalog.filter((s) => matchesCsv(s.kind ?? "manga", kinds)).slice(0, 12),
     });
   }),
 
@@ -794,6 +821,44 @@ export const handlers = [
     return HttpResponse.json(syncState);
   }),
 
+  http.patch("/api/sync/config", async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["SyncConfigUpdate"];
+    syncState.parallelSyncs = Math.max(1, Math.min(10, body.parallelSyncs));
+    return HttpResponse.json(syncState);
+  }),
+
+  http.post("/api/sync/control", async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["SyncControlRequest"];
+    const jobs = syncState.jobs ?? [];
+    if (body.action === "clear-completed") {
+      syncState.jobs = jobs.filter(
+        (j) => j.status !== "done" && j.status !== "failed" && j.status !== "cancelled",
+      );
+    } else if (body.jobId) {
+      const job = jobs.find((j) => j.id === body.jobId);
+      if (job) {
+        if (body.action === "pause") job.status = "paused";
+        else if (body.action === "resume") job.status = "queued";
+        else if (body.action === "cancel") job.status = "cancelled";
+      }
+    } else if (body.action === "pause-all") {
+      syncState.paused = true;
+      for (const j of jobs)
+        if (j.status === "queued" || j.status === "running") j.status = "paused";
+    } else if (body.action === "resume-all") {
+      syncState.paused = false;
+      for (const j of jobs) if (j.status === "paused") j.status = "queued";
+    } else if (body.action === "cancel-all") {
+      syncState.paused = false;
+      for (const j of jobs) {
+        if (j.status === "queued" || j.status === "running" || j.status === "paused") {
+          j.status = "cancelled";
+        }
+      }
+    }
+    return HttpResponse.json(syncState);
+  }),
+
   http.post("/api/sync", async () => {
     syncState.syncing = true;
     const task = simulateTask({
@@ -1055,6 +1120,14 @@ export const handlers = [
   }),
 
   // --- downloads --------------------------------------------------------
+  http.get("/api/downloads/config", () => HttpResponse.json(downloadConfig)),
+
+  http.patch("/api/downloads/config", async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["DownloadConfigUpdate"];
+    downloadConfig.parallelDownloads = Math.max(1, Math.min(10, body.parallelDownloads));
+    return HttpResponse.json(downloadConfig);
+  }),
+
   http.get("/api/downloads", async () => {
     await delay(100);
     return HttpResponse.json(downloadsDb);

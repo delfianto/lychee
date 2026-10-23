@@ -3,9 +3,18 @@ import { ChevronLeft, ChevronRight, Settings, X } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { fetchChapterDetail, fetchChapters, fetchSeries, putProgress } from "../api/queries";
+import {
+  bufferChapterPages,
+  fetchChapterDetail,
+  fetchChapters,
+  fetchSeries,
+  putProgress,
+} from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
 import {
+  clampPreloadPages,
+  MAX_PRELOAD_PAGES,
+  MIN_PRELOAD_PAGES,
   type ReaderBackground,
   type ReaderDirection,
   type ReaderFit,
@@ -25,6 +34,7 @@ const chapterLabel = ref("");
 const pages = ref<string[]>([]);
 const chapterOptions = ref<{ id: string; label: string }[]>([]);
 const orderedIds = ref<string[]>([]);
+const buffering = ref(false);
 
 const currentPage = ref(1);
 const controls = ref(true);
@@ -32,20 +42,39 @@ const settingsOpen = ref(false);
 const showEnd = ref(false);
 const readingArea = ref<HTMLElement | null>(null);
 
+function readableId(
+  c: { id: string | null; status?: string; providerChapterId?: string | null },
+  sid: string,
+): string | null {
+  if (c.id && c.status === "downloaded") return c.id;
+  if (c.providerChapterId) return `adhoc:${sid}:${c.providerChapterId}`;
+  return c.id;
+}
+
 // Guards against a slower earlier chapter load (jumping chapter → chapter quickly,
 // e.g. via the selector or next-chapter button) overwriting a newer one's state.
 const staleGuard = createStaleGuard();
 async function load(id: string): Promise<void> {
   const token = staleGuard.next();
-  const detail = await fetchChapterDetail(id);
+  const isAdhoc = id.startsWith("adhoc:");
+  buffering.value = isAdhoc;
+  const preload = clampPreloadPages(settings.preloadPages);
+  if (isAdhoc) {
+    pages.value = [];
+    await bufferChapterPages(id, 1, preload);
+    if (!staleGuard.isCurrent(token)) return;
+  }
+  const detail = await fetchChapterDetail(id, isAdhoc ? preload : undefined);
   if (!staleGuard.isCurrent(token)) return;
+  buffering.value = false;
+  const resolvedId = detail.id;
   seriesId.value = detail.seriesId;
   chapterLabel.value = detail.title
     ? `Ch. ${detail.number} · ${detail.title}`
     : `Ch. ${detail.number}`;
   pages.value = Array.from(
     { length: detail.pageCount },
-    (_, i) => `/api/chapters/${id}/pages/${i + 1}`,
+    (_, i) => `/api/chapters/${resolvedId}/pages/${i + 1}`,
   );
   currentPage.value = 1;
   showEnd.value = false;
@@ -55,10 +84,10 @@ async function load(id: string): Promise<void> {
   ]);
   if (!staleGuard.isCurrent(token)) return;
   seriesTitle.value = s.title;
-  // Reader only navigates local (downloaded) chapters.
   const ascending = vols
     .flatMap((v) => v.chapters)
-    .filter((c): c is typeof c & { id: string } => !!c.id && c.status === "downloaded")
+    .map((c) => ({ id: readableId(c, detail.seriesId), number: c.number }))
+    .filter((c): c is { id: string; number: string } => !!c.id)
     .reverse(); // reading order
   orderedIds.value = ascending.map((c) => c.id);
   chapterOptions.value = ascending.map((c) => ({ id: c.id, label: `Ch. ${c.number}` }));
@@ -70,10 +99,19 @@ const nextChapterId = computed(() => {
   return idx >= 0 ? orderedIds.value[idx + 1] : undefined;
 });
 
+function setPreloadPages(value: number): void {
+  settings.preloadPages = clampPreloadPages(value);
+}
+
 // Record reading position as pages turn (the backend marks the chapter read when
 // the last page is reached, which drives unread counts + continue-reading).
+// In ad-hoc mode, also prefetch the next window of loose pages into temp/.
 watch(currentPage, (page) => {
-  if (pages.value.length) void putProgress(chapterId.value, page);
+  if (!pages.value.length) return;
+  if (chapterId.value.startsWith("adhoc:")) {
+    void bufferChapterPages(chapterId.value, page, clampPreloadPages(settings.preloadPages));
+  }
+  void putProgress(chapterId.value, page);
 });
 function goToChapter(id: string | undefined): void {
   if (id) void router.push(`/read/${id}`);
@@ -215,8 +253,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     </header>
 
     <!-- One viewport owns both axes of scrolling in every reading mode. -->
-    <div v-if="!pages.length" class="flex min-h-0 flex-1 items-center justify-center">
+    <div
+      v-if="!pages.length"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2"
+    >
       <span class="loading loading-spinner loading-lg text-base-content/50" />
+      <span v-if="buffering" class="text-xs text-base-content/60">
+        Buffering {{ settings.preloadPages }} page(s)…
+      </span>
     </div>
     <div
       v-else
@@ -321,6 +365,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           :options="backgrounds"
           aria-label="Background"
           block
+        />
+      </div>
+
+      <div>
+        <label class="mb-1 flex items-center justify-between text-xs text-base-content/60">
+          <span>Ad-hoc preload pages</span>
+          <span class="font-medium tabular-nums">{{ settings.preloadPages }}</span>
+        </label>
+        <input
+          type="number"
+          :min="MIN_PRELOAD_PAGES"
+          :max="MAX_PRELOAD_PAGES"
+          :value="settings.preloadPages"
+          aria-label="Ad-hoc preload pages"
+          class="input input-bordered input-sm w-full"
+          @change="setPreloadPages(Number(($event.target as HTMLInputElement).value))"
         />
       </div>
 

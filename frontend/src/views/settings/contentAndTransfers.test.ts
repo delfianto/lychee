@@ -6,6 +6,7 @@ import { useToasts } from "../../lib/toast";
 import ContentPanel from "./ContentPanel.vue";
 import DownloadsPanel from "./DownloadsPanel.vue";
 import ImportPanel from "./ImportPanel.vue";
+import SyncPanel from "./SyncPanel.vue";
 import PromptDialog from "../../components/PromptDialog.vue";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 vi.mock("../../api/client", async (original) => ({
@@ -159,6 +160,12 @@ it("renders download phases and sizes and performs individual queue actions", as
   expect(api.db.downloads.some((d) => d.id === "q")).toBe(false);
   await click(wrapper, "Clear completed");
   expect(api.db.downloads.some((d) => d.status === "done")).toBe(false);
+  await input(wrapper, '[aria-label="Parallel downloads"]', "5");
+  expect(api.db.downloadConfig.parallelDownloads).toBe(5);
+  expect(messages()).toContain("Parallel downloads set to 5");
+  api.failNext("PATCH", "/api/downloads/config");
+  await input(wrapper, '[aria-label="Parallel downloads"]', "99");
+  expect(messages()).toContain("Rejected by server");
   await click(wrapper, "Sync now");
   expect(button(wrapper, "Syncing…").attributes("disabled")).toBeDefined();
   taskEvent("sync", "done", { result: { newChapters: 3 } });
@@ -293,4 +300,96 @@ it("uploads one or multiple files and permits retrying the same rejected file", 
   await send(["one.cbz", "two.zip"]);
   expect(messages()).toContain("Uploading 2 files");
   expect(api.writes().at(-1)?.body).toEqual({ kind: "manga", files: ["one.cbz", "two.zip"] });
+});
+
+it("manages background sync jobs, displays file/manga progress and errors, and enforces parallel sync limits", async () => {
+  api.db.sync.lastSync = new Date().toISOString();
+  api.db.sync.jobs = [
+    {
+      id: "j-run",
+      kind: "sync",
+      title: "Berserk",
+      source: "MangaDex",
+      status: "running",
+      progress: 45,
+      detail: "Pulling chapters for Berserk from MangaDex",
+      error: null,
+    },
+    {
+      id: "j-err",
+      kind: "scan",
+      title: "Corrupt.cbz",
+      source: "/library/Manga",
+      status: "failed",
+      progress: 0,
+      detail: "Unreadable file while indexing Corrupt.cbz",
+      error: "Bad zip header",
+    },
+  ];
+  const { wrapper } = await renderView(SyncPanel);
+  expect(wrapper.text()).toContain("Berserk");
+  expect(wrapper.text()).toContain("from MangaDex");
+  expect(wrapper.text()).toContain("Pulling chapters for Berserk from MangaDex");
+  expect(wrapper.text()).toContain("Corrupt.cbz");
+  expect(wrapper.text()).toContain("Bad zip header");
+
+  await input(wrapper, '[aria-label="Parallel sync jobs"]', "6");
+  expect(api.db.sync.parallelSyncs).toBe(6);
+  expect(messages()).toContain("Parallel sync jobs set to 6");
+  api.failNext("PATCH", "/api/sync/config");
+  await input(wrapper, '[aria-label="Parallel sync jobs"]', "15");
+  expect(messages()).toContain("Rejected by server");
+
+  await wrapper.get('[aria-label="Pause job"]').trigger("click");
+  await flushPromises();
+  expect(api.db.sync.jobs[0]!.status).toBe("paused");
+  expect(messages()).toContain("Sync paused");
+
+  await wrapper.get('[aria-label="Resume job"]').trigger("click");
+  await flushPromises();
+  expect(api.db.sync.jobs[0]!.status).toBe("queued");
+  expect(messages()).toContain("Sync resumed");
+
+  await click(wrapper, "Pause all");
+  expect(api.db.sync.paused).toBe(true);
+  await click(wrapper, "Resume all");
+  expect(api.db.sync.paused).toBe(false);
+
+  api.failNext("POST", "/api/sync/control");
+  await wrapper.get('[aria-label="Cancel job"]').trigger("click");
+  await flushPromises();
+  expect(messages()).toContain("Rejected by server");
+
+  await click(wrapper, "Cancel all");
+  expect(api.db.sync.jobs[0]!.status).toBe("cancelled");
+
+  await click(wrapper, "Clear completed");
+  expect(api.db.sync.jobs).toEqual([]);
+  expect(wrapper.text()).toContain("No sync jobs.");
+
+  await click(wrapper, "Sync now");
+  expect(messages()).toContain("Checking for new chapters");
+  taskEvent("sync", "done");
+  await flushPromises();
+  wrapper.unmount();
+
+  vi.useFakeTimers();
+  try {
+    api.db.sync.lastSync = null;
+    const mounted = await renderView(SyncPanel);
+    const before = api.requests.filter((r) => r.path === "/api/sync" && r.method === "GET").length;
+    taskEvent("scan", "running");
+    taskEvent("scan", "running");
+    taskEvent("unrelated", "running");
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    expect(api.requests.filter((r) => r.path === "/api/sync" && r.method === "GET")).toHaveLength(
+      before + 1,
+    );
+    taskEvent("import", "running");
+    mounted.wrapper.unmount();
+    await vi.advanceTimersByTimeAsync(300);
+  } finally {
+    vi.useRealTimers();
+  }
 });

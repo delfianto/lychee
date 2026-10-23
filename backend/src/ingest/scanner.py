@@ -33,6 +33,7 @@ from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.ingest.lychee_info import LYCHEE_INFO_FILENAME, LycheeInfoParseError, parse_lychee_info
 from src.ingest.parser import parse
+from src.integrations.sync import SyncCancelled, sync_jobs
 from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
 
@@ -137,6 +138,14 @@ def _page_count(candidate: Candidate) -> int | None:
             return container.page_count()
     except LycheeError as exc:
         logger.warning("scan_skip_unreadable", path=candidate.rel, error=str(exc))
+        _ = sync_jobs.create(
+            kind="scan",
+            title=candidate.rel,
+            source=str(candidate.path.parent),
+            status="failed",
+            detail=f"Unreadable file while indexing {candidate.rel}",
+            error=str(exc),
+        )
         return None
 
 
@@ -175,14 +184,40 @@ def scan_library(
     gallery = _series_kind(library) == "gallery"
     entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"]
     total_entries = max(len(entries), 1)
+    scan_job = sync_jobs.create(
+        kind="scan",
+        title=library.name,
+        source=str(root),
+        status="running",
+        detail=f"Scanning {root}",
+    )
 
-    for index, entry in enumerate(entries, start=1):
-        if gallery and entry.is_dir():
-            _ingest_artist(session, library, entry, root, existing, seen, summary)
-        else:
-            _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
-        if on_progress is not None:
-            on_progress(round(index / total_entries * 100), entry.name)
+    try:
+        for index, entry in enumerate(entries, start=1):
+            sync_jobs.check_state(scan_job.id)
+            pct = round(index / total_entries * 100)
+            _ = sync_jobs.update(
+                scan_job.id,
+                status="running",
+                progress=pct,
+                detail=f"Indexing {entry.name} in {root}",
+            )
+            if gallery and entry.is_dir():
+                _ingest_artist(session, library, entry, root, existing, seen, summary)
+            else:
+                _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
+            if on_progress is not None:
+                on_progress(pct, entry.name)
+    except SyncCancelled:
+        session.flush()
+        return summary
+
+    _ = sync_jobs.update(
+        scan_job.id,
+        status="done",
+        progress=100,
+        detail=f"Indexed {summary.series_added} series, {summary.books_added} book(s)",
+    )
 
     for path_rel, book in existing.items():
         if path_rel not in seen:

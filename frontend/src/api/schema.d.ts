@@ -175,7 +175,7 @@ export interface paths {
         };
         /**
          * Get Chapter
-         * @description Chapter detail for the reader.
+         * @description Chapter detail for the reader (local chapter, ad-hoc remote chapter, or series start).
          */
         get: operations["get_chapter_api_chapters__chapter_id__get"];
         put?: never;
@@ -189,6 +189,26 @@ export interface paths {
          *     * **Local / scanned**: hard-delete chapter + book from the DB and the filesystem.
          */
         delete: operations["delete_chapter_api_chapters__chapter_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chapters/{chapter_id}/buffer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buffer Chapter
+         * @description Buffer a window of pages into ``temp/adhoc/`` for ad-hoc reading.
+         */
+        post: operations["buffer_chapter_api_chapters__chapter_id__buffer_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -776,6 +796,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sync/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Control Sync
+         * @description Pause, resume, cancel, or clear completed background sync/scan jobs.
+         */
+        post: operations["control_sync_api_sync_control_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sync/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Sync Config
+         * @description Configure parallel sync worker count (1–10).
+         */
+        patch: operations["update_sync_config_api_sync_config_patch"];
+        trace?: never;
+    };
     "/api/import/config": {
         parameters: {
             query?: never;
@@ -1179,6 +1239,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/downloads/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Download Config */
+        get: operations["get_download_config_api_downloads_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Download Config */
+        patch: operations["update_download_config_api_downloads_config_patch"];
+        trace?: never;
+    };
     "/api/downloads/clear-completed": {
         parameters: {
             query?: never;
@@ -1399,6 +1477,28 @@ export interface components {
             /** Sourceurl */
             sourceUrl?: string | null;
         };
+        /** ChapterBufferOut */
+        ChapterBufferOut: {
+            /** Chapterid */
+            chapterId: string;
+            /** Pagecount */
+            pageCount: number;
+            /** Bufferedpages */
+            bufferedPages: number[];
+        };
+        /** ChapterBufferRequest */
+        ChapterBufferRequest: {
+            /**
+             * Startpage
+             * @default 1
+             */
+            startPage: number;
+            /**
+             * Preloadpages
+             * @default 4
+             */
+            preloadPages: number;
+        };
         /** ChapterDetailOut */
         ChapterDetailOut: {
             /** Id */
@@ -1593,6 +1693,16 @@ export interface components {
             redownloadable: boolean;
             /** Seriesid */
             seriesId: string;
+        };
+        /** DownloadConfigOut */
+        DownloadConfigOut: {
+            /** Paralleldownloads */
+            parallelDownloads: number;
+        };
+        /** DownloadConfigUpdate */
+        DownloadConfigUpdate: {
+            /** Paralleldownloads */
+            parallelDownloads: number;
         };
         /**
          * DownloadCreate
@@ -2071,6 +2181,40 @@ export interface components {
             /** Characters */
             characters?: string[] | null;
         };
+        /** SyncConfigUpdate */
+        SyncConfigUpdate: {
+            /** Parallelsyncs */
+            parallelSyncs: number;
+        };
+        /** SyncControlRequest */
+        SyncControlRequest: {
+            /** Action */
+            action: string;
+            /** Jobid */
+            jobId?: string | null;
+        };
+        /** SyncJobOut */
+        SyncJobOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /**
+             * Progress
+             * @default 0
+             */
+            progress: number;
+            /** Detail */
+            detail?: string | null;
+            /** Error */
+            error?: string | null;
+        };
         /** SyncOut */
         SyncOut: {
             /** Lastsync */
@@ -2081,6 +2225,18 @@ export interface components {
             newChapters: number;
             /** Syncing */
             syncing: boolean;
+            /**
+             * Paused
+             * @default false
+             */
+            paused: boolean;
+            /**
+             * Parallelsyncs
+             * @default 1
+             */
+            parallelSyncs: number;
+            /** Jobs */
+            jobs?: components["schemas"]["SyncJobOut"][];
         };
         /** TagOut */
         TagOut: {
@@ -2596,7 +2752,9 @@ export interface operations {
     };
     get_chapter_api_chapters__chapter_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                preloadPages?: number;
+            };
             header?: never;
             path: {
                 chapter_id: string;
@@ -2643,6 +2801,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteChapterOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    buffer_chapter_api_chapters__chapter_id__buffer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChapterBufferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterBufferOut"];
                 };
             };
             /** @description Validation Error */
@@ -2722,7 +2915,9 @@ export interface operations {
     };
     dashboard_api_dashboard_get: {
         parameters: {
-            query?: never;
+            query?: {
+                recentlyAddedKinds?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2736,6 +2931,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3686,6 +3890,72 @@ export interface operations {
             };
         };
     };
+    control_sync_api_sync_control_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncControlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_sync_config_api_sync_config_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_import_config_api_import_config_get: {
         parameters: {
             query?: never;
@@ -4523,6 +4793,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_download_config_api_downloads_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadConfigOut"];
+                };
+            };
+        };
+    };
+    update_download_config_api_downloads_config_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadConfigOut"];
                 };
             };
             /** @description Validation Error */

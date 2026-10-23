@@ -24,7 +24,6 @@ import {
 } from "../../api/settingsQueries";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { toast } from "../../lib/toast";
-import ThumbnailStorageCard from "./ThumbnailStorageCard.vue";
 
 const config = reactive({ enabled: false, quality: 75, filenamePattern: "" });
 const presets = ref<{ name: string; pattern: string }[]>([]);
@@ -135,7 +134,6 @@ onMounted(async () => {
         <!-- Config -->
         <div class="card bg-base-100">
           <div class="card-body gap-4 p-4">
-            <ThumbnailStorageCard />
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
                 <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />

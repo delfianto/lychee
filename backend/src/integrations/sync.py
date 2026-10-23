@@ -1,14 +1,17 @@
-"""Provider sync: check every matched series for new remote chapters.
+"""Provider and library sync jobs: progress log, pause/cancel controls, and worker concurrency.
 
-Runs on the background queue: for each series linked to a provider, it diffs the
-provider's chapter list against the local chapters and records the count of new
-ones on ``Series.available_chapters`` (summed into the sync-state singleton that
-backs the Settings → Sync card).
+Tracks background sync/scan/account-pull jobs with detailed per-item progress
+(what file is being indexed or which manga is being pulled from where, plus any
+error reason), supports cooperative pause/resume/cancel, and runs provider chapter
+checks across up to ``queue.sync_workers`` (1–10) parallel workers.
 """
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -16,16 +19,215 @@ from sqlalchemy.orm import Session
 
 from src.catalog.models import Series
 from src.catalog.remote_chapters import upsert_provider_chapters
+from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.logging import get_logger
-from src.downloads.provider import get_provider
+from src.core.persistence.base_model import gen_id
+from src.downloads.provider import RemoteChapter, get_provider
 from src.integrations.models import Provider, SyncState
-from src.integrations.schema import SyncOut
+from src.integrations.schema import SyncConfigUpdate, SyncControlRequest, SyncJobOut, SyncOut
 from src.integrations.seed import SYNC_STATE_ID
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
 
 logger = get_logger(__name__)
 _MANGADEX = "mangadex"
+_VALID_ACTIONS = frozenset(
+    {"pause", "pause-all", "resume", "resume-all", "cancel", "cancel-all", "clear-completed"}
+)
+_ACTIVE_STATUSES = frozenset({"queued", "running", "paused"})
+_FINISHED_STATUSES = frozenset({"done", "failed", "cancelled"})
+
+
+class SyncCancelled(Exception):
+    """Raised cooperatively when a sync/scan job is cancelled by the operator."""
+
+
+@dataclass
+class SyncJob:
+    id: str
+    kind: str
+    title: str
+    source: str
+    status: str = "queued"
+    progress: int = 0
+    detail: str | None = None
+    error: str | None = None
+    paused_requested: bool = False
+    cancel_requested: bool = False
+
+
+class SyncJobManager:
+    """Thread-safe registry of active and recent sync/scan jobs with pause & cancel."""
+
+    def __init__(self, *, max_keep: int = 200) -> None:
+        self._jobs: dict[str, SyncJob] = {}
+        self._order: list[str] = []
+        self._paused: bool = False
+        self._cond = threading.Condition()
+        self._max_keep = max_keep
+
+    @property
+    def paused(self) -> bool:
+        with self._cond:
+            return self._paused
+
+    def reset(self) -> None:
+        with self._cond:
+            self._jobs.clear()
+            self._order.clear()
+            self._paused = False
+            self._cond.notify_all()
+
+    def create(
+        self,
+        *,
+        kind: str,
+        title: str,
+        source: str,
+        status: str = "queued",
+        progress: int = 0,
+        detail: str | None = None,
+        error: str | None = None,
+    ) -> SyncJob:
+        with self._cond:
+            initial_status = "paused" if self._paused and status == "queued" else status
+            job = SyncJob(
+                id=gen_id(),
+                kind=kind,
+                title=title,
+                source=source,
+                status=initial_status,
+                progress=progress,
+                detail=detail,
+                error=error,
+                paused_requested=self._paused,
+            )
+            self._jobs[job.id] = job
+            self._order.append(job.id)
+            while len(self._order) > self._max_keep:
+                old_id = self._order.pop(0)
+                self._jobs.pop(old_id, None)
+            return job
+
+    def update(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        progress: int | None = None,
+        detail: str | None = None,
+        error: str | None = None,
+    ) -> SyncJob | None:
+        with self._cond:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if status is not None:
+                job.status = status
+            if progress is not None:
+                job.progress = max(0, min(100, int(progress)))
+            if detail is not None:
+                job.detail = detail
+            if error is not None:
+                job.error = error
+            return job
+
+    def check_state(self, job_id: str) -> None:
+        """Block while paused; raise :class:`SyncCancelled` if cancelled."""
+        with self._cond:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return
+            while (self._paused or job.paused_requested) and not job.cancel_requested:
+                job.status = "paused"
+                self._cond.wait(timeout=0.5)
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.detail = "Cancelled"
+                raise SyncCancelled(f"sync job {job_id} cancelled")
+            if job.status in {"queued", "paused"}:
+                job.status = "running"
+
+    def control(self, action: str, *, job_id: str | None = None) -> None:
+        if action not in _VALID_ACTIONS:
+            raise BadRequestError(f"unknown sync action {action!r}")
+        with self._cond:
+            if action == "clear-completed":
+                keep_ids = [
+                    jid
+                    for jid in self._order
+                    if jid in self._jobs and self._jobs[jid].status not in _FINISHED_STATUSES
+                ]
+                self._order = keep_ids
+                self._jobs = {jid: self._jobs[jid] for jid in keep_ids}
+                return
+
+            if job_id is not None:
+                job = self._jobs.get(job_id)
+                if job is None:
+                    raise NotFoundError(f"sync job {job_id!r} not found")
+                if action in {"pause", "pause-all"}:
+                    if job.status in {"queued", "running"}:
+                        job.paused_requested = True
+                        job.status = "paused"
+                elif action in {"resume", "resume-all"}:
+                    job.paused_requested = False
+                    if job.status == "paused":
+                        job.status = "queued"
+                elif action in {"cancel", "cancel-all"}:
+                    job.cancel_requested = True
+                    job.paused_requested = False
+                    if job.status in _ACTIVE_STATUSES:
+                        job.status = "cancelled"
+                        job.detail = "Cancelled"
+                self._cond.notify_all()
+                return
+
+            if action in {"pause", "pause-all"}:
+                self._paused = True
+                for job in self._jobs.values():
+                    if job.status in {"queued", "running"}:
+                        job.paused_requested = True
+                        job.status = "paused"
+            elif action in {"resume", "resume-all"}:
+                self._paused = False
+                for job in self._jobs.values():
+                    job.paused_requested = False
+                    if job.status == "paused":
+                        job.status = "queued"
+            elif action in {"cancel", "cancel-all"}:
+                self._paused = False
+                for job in self._jobs.values():
+                    if job.status in _ACTIVE_STATUSES:
+                        job.cancel_requested = True
+                        job.paused_requested = False
+                        job.status = "cancelled"
+                        job.detail = "Cancelled"
+            self._cond.notify_all()
+
+    def list_jobs(self) -> list[SyncJobOut]:
+        with self._cond:
+            return [
+                SyncJobOut(
+                    id=self._jobs[jid].id,
+                    kind=self._jobs[jid].kind,
+                    title=self._jobs[jid].title,
+                    source=self._jobs[jid].source,
+                    status=self._jobs[jid].status,
+                    progress=self._jobs[jid].progress,
+                    detail=self._jobs[jid].detail,
+                    error=self._jobs[jid].error,
+                )
+                for jid in reversed(self._order)
+                if jid in self._jobs
+            ]
+
+    def has_active(self) -> bool:
+        with self._cond:
+            return any(j.status in _ACTIVE_STATUSES for j in self._jobs.values())
+
+
+sync_jobs = SyncJobManager()
 
 
 def _sync_state(session: Session) -> SyncState:
@@ -38,16 +240,79 @@ def _sync_state(session: Session) -> SyncState:
 
 
 def _sync_out(state: SyncState) -> SyncOut:
+    jobs = sync_jobs.list_jobs()
+    active = any(j.status in {"queued", "running"} for j in jobs)
     return SyncOut(
         last_sync=state.last_sync_at,
         auto_every_minutes=state.auto_every_minutes,
         new_chapters=state.new_chapters,
-        syncing=state.syncing,
+        syncing=state.syncing or active,
+        paused=sync_jobs.paused,
+        parallel_syncs=queue.sync_workers,
+        jobs=jobs,
     )
 
 
 def get_sync(session: Session) -> SyncOut:
     return _sync_out(_sync_state(session))
+
+
+def update_sync_config(session: Session, data: SyncConfigUpdate) -> SyncOut:
+    _ = queue.set_sync_workers(data.parallel_syncs)
+    return get_sync(session)
+
+
+def control_sync(session: Session, data: SyncControlRequest) -> SyncOut:
+    sync_jobs.control(data.action, job_id=data.job_id)
+    if data.action in {"cancel", "cancel-all"} and not sync_jobs.has_active():
+        state = _sync_state(session)
+        state.syncing = False
+        session.commit()
+    return get_sync(session)
+
+
+def _fetch_series_remote_chapters(
+    job_id: str,
+    title: str,
+    provider_id: str,
+    provider_series_id: str,
+    language: str,
+) -> list[RemoteChapter] | Exception:
+    try:
+        sync_jobs.check_state(job_id)
+    except SyncCancelled as exc:
+        return exc
+    provider = get_provider(provider_id)
+    if provider is None:
+        err = RuntimeError(f"provider {provider_id!r} is not available")
+        _ = sync_jobs.update(
+            job_id,
+            status="failed",
+            detail=f"Failed pulling {title} from {provider_id}",
+            error=str(err),
+        )
+        return err
+    _ = sync_jobs.update(
+        job_id,
+        status="running",
+        progress=30,
+        detail=f"Pulling chapters for {title} from {provider_id}",
+    )
+    try:
+        remotes = provider.list_chapters(provider_series_id, language=language)
+        sync_jobs.check_state(job_id)
+        return remotes
+    except SyncCancelled as exc:
+        return exc
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sync_series_failed", series=title, error=str(exc))
+        _ = sync_jobs.update(
+            job_id,
+            status="failed",
+            detail=f"Failed pulling {title} from {provider_id}",
+            error=str(exc),
+        )
+        return exc
 
 
 def _sync_work() -> Work:
@@ -61,27 +326,86 @@ def _sync_work() -> Work:
                 )
             )
         )
+        state = _sync_state(session)
+        state.syncing = True
+        session.commit()
+
+        planned: list[tuple[Series, SyncJob, str]] = []
+        for series in matched:
+            source = (series.provider or _MANGADEX).capitalize()
+            if source.lower() == "mangadex":
+                source = "MangaDex"
+            job = sync_jobs.create(
+                kind="sync",
+                title=series.title,
+                source=source,
+                status="queued",
+                detail=f"Queued chapter check from {source}",
+            )
+            planned.append((series, job, source))
+
+        workers = max(1, min(queue.sync_workers, len(planned) or 1))
         total_new = 0
-        for index, series in enumerate(matched, start=1):
-            provider = get_provider(series.provider or "")
-            if provider is not None:
+        completed = 0
+        total = len(planned) or 1
+
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="lychee-sync-item") as pool:
+            futures = [
+                (
+                    series,
+                    job,
+                    source,
+                    pool.submit(
+                        _fetch_series_remote_chapters,
+                        job.id,
+                        series.title,
+                        series.provider or _MANGADEX,
+                        series.provider_series_id or "",
+                        language,
+                    ),
+                )
+                for series, job, source in planned
+            ]
+            for series, job, source, fut in futures:
+                outcome = fut.result()
+                completed += 1
+                if isinstance(outcome, SyncCancelled):
+                    on_progress(round(completed / total * 100), f"Cancelled {series.title}")
+                    continue
+                if isinstance(outcome, Exception):
+                    on_progress(round(completed / total * 100), f"Error: {series.title}")
+                    continue
                 try:
-                    remote = provider.list_chapters(
-                        series.provider_series_id or "", language=language
-                    )
-                    # Persist full feed (not just the count) so series detail can list
-                    # undownloaded chapters with download status.
+                    sync_jobs.check_state(job.id)
                     _ = upsert_provider_chapters(
-                        session, series, remote, provider=series.provider or provider.id
+                        session, series, outcome, provider=series.provider or _MANGADEX
                     )
+                    session.commit()
                     total_new += series.available_chapters
-                except Exception as exc:  # noqa: BLE001 - per-series best-effort
-                    logger.warning("sync_series_failed", series=series.title, error=str(exc))
-            on_progress(round(index / len(matched) * 100) if matched else 100, series.title)
+                    _ = sync_jobs.update(
+                        job.id,
+                        status="done",
+                        progress=100,
+                        detail=f"Pulled from {source} · {series.available_chapters} new chapter(s)",
+                    )
+                except SyncCancelled:
+                    session.rollback()
+                except Exception as exc:  # noqa: BLE001
+                    session.rollback()
+                    logger.warning("sync_series_upsert_failed", series=series.title, error=str(exc))
+                    _ = sync_jobs.update(
+                        job.id,
+                        status="failed",
+                        detail=f"Failed indexing chapters for {series.title} from {source}",
+                        error=str(exc),
+                    )
+                on_progress(round(completed / total * 100), series.title)
+
         state = _sync_state(session)
         state.new_chapters = total_new
         state.last_sync_at = datetime.now(UTC)
         state.syncing = False
+        session.commit()
         return {"newChapters": total_new}
 
     return work

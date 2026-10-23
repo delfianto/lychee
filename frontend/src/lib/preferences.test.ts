@@ -38,6 +38,29 @@ describe("shared display preferences", () => {
       expect(localStorage.getItem("lychee.listsDefaultTab")).toBe("all");
     },
   );
+
+  it.each([
+    [null, ["manga"]],
+    ['["gallery","comics"]', ["comic", "gallery"]],
+    ["manga,gallery", ["manga", "gallery"]],
+    ["invalid", ["manga"]],
+    ['["invalid"]', ["manga"]],
+    ["123", ["manga"]],
+    ["[]", []],
+  ])(
+    "loads recentlyAddedKinds %s and toggles kinds in canonical order",
+    async (stored, expected) => {
+      if (stored !== null) localStorage.setItem("lychee.recentlyAddedKinds", stored);
+      const { useRecentlyAddedKinds } = await import("./density");
+      const { recentlyAddedKinds, toggleRecentlyAddedKind } = useRecentlyAddedKinds();
+      expect(recentlyAddedKinds.value).toEqual(expected);
+      toggleRecentlyAddedKind("comic");
+      await nextTick();
+      expect(JSON.parse(localStorage.getItem("lychee.recentlyAddedKinds") ?? "[]")).toEqual(
+        recentlyAddedKinds.value,
+      );
+    },
+  );
 });
 
 describe("font size", () => {

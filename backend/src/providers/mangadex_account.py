@@ -29,6 +29,7 @@ from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
 from src.integrations.providers import get_provider_row, provider_out
 from src.integrations.schema import ProviderConnect, ProviderOut
+from src.integrations.sync import SyncCancelled, sync_jobs
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.progress.models import ReadingProgress
@@ -274,17 +275,49 @@ def _sync_work() -> Work:
 
         series_by_id: dict[str, Series] = {}
         total = len(union_ids) or 1
-        for index, md_id in enumerate(sorted(union_ids), start=1):
-            meta = meta_by_id.get(md_id) or _safe_metadata(provider, md_id, config.language)
-            if meta is None:
-                continue
-            series_by_id[md_id] = _upsert_series(
-                session, library, meta, statuses.get(md_id), fetch_covers=config.fetch_covers
-            )
-            session.commit()  # commit per series so progress is durable
-            on_progress(round(index / total * 90), meta.title)
+        job = sync_jobs.create(
+            kind="import",
+            title="MangaDex Account",
+            source="MangaDex",
+            status="running",
+            detail="Fetching account follows and lists from MangaDex",
+        )
+        try:
+            for index, md_id in enumerate(sorted(union_ids), start=1):
+                sync_jobs.check_state(job.id)
+                pct = round(index / total * 90)
+                meta = meta_by_id.get(md_id) or _safe_metadata(provider, md_id, config.language)
+                if meta is None:
+                    _ = sync_jobs.create(
+                        kind="import",
+                        title=md_id,
+                        source="MangaDex",
+                        status="failed",
+                        detail=f"Failed pulling manga {md_id} from MangaDex",
+                        error="Could not fetch metadata from MangaDex",
+                    )
+                    continue
+                _ = sync_jobs.update(
+                    job.id,
+                    status="running",
+                    progress=pct,
+                    detail=f"Pulling {meta.title} from MangaDex",
+                )
+                series_by_id[md_id] = _upsert_series(
+                    session, library, meta, statuses.get(md_id), fetch_covers=config.fetch_covers
+                )
+                session.commit()  # commit per series so progress is durable
+                on_progress(pct, meta.title)
+        except SyncCancelled:
+            return {
+                "synced": len(series_by_id),
+                "lists": 0,
+                "ratings": 0,
+                "readMarked": 0,
+            }
 
         on_progress(95, "Syncing lists")
+        _ = sync_jobs.update(job.id, progress=95, detail="Syncing MangaDex lists")
         with LIST_LOCK:
             # Refresh snapshots after the long metadata import so a concurrent
             # user edit cannot be overwritten by membership fetched at startup.
@@ -309,6 +342,12 @@ def _sync_work() -> Work:
         on_progress(98, "Syncing read markers")
         marked = _sync_read_markers(session, provider, series_by_id)
         session.commit()
+        _ = sync_jobs.update(
+            job.id,
+            status="done",
+            progress=100,
+            detail=f"Synced {len(series_by_id)} manga from MangaDex",
+        )
         return {
             "synced": len(series_by_id),
             "lists": synced_lists,

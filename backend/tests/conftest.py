@@ -16,6 +16,7 @@ from src.core.persistence.base_model import Base
 from src.core.persistence.database import SessionLocal, get_db
 from src.downloads.deps import get_storage_root
 from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata, register_provider
+from src.integrations.sync import sync_jobs
 from src.main import app
 from src.media.render_cache import RenderCache
 from src.media.thumbnails import ThumbnailStore
@@ -119,8 +120,14 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
         tmp_path / "storage" / "renders"
     )
     queue.configure(test_session)  # background workers use this test's temp DB
+    _ = queue.set_download_workers(1)
+    _ = queue.set_sync_workers(1)
+    sync_jobs.reset()
     with TestClient(app) as test_client:
         register_provider(_OfflineProvider())  # startup registers the real one; neutralise it
         yield test_client
+    sync_jobs.reset()
+    _ = queue.set_download_workers(1)
+    _ = queue.set_sync_workers(1)
     app.dependency_overrides.clear()
     queue.configure(SessionLocal)

@@ -33,6 +33,7 @@ it("loads series details, persists shelf/favorite/rating, and browses chapter fi
     pattern: "/series/:id",
   });
   expect(wrapper.get("h1").text()).toBe("Story s1");
+  expect(wrapper.find('a[href="/read/adhoc:s1:remote-3"]').exists()).toBe(true);
   await wrapper.get('[aria-label="Favorite"]').trigger("click");
   await flushPromises();
   expect(api.writes().at(-1)?.body).toEqual({ favorite: true });

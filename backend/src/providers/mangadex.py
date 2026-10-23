@@ -399,6 +399,39 @@ class MangaDexProvider:
         self._fetch_pages(chapter, data_saver=data_saver, on_page=on_page, save=save)
         return paths
 
+    def fetch_adhoc_pages(
+        self,
+        chapter: RemoteChapter,
+        directory: Path,
+        *,
+        start_page: int = 1,
+        count: int = 4,
+        data_saver: bool = False,
+    ) -> tuple[int, list[int]]:
+        server = self._at_home(chapter.provider_chapter_id)
+        quality = "data-saver" if data_saver else "data"
+        chapter_hash = server["chapter"]["hash"]
+        files: list[str] = server["chapter"]["dataSaver" if data_saver else "data"]
+        base = server["baseUrl"]
+        total = len(files)
+        if total == 0:
+            return 0, []
+        first = max(1, min(total, start_page))
+        last = min(total, first + max(1, count) - 1)
+        buffered: list[int] = []
+        directory.mkdir(parents=True, exist_ok=True)
+        for page_num in range(first, last + 1):
+            filename = files[page_num - 1]
+            suffix = Path(filename).suffix.lower() or ".jpg"
+            target = directory / f"{page_num:04d}{suffix}"
+            if not target.is_file():
+                content, base = self._fetch_page(
+                    chapter.provider_chapter_id, base, quality, chapter_hash, filename
+                )
+                target.write_bytes(content)
+            buffered.append(page_num)
+        return total, buffered
+
     def _fetch_pages(
         self,
         chapter: RemoteChapter,

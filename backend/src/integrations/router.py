@@ -22,6 +22,8 @@ from src.integrations.schema import (
     ProviderConnect,
     ProviderOut,
     ProviderUpdate,
+    SyncConfigUpdate,
+    SyncControlRequest,
     SyncOut,
     TrackerAuthUrl,
     TrackerCallback,
@@ -106,6 +108,18 @@ def get_sync(db: DbSession) -> SyncOut:
 def run_sync(db: DbSession) -> TaskOut:
     """Check matched series for new remote chapters in the background."""
     return sync_svc.run_sync(db)
+
+
+@router.post("/sync/control")
+def control_sync(db: DbSession, data: SyncControlRequest) -> SyncOut:
+    """Pause, resume, cancel, or clear completed background sync/scan jobs."""
+    return sync_svc.control_sync(db, data)
+
+
+@router.patch("/sync/config")
+def update_sync_config(db: DbSession, data: SyncConfigUpdate) -> SyncOut:
+    """Configure parallel sync worker count (1–10)."""
+    return sync_svc.update_sync_config(db, data)
 
 
 @router.get("/import/config")

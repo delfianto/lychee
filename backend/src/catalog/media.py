@@ -20,6 +20,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.catalog import adhoc
 from src.catalog.models import Book, Chapter, Library, Series
 from src.catalog.schema import GalleryMediaItem
 from src.core.exceptions import BadRequestError, LycheeError, NotFoundError
@@ -315,6 +316,12 @@ def get_page(
 ) -> Served:
     """Serve page ``n`` (1-based) of a chapter. With ``width`` + a ``render_cache``, serve
     an AVIF re-encoded to at most that width (cached on disk); otherwise the raw page."""
+    if adhoc.parse_adhoc_id(chapter_id) is not None:
+        data, name = adhoc.read_adhoc_page(session, chapter_id, n)
+        if width is not None:
+            rendered = render_width(data, width)
+            return Served(data=rendered, media_type="image/avif", etag=_etag(rendered))
+        return Served(data=data, media_type=_mime(name), etag=_etag(data))
     chapter = session.get(Chapter, chapter_id)
     if chapter is None:
         raise NotFoundError(f"chapter {chapter_id!r} not found")

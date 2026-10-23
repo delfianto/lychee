@@ -71,7 +71,7 @@ export default defineConfig({
           functions: 95,
           branches: 80,
         },
-        "src/views/settings/{ContentPanel,DownloadsPanel,ImportPanel}.vue": {
+        "src/views/settings/{ContentPanel,DownloadsPanel,ImportPanel,SyncPanel}.vue": {
           perFile: true,
           lines: 95,
           statements: 95,

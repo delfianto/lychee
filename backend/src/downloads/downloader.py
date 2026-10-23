@@ -16,6 +16,7 @@ Downloads require an enabled ``kind=manga`` library with a real filesystem path.
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -40,6 +41,7 @@ from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 
 logger = get_logger(__name__)
+_CLAIM_LOCK = threading.Lock()
 
 # Characters illegal on common filesystems (Windows + POSIX reserved).
 _UNSAFE_FS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -391,19 +393,20 @@ def run_download_queue(
     while True:
         if is_cancelled(series_id):
             break
-        row = session.scalar(
-            select(DownloadTask)
-            .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
-            .order_by(DownloadTask.created_at)
-        )
-        if row is None:
-            break
-        row.status = "downloading"
-        row.progress = 0
-        row.phase = "fetching"
-        row.detail = None
-        row.error = None
-        session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
+        with _CLAIM_LOCK:
+            row = session.scalar(
+                select(DownloadTask)
+                .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
+                .order_by(DownloadTask.created_at)
+            )
+            if row is None:
+                break
+            row.status = "downloading"
+            row.progress = 0
+            row.phase = "fetching"
+            row.detail = None
+            row.error = None
+            session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
         try:
             if not row.remote_json:
                 raise ValueError("queued download is missing chapter data")

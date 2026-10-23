@@ -8,6 +8,7 @@ value + id of the last row, and the next page is everything ordered after it.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -124,7 +125,11 @@ def _sort_value(sort: str, row: SeriesRow) -> object:
 def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]:
     conds: list[ColumnElement[bool]] = []
     if f.kind:
-        conds.append(Series.kind == f.kind)
+        kinds = ["comic" if part == "comics" else part for part in f.kind.split(",") if part]
+        if len(kinds) == 1:
+            conds.append(Series.kind == kinds[0])
+        elif kinds:
+            conds.append(Series.kind.in_(kinds))
     if f.shelf:
         conds.append(Series.library_status == f.shelf)
     if f.favorite is not None:
@@ -401,8 +406,15 @@ def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
     ]
 
 
-def recently_added(session: Session, *, limit: int = 12) -> list[SeriesRow]:
-    """Newest series first (all kinds), for the dashboard rail."""
+def recently_added(
+    session: Session,
+    *,
+    kinds: Sequence[str] = ("manga",),
+    limit: int = 12,
+) -> list[SeriesRow]:
+    """Newest series first for the configured kinds, for the dashboard rail."""
+    if not kinds:
+        return []
     agg = _aggregates()
     stmt = (
         select(
@@ -411,6 +423,7 @@ def recently_added(session: Session, *, limit: int = 12) -> list[SeriesRow]:
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
         )
+        .where(Series.kind.in_(kinds))
         .options(selectinload(Series.tags), selectinload(Series.credits))
         .order_by(Series.created_at.desc(), Series.id.desc())
         .limit(limit)

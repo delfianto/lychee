@@ -125,8 +125,17 @@ export interface DashboardData {
   recentlyAdded: Series[];
 }
 
-export async function fetchDashboard(): Promise<DashboardData> {
-  const { data, error } = await api.GET("/api/dashboard");
+export async function fetchDashboard(
+  recentlyAddedKinds?: readonly string[],
+): Promise<DashboardData> {
+  const query =
+    recentlyAddedKinds !== undefined
+      ? { recentlyAddedKinds: recentlyAddedKinds.join(",") || "none" }
+      : undefined;
+  const { data, error } = await api.GET(
+    "/api/dashboard",
+    query ? { params: { query } } : undefined,
+  );
   if (error || !data) throw new Error("Failed to load dashboard");
   return {
     stats: data.stats,
@@ -370,9 +379,15 @@ export interface ChapterDetail {
   pageCount: number;
 }
 
-export async function fetchChapterDetail(id: string): Promise<ChapterDetail> {
+export async function fetchChapterDetail(
+  id: string,
+  preloadPages?: number,
+): Promise<ChapterDetail> {
   const { data, error } = await api.GET("/api/chapters/{chapter_id}", {
-    params: { path: { chapter_id: id } },
+    params: {
+      path: { chapter_id: id },
+      ...(preloadPages !== undefined ? { query: { preloadPages } } : {}),
+    },
   });
   if (error || !data) throw new Error("Chapter not found");
   return {
@@ -382,6 +397,23 @@ export async function fetchChapterDetail(id: string): Promise<ChapterDetail> {
     number: data.number,
     title: data.title ?? undefined,
     pageCount: data.pageCount,
+  };
+}
+
+export async function bufferChapterPages(
+  id: string,
+  startPage = 1,
+  preloadPages = 4,
+): Promise<{ chapterId: string; pageCount: number; bufferedPages: number[] }> {
+  const { data, error } = await api.POST("/api/chapters/{chapter_id}/buffer", {
+    params: { path: { chapter_id: id } },
+    body: { startPage, preloadPages },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't buffer chapter pages"));
+  return {
+    chapterId: data.chapterId,
+    pageCount: data.pageCount,
+    bufferedPages: data.bufferedPages,
   };
 }
 

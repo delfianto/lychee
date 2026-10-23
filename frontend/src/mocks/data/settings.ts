@@ -37,6 +37,9 @@ export const syncState: SyncOut = {
   autoEveryMinutes: 60,
   newChapters: 14,
   syncing: false,
+  paused: false,
+  parallelSyncs: 2,
+  jobs: [],
 };
 
 // --- filesystem browser (AddLibraryModal / ImportPanel path picker) --------

@@ -250,9 +250,42 @@ export async function fetchDownloadTasks(): Promise<DownloadTask[]> {
   return data ?? [];
 }
 
+export async function fetchDownloadConfig(): Promise<{ parallelDownloads: number }> {
+  const { data } = await api.GET("/api/downloads/config");
+  return data ?? { parallelDownloads: 1 };
+}
+
+export async function updateDownloadConfig(
+  parallelDownloads: number,
+): Promise<{ parallelDownloads: number }> {
+  const clamped = Math.max(1, Math.min(10, Math.round(parallelDownloads)));
+  const { data, error } = await api.PATCH("/api/downloads/config", {
+    body: { parallelDownloads: clamped },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't update download settings"));
+  return data;
+}
+
 export async function fetchSyncState(): Promise<SyncState | null> {
   const { data } = await api.GET("/api/sync");
   return data ?? null;
+}
+
+export async function updateSyncConfig(parallelSyncs: number): Promise<SyncState> {
+  const clamped = Math.max(1, Math.min(10, Math.round(parallelSyncs)));
+  const { data, error } = await api.PATCH("/api/sync/config", {
+    body: { parallelSyncs: clamped },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't update sync settings"));
+  return data;
+}
+
+export async function controlSync(action: string, jobId?: string): Promise<SyncState> {
+  const { data, error } = await api.POST("/api/sync/control", {
+    body: { action, ...(jobId ? { jobId } : {}) },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't update sync job"));
+  return data;
 }
 
 /** Runs on the queue; UI state reloads on the sync task's `done` SSE event. */

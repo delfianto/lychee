@@ -110,7 +110,17 @@ export function chaptersFor(seriesId: string): MockChapter[] {
 }
 
 export function chapterById(chapterId: string): MockChapter | undefined {
-  return chaptersDb.find((c) => c.id === chapterId);
+  if (chapterId.startsWith("adhoc:")) {
+    const [, seriesId, providerChapterId] = chapterId.split(":", 3);
+    return chaptersDb.find(
+      (c) => c.seriesId === seriesId && c.providerChapterId === providerChapterId,
+    );
+  }
+  return (
+    chaptersDb.find((c) => c.id === chapterId) ??
+    chaptersDb.find((c) => c.seriesId === chapterId && !c.read) ??
+    chaptersDb.find((c) => c.seriesId === chapterId)
+  );
 }
 
 export function volumeGroupsFor(

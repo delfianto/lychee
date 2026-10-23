@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.catalog import adhoc
 from src.catalog import matching as catalog_matching
 from src.catalog import repository as repo
 from src.catalog.metadata import reconcile_tags
@@ -57,6 +58,7 @@ _LIBRARY_STATUSES = {
 _PUB_STATUSES = {"ongoing", "completed", "hiatus", "cancelled"}
 _CONTENT_RATINGS = {"safe", "suggestive", "erotica", "pornographic", "explicit"}
 _DEMOGRAPHICS = {"shonen", "shojo", "seinen", "josei", "none"}
+_RECENTLY_ADDED_KINDS = ("manga", "comic", "gallery")
 
 _MAX_LIMIT = 100
 
@@ -69,6 +71,15 @@ def cover_url(series_id: str) -> str:
 
 def _csv(value: str | None) -> list[str]:
     return [part for part in value.split(",") if part] if value else []
+
+
+def _parse_recently_added_kinds(value: str | None) -> list[str]:
+    if value is None:
+        return ["manga"]
+    if value == "none":
+        return []
+    normalized = {"comic" if part == "comics" else part for part in _csv(value)}
+    return [kind for kind in _RECENTLY_ADDED_KINDS if kind in normalized]
 
 
 def _parse_tags(tags: str | None) -> tuple[list[str], list[str]]:
@@ -579,9 +590,47 @@ def list_chapters(
     return groups
 
 
-def get_chapter(session: Session, chapter_id: str) -> ChapterDetailOut:
+def get_chapter(
+    session: Session, chapter_id: str, *, preload_pages: int = adhoc.DEFAULT_PRELOAD_PAGES
+) -> ChapterDetailOut:
+    if adhoc.parse_adhoc_id(chapter_id) is not None:
+        return adhoc.get_adhoc_chapter_detail(session, chapter_id, preload_pages=preload_pages)
     row = repo.get_chapter(session, chapter_id)
     if row is None:
+        # Support navigating to /read/{series_id} ("Start reading" / "Continue reading"):
+        # resolve the first unread (or first) local chapter, or fall back to the first remote chapter.
+        series = session.get(Series, chapter_id)
+        if series is not None:
+            local_rows = repo.list_chapters(session, series.id, descending=False)
+            if local_rows:
+                chosen = next((r for r in local_rows if not r.read), local_rows[0])
+                c = chosen.chapter
+                return ChapterDetailOut(
+                    id=c.id,
+                    series_id=c.series_id,
+                    volume=c.volume,
+                    number=c.number or "",
+                    title=c.title,
+                    group=c.group_name,
+                    language=c.language,
+                    page_count=c.page_count,
+                    comments=c.comment_count,
+                    read=chosen.read,
+                    uploaded_at=c.source_uploaded_at or c.created_at,
+                )
+            ensure_chapter_index(session, series.id)
+            remote = session.scalar(
+                select(ProviderChapter)
+                .where(ProviderChapter.series_id == series.id)
+                .order_by(ProviderChapter.number_sort.asc(), ProviderChapter.id.asc())
+                .limit(1)
+            )
+            if remote is not None:
+                return adhoc.get_adhoc_chapter_detail(
+                    session,
+                    f"adhoc:{series.id}:{remote.provider_chapter_id}",
+                    preload_pages=preload_pages,
+                )
         raise NotFoundError(f"chapter {chapter_id!r} not found")
     c = row.chapter
     return ChapterDetailOut(
@@ -624,7 +673,7 @@ def updates(
     return Page[RecentUpdateOut](items=items, next_cursor=next_cursor)
 
 
-def dashboard(session: Session) -> DashboardOut:
+def dashboard(session: Session, *, recently_added_kinds: str | None = None) -> DashboardOut:
     series_count, unread_chapters, reading = repo.dashboard_counts(session)
     recent = updates(session, unread_only=False, cursor=None, limit=12)
     # A shelf entry needs no local chapters or progress. Alphabetical order keeps
@@ -632,12 +681,15 @@ def dashboard(session: Session) -> DashboardOut:
     reading_list, _ = repo.list_series(
         session, repo.SeriesFilters(shelf="reading", sort="title"), limit=12
     )
+    kinds = _parse_recently_added_kinds(recently_added_kinds)
     return DashboardOut(
         stats=DashboardStats(series=series_count, unread_chapters=unread_chapters, reading=reading),
         continue_reading=[to_series_out(r) for r in repo.continue_reading(session, limit=6)],
         reading_list=[to_series_out(r) for r in reading_list],
         recent_updates=recent.items,
-        recently_added=[to_series_out(r) for r in repo.recently_added(session, limit=12)],
+        recently_added=[
+            to_series_out(r) for r in repo.recently_added(session, kinds=kinds, limit=12)
+        ],
     )
 
 
