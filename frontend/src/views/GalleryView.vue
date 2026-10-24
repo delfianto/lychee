@@ -41,9 +41,7 @@ async function load(): Promise<void> {
   loading.value = true;
   loadError.value = "";
   try {
-    libraries.value = (await fetchLibraryRows()).filter(
-      (l) => l.kind === "gallery" || l.kind === "mixed",
-    );
+    libraries.value = (await fetchLibraryRows()).filter((l) => l.kind === "gallery");
     if (!libraries.value.some((l) => l.id === selectedLibrary.value)) {
       selectedLibrary.value = libraries.value[0]?.id ?? "";
       if (selectedLibrary.value) return; // the selection watcher loads it
