@@ -126,14 +126,13 @@ onMounted(async () => {
         Local import
       </h3>
       <p class="max-w-2xl text-xs text-base-content/50">
-        Import comic/manga containers (CBZ/ZIP) or image folders from the server's disk and
-        transcode their pages to AVIF. Configure it on the left, then import from a path or upload
-        files.
+        Convert CBZ/ZIP archives or image folders to AVIF. Configure imports, then choose a server
+        path or upload files.
       </p>
       <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
         <!-- Config -->
         <div class="card bg-base-100">
-          <div class="card-body gap-4 p-4">
+          <div class="flex flex-col gap-4 p-4">
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-start gap-3">
                 <FolderInput class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -258,7 +257,7 @@ onMounted(async () => {
 
         <!-- Import action -->
         <div class="card bg-base-100">
-          <div class="card-body gap-5 p-5">
+          <div class="flex flex-col gap-4 p-4">
             <div class="flex items-start gap-3">
               <HardDriveDownload class="mt-0.5 size-5 shrink-0 text-primary" />
               <div class="min-w-0">

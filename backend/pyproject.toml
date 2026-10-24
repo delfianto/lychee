@@ -1,6 +1,6 @@
 [project]
 name = "lychee-backend"
-version = "0.1.0b8"
+version = "0.1.0b9"
 description = "lychee — self-hosted manga/comic/ebook media server (backend)"
 requires-python = ">=3.14"
 

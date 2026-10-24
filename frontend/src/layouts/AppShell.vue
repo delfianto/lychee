@@ -75,7 +75,7 @@ const nav = computed<NavItem[]>(() => [
   ...(mainBarIcons.value.gallery
     ? [{ label: "Gallery", icon: GalleryThumbnails, to: "/gallery" }]
     : []),
-  { label: "Lists", icon: Layers, to: "/lists" },
+  ...(mainBarIcons.value.lists ? [{ label: "Lists", icon: Layers, to: "/lists" }] : []),
 ]);
 </script>
 

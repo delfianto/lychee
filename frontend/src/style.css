@@ -397,6 +397,12 @@
   border: 1px solid var(--surface-border);
 }
 
+/* Settings rows keep label/help text at natural height, outside card-body's
+   paragraph flex-grow rule. Controls stack until the desktop pane is wide enough. */
+@utility settings-row {
+  @apply grid items-start gap-3 px-4 py-3 xl:grid-cols-3 xl:gap-6;
+}
+
 @utility surface-border {
   border: 1px solid var(--surface-border);
 }

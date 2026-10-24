@@ -94,9 +94,10 @@ export function useRecentlyAddedKinds() {
 export interface MainBarIcons {
   comics: boolean;
   gallery: boolean;
+  lists: boolean;
 }
 const MAIN_BAR_KEY = "lychee.mainBarIcons";
-const defaultMainBarIcons: MainBarIcons = { comics: true, gallery: true };
+const defaultMainBarIcons: MainBarIcons = { comics: true, gallery: true, lists: true };
 
 function toMainBarIcons(raw: string | null): MainBarIcons {
   if (!raw) return { ...defaultMainBarIcons };
@@ -105,6 +106,7 @@ function toMainBarIcons(raw: string | null): MainBarIcons {
     return {
       comics: typeof parsed.comics === "boolean" ? parsed.comics : true,
       gallery: typeof parsed.gallery === "boolean" ? parsed.gallery : true,
+      lists: typeof parsed.lists === "boolean" ? parsed.lists : true,
     };
   } catch {
     return { ...defaultMainBarIcons };
