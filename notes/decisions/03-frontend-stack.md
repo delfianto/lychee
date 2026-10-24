@@ -52,6 +52,20 @@ fit-to-width/height modes, keyboard navigation, and progress tracking on
 scroll are all implemented (`views/ReaderView.vue`); page **prefetch** of
 upcoming pages is not — pages load on demand.
 
+## Returning to long lists
+
+`App.vue` keeps the application shell alive across full-screen reader visits;
+`AppShell.vue` caches browse views and their loaded cursor pages. Inactive grids
+stop observing their pagination sentinel. After an edit, list refreshes retain the
+previous loaded depth and publish refreshed pages together.
+
+`lib/browseScroll.ts` remembers offsets by full route and restores browser-history
+positions after the returning route has mounted and finished loading. Obsolete
+restores and user wheel/touch input cancel pending restoration; shorter lists
+clamp to the remaining height. `BackToTop.vue` provides a floating button after
+600px of scrolling, respecting reduced-motion preferences. This state lasts for
+the current SPA session, rather than surviving a full browser reload.
+
 ## Mock harness
 
 `bun run dev:mock` (or `just fe-mock`) serves the SPA against MSW instead of

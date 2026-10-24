@@ -26,6 +26,7 @@ from src.integrations.models import Provider, SyncState
 from src.integrations.schema import SyncConfigUpdate, SyncControlRequest, SyncJobOut, SyncOut
 from src.integrations.seed import SYNC_STATE_ID
 from src.tasks.concurrency import parallel_map
+from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
 from src.tasks.queue import Work, queue
 from src.tasks.schema import TaskOut
@@ -295,7 +296,7 @@ def get_sync(session: Session) -> SyncOut:
 
 
 def update_sync_config(session: Session, data: SyncConfigUpdate) -> SyncOut:
-    _ = queue.set_sync_workers(data.parallel_syncs)
+    save_queue_workers(session, "sync", data.parallel_syncs)
     return get_sync(session)
 
 

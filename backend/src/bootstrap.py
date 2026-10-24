@@ -44,6 +44,11 @@ def bootstrap() -> None:
     from src.tasks.queue import queue
 
     with SessionLocal() as session:
+        from src.media.processing import configure_processing
+        from src.tasks.config import restore_queue
+
+        restore_queue(session)
+        configure_processing(session)
         reclaimed = reclaim_orphaned_downloads(session)
         # Kick a drain for every series that still has queued chapters so a restart
         # actually continues the queue (reclaim alone only flips status).

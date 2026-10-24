@@ -1,0 +1,25 @@
+import { mount } from "@vue/test-utils";
+import { expect, it, vi } from "vite-plus/test";
+import BackToTop from "./BackToTop.vue";
+it("appears on long pages, scrolls up, and honors reduced motion", async () => {
+  let top = 0;
+  vi.spyOn(window, "scrollY", "get").mockImplementation(() => top);
+  let reduced = false;
+  vi.spyOn(window, "matchMedia").mockImplementation(() => ({ matches: reduced }) as MediaQueryList);
+  const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const wrapper = mount(BackToTop);
+  expect(wrapper.find("button").exists()).toBe(false);
+  top = 1800;
+  window.dispatchEvent(new Event("scroll"));
+  await wrapper.vm.$nextTick();
+  await wrapper.get('[aria-label="Back to top"]').trigger("click");
+  expect(scroll).toHaveBeenLastCalledWith({ left: 0, top: 0, behavior: "smooth" });
+  reduced = true;
+  await wrapper.get("button").trigger("click");
+  expect(scroll).toHaveBeenLastCalledWith({ left: 0, top: 0, behavior: "auto" });
+  top = 0;
+  window.dispatchEvent(new Event("scroll"));
+  await wrapper.vm.$nextTick();
+  expect(wrapper.find("button").exists()).toBe(false);
+  wrapper.unmount();
+});

@@ -18,8 +18,9 @@ from src.catalog.models import (
 from src.collections.models import Collection, CollectionSeries
 from src.downloads.models import DownloadTask
 from src.integrations.models import ImportConfig, Provider, SyncState, Tracker
-from src.media.models import ThumbnailConfig
+from src.media.models import ImageProcessingConfig, ThumbnailConfig
 from src.progress.models import ProviderReadingProgress, ReadingProgress
+from src.tasks.models import TaskQueueConfig
 from src.taxonomy.models import Tag, series_tag
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "CollectionSeries",
     "DownloadTask",
     "ImportConfig",
+    "ImageProcessingConfig",
     "Library",
     "Provider",
     "ProviderChapter",
@@ -37,6 +39,7 @@ __all__ = [
     "Series",
     "SeriesCredit",
     "SyncState",
+    "TaskQueueConfig",
     "Tag",
     "TitleVariant",
     "ThumbnailConfig",

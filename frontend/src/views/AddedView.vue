@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Grid2x2, LayoutGrid, List } from "@lucide/vue";
-import { type Component, ref, watch } from "vue";
+import { type Component, onActivated, ref, watch } from "vue";
 
 import { useSeriesList } from "../api/queries";
 import SegmentedToggle from "../components/SegmentedToggle.vue";
@@ -23,7 +23,8 @@ const SORTS: Record<string, string> = {
 const sorts = Object.keys(SORTS);
 const sort = ref("Recently Added");
 
-const { items: results, loading, hasMore, reload, loadMore } = useSeriesList();
+const { items: results, loading, hasMore, reload, loadMore, refreshIfChanged } = useSeriesList();
+onActivated(refreshIfChanged);
 watch(
   [sort, recentlyAddedKinds],
   ([s, kinds]) =>

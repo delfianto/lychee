@@ -262,30 +262,41 @@ export function useSeriesList() {
   // e.g. filter change A's request still pending when filter change B's lands first.
   const staleGuard = createStaleGuard();
 
-  async function fetchPage(reset: boolean): Promise<void> {
+  async function fetchPage(reset: boolean, minimum = 24): Promise<void> {
     if (loading.value && started && !reset) return;
     const token = staleGuard.next();
     loading.value = true;
     const query: SeriesQuery = { ...params, limit: 24 };
-    if (!reset && cursor.value) query.cursor = cursor.value;
     while (seriesWrites.size) {
       await Promise.allSettled(seriesWrites.values());
       if (!staleGuard.isCurrent(token)) return;
     }
     const requestedRevision = seriesRevision;
-    const { data, error } = await api.GET("/api/series", { params: { query } });
-    if (!staleGuard.isCurrent(token)) return;
-    if (!error && data) {
-      const mapped = data.items.map(toSeries);
-      items.value = reset ? mapped : [...items.value, ...mapped];
-      loadedRevision = requestedRevision;
-      cursor.value = data.nextCursor ?? null;
-      done.value = !data.nextCursor;
-      failed.value = false;
-    } else if (reset) {
-      failed.value = true; // distinguish a load failure from a genuinely empty grid
-      items.value = [];
-    }
+    const mapped: Series[] = [];
+    let nextCursor = reset ? null : cursor.value;
+    do {
+      if (nextCursor) query.cursor = nextCursor;
+      else delete query.cursor;
+      const { data, error } = await api.GET("/api/series", { params: { query } });
+      if (!staleGuard.isCurrent(token)) return;
+      if (error || !data) {
+        if (reset) {
+          failed.value = true;
+          items.value = [];
+        }
+        loading.value = false;
+        return;
+      }
+      mapped.push(...data.items.map(toSeries));
+      nextCursor = data.nextCursor ?? null;
+    } while (reset && mapped.length < minimum && nextCursor);
+    // Publish the refreshed depth together: replacing 100 loaded rows with just
+    // page one briefly collapses the document and destroys a saved scroll offset.
+    items.value = reset ? mapped : [...items.value, ...mapped];
+    loadedRevision = requestedRevision;
+    cursor.value = nextCursor;
+    done.value = !nextCursor;
+    failed.value = false;
     loading.value = false;
   }
 
@@ -314,7 +325,8 @@ export function useSeriesList() {
   // KeepAlive preserves filters and pagination. Refresh on return only if a
   // detail edit changed the data (or its save is still in flight).
   function refreshIfChanged(): void {
-    if (started && (seriesWrites.size || loadedRevision !== seriesRevision)) void reload(params);
+    if (started && (seriesWrites.size || loadedRevision !== seriesRevision))
+      void fetchPage(true, Math.max(24, items.value.length));
   }
 
   return {

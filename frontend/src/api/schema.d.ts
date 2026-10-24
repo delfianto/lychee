@@ -548,6 +548,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries/image-processing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Processing */
+        get: operations["get_image_processing_api_libraries_image_processing_get"];
+        /** Update Image Processing */
+        put: operations["update_image_processing_api_libraries_image_processing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/{library_id}": {
         parameters: {
             query?: never;
@@ -1887,6 +1905,26 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ImageProcessingOut */
+        ImageProcessingOut: {
+            /** Conversionworkers */
+            conversionWorkers: number;
+            /** Thumbnailworkers */
+            thumbnailWorkers: number;
+            /** Cputhreads */
+            cpuThreads: number;
+            /** Recommendedconversionworkers */
+            recommendedConversionWorkers: number;
+            /** Recommendedthumbnailworkers */
+            recommendedThumbnailWorkers: number;
+        };
+        /** ImageProcessingUpdate */
+        ImageProcessingUpdate: {
+            /** Conversionworkers */
+            conversionWorkers: number;
+            /** Thumbnailworkers */
+            thumbnailWorkers: number;
         };
         /** ImportConfigOut */
         ImportConfigOut: {
@@ -3516,6 +3554,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThumbnailStorageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_processing_api_libraries_image_processing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageProcessingOut"];
+                };
+            };
+        };
+    };
+    update_image_processing_api_libraries_image_processing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageProcessingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageProcessingOut"];
                 };
             };
             /** @description Validation Error */
