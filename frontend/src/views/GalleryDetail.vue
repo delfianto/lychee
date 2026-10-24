@@ -73,7 +73,7 @@ function openAt(i: number): void {
   open.value = true;
 }
 
-/** Grid always uses the small /thumb endpoint — never full-resolution originals. */
+/** Grid uses the fixed 640px /thumb preview — never full-resolution originals. */
 function thumbSrc(item: GalleryMediaItem): string {
   return item.thumbUrl || item.posterUrl || item.url;
 }
@@ -166,7 +166,9 @@ function thumbSrc(item: GalleryMediaItem): string {
       </section>
 
       <!-- Media grid — CoverImage shimmers while /thumb is generated/fetched -->
-      <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <div
+        class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:gallery-columns"
+      >
         <button
           v-for="item in items"
           :key="item.index"

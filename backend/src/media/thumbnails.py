@@ -1,7 +1,7 @@
 """AVIF thumbnail store — content-addressed and sharded.
 
-Layout: ``<root>/<id[:2]>/<id>.<variant>.avif``. Two sizes keyed by the longest
-edge — ``cover`` (~320px, grids) and ``detail`` (~640px, series/gallery hero).
+Layout: ``<root>/<id[:2]>/<id>.<variant>.avif``. One 640px-wide preview
+per image: square gallery tiles or 2:3 portrait covers, without stretching.
 Generation is idempotent and writes atomically (temp file + ``os.replace``), so a
 half-written thumbnail can never be served.
 """
@@ -16,22 +16,21 @@ from pathlib import Path
 from PIL import Image
 
 from src.media.artifacts import artifact_lock
-from src.media.avif import ContentClass, load_image
+from src.media.avif import ContentClass
 from src.media.encode_pool import encode_thumbnail
 from src.tasks.context import checkpoint
 
 
 class ThumbVariant(StrEnum):
-    """A thumbnail size."""
+    """One fixed preview resolution, shaped for the UI frame."""
 
-    COVER = "cover"
-    DETAIL = "detail"
+    COVER = "cover-v2"
+    GALLERY = "gallery-v2"
 
 
-_MAX_EDGE: dict[ThumbVariant, int] = {
-    ThumbVariant.COVER: 320,
-    ThumbVariant.DETAIL: 640,
-}
+PREVIEW_WIDTH = 640
+PREVIEW_VERSION = 2
+PREVIEW_QUALITY = 75
 
 
 class ThumbnailStore:
@@ -65,31 +64,22 @@ class ThumbnailStore:
         with artifact_lock(str(path)):
             if path.is_file() and not overwrite:
                 return path
-            data = encode_thumbnail(source, _MAX_EDGE[variant], content_class, quality)
+            # ImageOps.fit crops proportionally to the existing object-cover frame.
+            aspect = 1.0 if variant is ThumbVariant.GALLERY else 2 / 3
+            data = encode_thumbnail(
+                source,
+                PREVIEW_WIDTH,
+                content_class,
+                PREVIEW_QUALITY if quality is None else quality,
+                aspect=aspect,
+            )
             checkpoint()
             _atomic_write(path, data)
+            # Remove only known legacy derivatives after the replacement is safe.
+            for legacy in ("cover", "detail"):
+                old = path.with_name(f"{thumb_id}.{legacy}.avif")
+                old.unlink(missing_ok=True)
             return path
-
-    def generate_all(
-        self,
-        thumb_id: str,
-        source: Image.Image | bytes,
-        *,
-        content_class: ContentClass = ContentClass.COLOR_ART,
-        overwrite: bool = False,
-        quality: int | None = None,
-    ) -> None:
-        """Generate every variant from one decode of the source."""
-        image = load_image(source)
-        for variant in ThumbVariant:
-            self.generate(
-                thumb_id,
-                image,
-                variant,
-                content_class=content_class,
-                overwrite=overwrite,
-                quality=quality,
-            )
 
 
 def _atomic_write(path: Path, data: bytes) -> None:

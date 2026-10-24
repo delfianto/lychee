@@ -383,7 +383,7 @@ export interface paths {
         };
         /**
          * Series Cover
-         * @description AVIF cover thumbnail (size = cover | detail).
+         * @description 640px-wide AVIF cover preview (cover and detail reuse the same file).
          */
         get: operations["series_cover_api_series__series_id__cover_get"];
         put?: never;
@@ -403,7 +403,7 @@ export interface paths {
         };
         /**
          * Gallery Image Thumb
-         * @description Grid preview (~320px AVIF). Generated on first request if scan has not warmed it.
+         * @description Aspect-aware square grid preview (up to 640px AVIF). Generated on first request if scan has not warmed it.
          */
         get: operations["gallery_image_thumb_api_series__series_id__images__index__thumb_get"];
         put?: never;

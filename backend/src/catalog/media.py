@@ -3,7 +3,7 @@
 Covers are AVIF: a series' canonical cover is a ``Cover.avif`` file beside its books
 (written for managed libraries; a ``cover.*``/``folder.*`` convention read for scanned
 ones), falling back to the provider cover or the first page. The hero (``?size=detail``)
-serves that canonical image; grids serve a 320px thumbnail derived into the store. Pages
+shares the same 640px-wide portrait preview as grids. Pages
 and gallery images are read straight from their book container. Every response carries a
 content-hash ETag.
 """
@@ -32,7 +32,12 @@ from src.media.avif import ContentClass
 from src.media.containers import ImageDirContainer, is_cover_file, media_kind, open_container
 from src.media.encode_pool import encode_thumbnail
 from src.media.render_cache import RenderCache, render_width
-from src.media.thumbnails import ThumbnailStore, ThumbVariant, _atomic_write
+from src.media.thumbnails import (
+    PREVIEW_VERSION,
+    ThumbnailStore,
+    ThumbVariant,
+    _atomic_write,
+)
 from src.media.video import extract_poster_png
 from src.tasks.concurrency import parallel_map
 from src.tasks.context import OperationCancelled, checkpoint, report_phase
@@ -243,7 +248,7 @@ def _write_bytes_atomic(path: Path, data: bytes) -> None:
 def generate_series_cover(
     session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
 ) -> bool:
-    """Generate a series' derived 320px grid thumbnail from its canonical cover (the
+    """Generate a series' derived 640px-wide portrait thumbnail from its canonical cover (the
     on-disk ``Cover.avif``/``cover.*``/``folder.*``, else the provider cover / first page).
 
     Idempotent + best-effort: skips when the thumbnail exists (unless ``overwrite``),
@@ -275,18 +280,13 @@ def materialize_series_cover(
 def _materialize_series_cover(
     session: Session, store: ThumbnailStore, series_id: str, *, overwrite: bool = False
 ) -> bool:
-    """Download/resolve the cover source once and write both thumbnail variants (cover +
-    detail) into the store. Idempotent: no-ops when both variants exist unless
+    """Download/resolve the cover source and write one 640px-wide portrait preview.
+    Idempotent: no-ops when that preview exists unless
     ``overwrite``. Best-effort — swallows failures so metadata/sync never aborts.
     """
-    if (
-        not overwrite
-        and store.exists(series_id, ThumbVariant.COVER)
-        and store.exists(series_id, ThumbVariant.DETAIL)
-    ):
+    if not overwrite and store.exists(series_id, ThumbVariant.COVER):
         return False
-    # Prefer raw bytes so generate_all can size both variants from one decode,
-    # rather than re-encoding an already-downscaled AVIF for the grid size.
+    # Prefer original bytes over re-encoding a smaller derivative.
     raw = _raw_cover_source(session, series_id)
     if raw is None:
         source = _canonical_cover_bytes(session, series_id)
@@ -294,7 +294,7 @@ def _materialize_series_cover(
             return False
         raw = source
     try:
-        store.generate_all(series_id, raw, overwrite=overwrite)
+        store.generate(series_id, raw, ThumbVariant.COVER, overwrite=overwrite)
     except OperationCancelled:
         raise
     except Exception as exc:  # noqa: BLE001 - cover warm must never break callers
@@ -304,15 +304,13 @@ def _materialize_series_cover(
 
 
 def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str) -> Served:
-    """Serve a series cover from the thumbnail store (``cover`` ~320px, ``detail`` ~640px).
+    """Serve the single 640px-wide portrait cover; detail is a compatibility alias.
 
-    On a store miss, materializes both variants from the canonical/provider source so
-    subsequent requests (including detail for virtual MangaDex series with no series dir)
-    never re-hit the remote CDN.
+    Missing previews are generated from the source and cached.
     """
     if session.get(Series, series_id) is None:
         raise NotFoundError(f"series {series_id!r} not found")
-    variant = ThumbVariant.DETAIL if size == "detail" else ThumbVariant.COVER
+    variant = ThumbVariant.COVER
     data = store.read(series_id, variant)
     if data is None:
         _ = materialize_series_cover(session, store, series_id)
@@ -323,7 +321,7 @@ def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str
 
 
 def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
-    """Warm cover + detail thumbnails for every series in a library (best-effort)."""
+    """Warm the single cover preview for every series in a library (best-effort)."""
     series_ids = list(session.scalars(select(Series.id).where(Series.library_id == library_id)))
     return warm_series_covers(session, store, series_ids)
 
@@ -449,11 +447,17 @@ def _gallery_item_thumb_id(series_id: str, index: int) -> str:
 
 
 def ensure_gallery_item_thumb(
-    session: Session, store: ThumbnailStore, series_id: str, index: int, *, overwrite: bool = False
+    session: Session,
+    store: ThumbnailStore,
+    series_id: str,
+    index: int,
+    *,
+    overwrite: bool = False,
 ) -> bool:
     """Generate the grid AVIF for one gallery item if missing. Returns whether it wrote."""
     thumb_id = _gallery_item_thumb_id(series_id, index)
-    if not overwrite and store.exists(thumb_id, ThumbVariant.COVER):
+    variant = ThumbVariant.GALLERY
+    if not overwrite and store.exists(thumb_id, variant):
         return False
     info = resolve_gallery_file(session, series_id, index)
     try:
@@ -464,8 +468,8 @@ def ensure_gallery_item_thumb(
             store.generate(
                 thumb_id,
                 png,
-                ThumbVariant.COVER,
-                content_class=ContentClass.PHOTO,
+                variant,
+                content_class=ContentClass.COLOR_ART,
                 overwrite=overwrite,
             )
         else:
@@ -474,8 +478,8 @@ def ensure_gallery_item_thumb(
             store.generate(
                 thumb_id,
                 data,
-                ThumbVariant.COVER,
-                content_class=ContentClass.PHOTO,
+                variant,
+                content_class=ContentClass.COLOR_ART,
                 overwrite=overwrite,
             )
     except OperationCancelled:
@@ -489,12 +493,13 @@ def ensure_gallery_item_thumb(
 def get_gallery_thumb(
     session: Session, store: ThumbnailStore, series_id: str, index: int
 ) -> Served:
-    """Small grid preview (AVIF ~320px). Lazy-generates on miss so unscanned items shimmer once."""
+    """Square grid preview (AVIF up to 640px). Lazy-generates on miss so unscanned items shimmer once."""
     thumb_id = _gallery_item_thumb_id(series_id, index)
-    cached = store.read(thumb_id, ThumbVariant.COVER)
+    variant = ThumbVariant.GALLERY
+    cached = store.read(thumb_id, variant)
     if cached is None:
         _ = ensure_gallery_item_thumb(session, store, series_id, index)
-        cached = store.read(thumb_id, ThumbVariant.COVER)
+        cached = store.read(thumb_id, variant)
         if cached is None:
             raise NotFoundError("could not build gallery thumbnail")
     return Served(data=cached, media_type="image/avif", etag=_etag(cached))
@@ -579,8 +584,8 @@ def gallery_images(
                 kind = media_kind(name)
                 url = f"/api/series/{series_id}/images/{i}"
                 # Grid always uses /thumb (lazy-generated AVIF). Video lightbox uses url stream.
-                thumb = f"{url}/thumb"
-                poster = f"{url}/poster" if kind == "video" else None
+                thumb = f"{url}/thumb?v={PREVIEW_VERSION}"
+                poster = f"{url}/poster?v={PREVIEW_VERSION}" if kind == "video" else None
                 items.append(
                     GalleryMediaItem(
                         index=i, kind=kind, url=url, thumb_url=thumb, poster_url=poster

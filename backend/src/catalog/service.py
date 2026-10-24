@@ -40,6 +40,7 @@ from src.catalog.schema import (
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
 from src.ingest.lychee_info import LycheeInfoFile
+from src.media.thumbnails import PREVIEW_VERSION
 from src.progress.models import ReadingProgress
 from src.taxonomy.models import Tag
 from src.trackers.sync import enqueue_push
@@ -66,7 +67,7 @@ _MAX_LIMIT = 100
 def cover_url(series_id: str) -> str:
     # Covers — provider art or local page — are downloaded once and served by our own
     # endpoint as cached AVIF thumbnails (never hotlinked).
-    return f"/api/series/{series_id}/cover"
+    return f"/api/series/{series_id}/cover?v={PREVIEW_VERSION}"
 
 
 def _csv(value: str | None) -> list[str]:

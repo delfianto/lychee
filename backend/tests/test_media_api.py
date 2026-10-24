@@ -91,11 +91,11 @@ def test_cover_is_generated_as_avif(
     assert client.get("/api/series/missing/cover").status_code == 404
 
 
-def test_cover_detail_serves_canonical_avif(
+def test_cover_detail_reuses_single_preview(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
     series, _ = _make_book_series(db_session, tmp_path, kind="manga", pages=2, with_chapter=True)
-    # ?size=detail serves the canonical cover bytes directly (not a store variant).
+    # Legacy detail requests share the same cached cover preview.
     resp = client.get(f"/api/series/{series.id}/cover", params={"size": "detail"})
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/avif"
@@ -110,7 +110,7 @@ def test_gallery_images_list_and_serve(
     first = client.get(f"/api/series/{series.id}/images", params={"limit": 2}).json()
     assert len(first["items"]) == 2
     assert first["items"][0]["url"] == f"/api/series/{series.id}/images/0"
-    assert first["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb"
+    assert first["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb?v=2"
     assert first["items"][0]["kind"] == "image"
     assert first["items"][0]["posterUrl"] is None
     assert first["nextCursor"] is not None
@@ -179,8 +179,8 @@ def test_gallery_mp4_stream_and_range(
 
     listed = client.get(f"/api/series/{series.id}/images").json()
     assert listed["items"][0]["kind"] == "video"
-    assert listed["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb"
-    assert listed["items"][0]["posterUrl"] == f"/api/series/{series.id}/images/0/poster"
+    assert listed["items"][0]["thumbUrl"] == f"/api/series/{series.id}/images/0/thumb?v=2"
+    assert listed["items"][0]["posterUrl"] == f"/api/series/{series.id}/images/0/poster?v=2"
 
     full = client.get(f"/api/series/{series.id}/images/0")
     assert full.status_code == 200
@@ -233,7 +233,7 @@ def test_provider_cover_is_downloaded_and_served_locally(
     listed = client.get("/api/series").json()["items"]
     assert (
         next(s for s in listed if s["id"] == series.id)["coverUrl"]
-        == f"/api/series/{series.id}/cover"
+        == f"/api/series/{series.id}/cover?v=2"
     )
     assert ThumbnailStore(tmp_path / "storage" / "thumbnails").exists(series.id, ThumbVariant.COVER)
 
@@ -304,3 +304,40 @@ def test_chapters_group_no_volume_first_then_descending(
 
     groups = client.get(f"/api/series/{series.id}/chapters").json()
     assert [g["volume"] for g in groups] == [None, 2, 1]  # No Volume first, then volumes descending
+
+
+def test_gallery_preview_cache_upgrade_keeps_full_image_and_one_size(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    series, _ = _make_book_series(db_session, tmp_path, kind="gallery", pages=1, with_chapter=False)
+    original = tmp_path / "lib" / series.id / "001.png"
+    Image.new("RGB", (1600, 1000), (40, 90, 160)).save(original)
+    original_bytes = original.read_bytes()
+    store = ThumbnailStore(tmp_path / "storage" / "thumbnails")
+    old = store.root / series.id[:2] / f"{series.id}-gi-0.cover.avif"
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_bytes(b"old small cache")
+
+    listed = client.get(f"/api/series/{series.id}/images").json()["items"][0]
+    assert listed["thumbUrl"].endswith("?v=2")
+    response = client.get(listed["thumbUrl"])
+    assert response.status_code == 200
+    assert Image.open(io.BytesIO(response.content)).size == (640, 640)
+    assert not old.exists()
+    assert client.get(listed["url"]).content == original_bytes
+    assert original.read_bytes() == original_bytes
+    assert (
+        client.get(
+            listed["thumbUrl"], headers={"If-None-Match": response.headers["etag"]}
+        ).status_code
+        == 304
+    )
+    files = list(store.root.rglob("*.avif"))
+    assert len(files) == 1
+
+    cover_url = client.get(f"/api/series/{series.id}").json()["coverUrl"]
+    assert cover_url.endswith("?v=2")
+    cover = client.get(cover_url)
+    assert Image.open(io.BytesIO(cover.content)).size == (640, 960)
+    assert client.get(cover_url + "&size=detail").content == cover.content
+    assert len(list(store.root.rglob("*.avif"))) == 2  # one item + its separate cover frame

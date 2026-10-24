@@ -256,7 +256,7 @@ def test_import_writes_portable_cover_avif(client: TestClient, tmp_path: Path) -
     cover = tmp_path / "storage" / "imports" / series["id"] / "Cover.avif"
     assert cover.is_file()
     assert b"ftyp" in cover.read_bytes()[:16]
-    # ?size=detail serves that canonical cover
+    # ?size=detail aliases the single cached cover preview
     detail = client.get(f"/api/series/{series['id']}/cover", params={"size": "detail"})
     assert detail.status_code == 200
     assert detail.headers["content-type"] == "image/avif"

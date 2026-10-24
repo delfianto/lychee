@@ -63,7 +63,7 @@ def test_list_and_detail_with_derived_counts(client: TestClient, db_session: Ses
     assert item["unreadCount"] == 2
     assert item["lastReadChapter"] == 3.0  # 3 of 5 read
     assert item["favorite"] is True
-    assert item["coverUrl"].endswith(f"/api/series/{item['id']}/cover")
+    assert item["coverUrl"].endswith(f"/api/series/{item['id']}/cover?v=2")
     assert item["tags"][0]["id"] == "action"
 
     detail = client.get(f"/api/series/{item['id']}")

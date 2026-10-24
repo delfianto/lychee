@@ -48,11 +48,29 @@ being wrong for one or the other.
 
 ## Thumbnails
 
-`backend/src/media/thumbnails.py` — `ThumbnailStore`, two variants (`cover`
-320px, `detail` 640px longest edge), sharded content-addressed filesystem
-path `<root>/<id[:2]>/<id>.<variant>.avif`, atomic write (temp file +
-`os.replace`), idempotent unless `overwrite=True`. Concurrent generators share an artifact lock;
-unique temporary files avoid publication races. Image work uses the shared AVIF
+`backend/src/media/thumbnails.py` stores one fixed-resolution preview per image:
+640×640 for gallery item tiles and 640×960 for 2:3 cover frames. `ImageOps.fit`
+uses LANCZOS and preserves proportions while center-cropping exactly as the UI's
+`object-cover` did. Small sources are not upscaled. Preview encoding uses AVIF
+quality 75 with 4:4:4 chroma, independently of downloaded-page presets. There is
+no `srcset`, size ladder, or generation of multiple sizes during scans.
+
+Versioned cache filenames are `<root>/<id[:2]>/<id>.<cover-v2|gallery-v2>.avif`;
+API image URLs include `?v=2` to bypass previously cached low-resolution images.
+Successful publication removes that image's old `.cover.avif` / `.detail.avif`
+derivatives. Originals and canonical `Cover.avif` files are never removed.
+Existing previews upgrade on access or the next scan; no synchronous rebuild of
+the whole library is required. `size=detail` remains an API compatibility alias
+of the same cover preview, using one disk file.
+
+On wide screens the gallery uses fluid columns near 240–300 CSS pixels rather
+than stretching five tiles across the whole monitor. That keeps 640px previews
+useful at 2x display density. The three sampled live sources encoded to 17–29 KB
+per 640px square preview (quality 75, 4:4:4), roughly 220–370 MB for 12,985 items;
+actual size depends on the library. Covers add one preview per series.
+
+Concurrent generators share an artifact lock; unique temporary files and atomic
+replacement protect publication. All preview generation uses the shared AVIF
 process pool described in [ADR 08](08-task-runner.md).
 
 Thumbnail location is configurable in **Settings → Libraries → Thumbnail storage**.
@@ -73,7 +91,7 @@ on disk, the fallback chain differs by kind: gallery → first local page;
 manga/comic → provider HTTP `cover_source` (downloaded once and cached) →
 first local page. `Series.cover_source` is a plain nullable URL string, not
 a `generated|sidecar|user` enum. On a thumbnail-store miss, `get_cover`
-materializes both variants from the canonical/provider source on the spot,
+materializes its single preview from the canonical/provider source on the spot,
 so a cover always renders even before a scan has warmed it — the same
 lazy-generate-on-miss pattern covers gallery item thumbnails.
 

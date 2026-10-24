@@ -994,3 +994,13 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
 - Worker concurrency preferences and generic task history remain in-memory;
   restarting resets operation limits to 1. Running native encodes finish before
   cancellation completes; active HTTP requests retain their timeout boundary.
+
+### Gallery preview quality
+
+- [x] One 640px-wide preview per image, matched to the UI frame without stretching:
+      square gallery items and 2:3 cover cards; original full images stay unchanged.
+- [x] LANCZOS, quality 75 / 4:4:4, and fluid desktop gallery columns avoid magnifying
+      undersized long-edge thumbnails. Source images smaller than the target are
+      never upscaled.
+- [x] Cache version 2 in filenames and URLs, with old derivatives removed after
+      successful replacement. Scans and lazy access upgrade existing previews.

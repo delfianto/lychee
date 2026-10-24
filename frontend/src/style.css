@@ -452,6 +452,12 @@
   justify-content: center;
 }
 
+/* Keep gallery tiles near 240–300 CSS pixels on wide screens so a single
+   640px preview remains sufficient at 2x pixel density. */
+@utility gallery-columns {
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
 /* Portrait 2:3 cover ratio, as a reusable utility so we never sprinkle
    `aspect-[2/3]` (the one arbitrary value the mockups kept reaching for). */
 @utility cover {
