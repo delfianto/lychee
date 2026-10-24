@@ -24,7 +24,10 @@ SQLite uses WAL, foreign keys, synchronous=NORMAL and a 2s busy timeout. Compare
 identical settings across runs. Results came from a shared 32-thread host with
 other services running; repeated samples are indicative, not a controlled CPU
 performance claim. API timings measure FastAPI's in-process HTTP transport,
-without TLS, a network proxy, or a browser.
+without TLS, a network proxy, or a browser. On this host `/tmp` is tmpfs:
+these runs exercise real filesystem calls against RAM-backed storage, not NVMe
+media or database durability costs. See the [database attribution study](../database/README.md)
+for separate tmpfs/NVMe and WAL/MVCC controls.
 
 `baseline-*.json` use application commit `4f18066` before the connection fixes.
 All three series operations fail under connection pressure, leaving unfinished

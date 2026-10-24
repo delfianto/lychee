@@ -72,6 +72,11 @@ be-turso:
 bench-downloads *args:
     cd {{ backend_dir }} && uv run python scripts/bench_downloads.py {{args}}
 
+# Attribute SQLite/Turso driver, query, MVCC and concurrent-write costs offline.
+[group('backend')]
+bench-database *args:
+    cd {{ backend_dir }} && uv run python scripts/bench_database.py {{args}}
+
 # Make a verified local Turso copy without modifying the SQLite source.
 [group('database')]
 db-to-turso source destination:
