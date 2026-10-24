@@ -211,3 +211,57 @@ it("keeps the stream usable when snapshot fetching fails or returns no data", as
   source.emit("scan.progress", task("after-reconnect", { progress: 40 }));
   expect(useTasks().tasks.value[0]?.progress).toBe(40);
 });
+
+it("shows accepted work before SSE opens and keeps newer streamed progress", async () => {
+  const { connectTaskStream, rememberTask, activeTasks } = await import("./events");
+  connectTaskStream();
+  rememberTask(task("accepted", { status: "queued" }));
+  expect(activeTasks.value.some((t) => t.id === "accepted")).toBe(true);
+  FakeEventSource.instances[0]!.emit("scan.progress", task("accepted", { progress: 45 }));
+  rememberTask(task("accepted", { status: "queued", progress: 0 }));
+  expect(activeTasks.value.find((t) => t.id === "accepted")?.progress).toBe(45);
+});
+
+it("recovers a missed completion from a snapshot and notifies detail views", async () => {
+  const { connectTaskStream, refreshTasks, onTaskDone, activeTasks } = await import("./events");
+  connectTaskStream();
+  await flushPromises();
+  FakeEventSource.instances[0]!.emit("scan.started", task("missed"));
+  const done = vi.fn();
+  onTaskDone(done);
+  fetchTasks.mockResolvedValueOnce({ data: [task("missed", { status: "done", progress: 100 })] });
+  await refreshTasks();
+  expect(activeTasks.value.some((t) => t.id === "missed")).toBe(false);
+  expect(done).toHaveBeenCalledWith(expect.objectContaining({ id: "missed", status: "done" }));
+});
+
+it("refreshes tasks when connectivity or a visible tab returns, and dispatches snapshot updates", async () => {
+  const windowEvents = vi.spyOn(window, "addEventListener");
+  const documentEvents = vi.spyOn(document, "addEventListener");
+  const { connectTaskStream, onTaskEvent, activeTasks } = await import("./events");
+  connectTaskStream();
+  await flushPromises();
+  const handler = vi.fn();
+  onTaskEvent(handler);
+  const online = windowEvents.mock.calls.find(([event]) => event === "online")![1] as EventListener;
+  const visibility = documentEvents.mock.calls.find(
+    ([event]) => event === "visibilitychange",
+  )![1] as EventListener;
+  fetchTasks.mockResolvedValueOnce({ data: [task("recovered")] });
+  online(new Event("online"));
+  await flushPromises();
+  expect(activeTasks.value.some((t) => t.id === "recovered")).toBe(true);
+  expect(handler).toHaveBeenCalledWith(
+    "scan.snapshot",
+    expect.objectContaining({ id: "recovered" }),
+  );
+  const visible = vi.spyOn(document, "visibilityState", "get");
+  visible.mockReturnValue("hidden");
+  const before = fetchTasks.mock.calls.length;
+  visibility(new Event("visibilitychange"));
+  expect(fetchTasks).toHaveBeenCalledTimes(before);
+  visible.mockReturnValue("visible");
+  visibility(new Event("visibilitychange"));
+  await flushPromises();
+  expect(fetchTasks).toHaveBeenCalledTimes(before + 1);
+});

@@ -29,6 +29,8 @@ beforeEach(() => {
 it("shows thumbnail progress and cancels the complete operation", async () => {
   const { wrapper } = await renderComponent(ActivityIndicator);
   expect(wrapper.text()).toContain("4/12");
+  expect(wrapper.text()).toContain("Overall progress");
+  expect(wrapper.get('progress[aria-label="Overall progress"]').attributes("value")).toBe("50");
   await wrapper.get('button[aria-label="Cancel Gallery"]').trigger("click");
   await flushPromises();
   expect(post).toHaveBeenCalledWith("/api/tasks/{task_id}/cancel", {

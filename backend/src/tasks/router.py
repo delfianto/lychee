@@ -29,7 +29,7 @@ async def events() -> StreamingResponse:
     async def stream() -> AsyncIterator[str]:
         yield ": connected\n\n"
         async for event in broker.subscribe():
-            yield f"data: {json.dumps(event)}\n\n"
+            yield ": keep-alive\n\n" if event is None else f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(
         stream(),

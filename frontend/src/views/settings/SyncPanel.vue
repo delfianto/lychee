@@ -6,6 +6,7 @@ import { AlertCircle, Gauge, Globe, Pause, Play, RefreshCw, Square, X } from "@l
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import PhaseProgress from "../../components/PhaseProgress.vue";
+import OverallProgress from "../../components/OverallProgress.vue";
 
 import type { SyncState } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
@@ -101,9 +102,14 @@ async function loadSync(): Promise<void> {
 
 async function syncNow(): Promise<void> {
   sync.syncing = true;
-  await runSync();
-  toast("Checking for new chapters…");
-  await loadSync();
+  try {
+    await runSync();
+    toast("Checking for new chapters…");
+    await loadSync();
+  } catch (e) {
+    sync.syncing = false;
+    toast(e instanceof Error ? e.message : "Couldn’t start sync", "error");
+  }
 }
 
 async function setParallelSyncs(raw: number): Promise<void> {
@@ -283,11 +289,9 @@ onMounted(() => {
             </div>
 
             <PhaseProgress :phases="job.phases" />
-            <progress
-              v-if="job.status === 'running' || job.status === 'paused'"
-              class="progress progress-primary mt-2 h-1.5 w-full"
-              :value="job.progress"
-              max="100"
+            <OverallProgress
+              v-if="['queued', 'running', 'paused', 'cancelling'].includes(job.status)"
+              :progress="job.progress"
             />
           </div>
 

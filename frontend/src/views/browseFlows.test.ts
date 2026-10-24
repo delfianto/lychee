@@ -169,6 +169,12 @@ it("handles malformed presets and unknown library headings and retries failed gr
 });
 
 it("filters galleries by artist, characters and franchise and sorts their titles", async () => {
+  api.db.libraries.push({
+    ...api.db.libraries[0]!,
+    id: "gallery-lib",
+    name: "Gallery root",
+    kind: "gallery",
+  });
   api.db.series.push(
     makeSeries("g2", {
       kind: "gallery",
@@ -187,7 +193,9 @@ it("filters galleries by artist, characters and franchise and sorts their titles
     expect(wrapper.text()).toContain(term === "missing" ? "No" : "Gallery");
   }
   await search.setValue("");
-  const selects = wrapper.findAll("select");
+  const selects = wrapper
+    .findAll("select")
+    .filter((s) => s.attributes("aria-label") !== "Gallery library");
   await selects[0]!.setValue("Model");
   await flushPromises();
   expect(wrapper.text()).not.toContain("Alternate");
@@ -257,7 +265,11 @@ it("filters reading lists by kind, creates a visible empty list and deletes it",
   await click(wrapper, "Create");
   expect(api.db.collections.at(-1)?.name).toBe("My list");
   expect(wrapper.text()).toContain("My list");
-  await wrapper.findAll('[aria-label="Delete list"]').at(-1)!.trigger("click");
+  await wrapper
+    .findAll("div.group")
+    .find((card) => card.text().includes("My list"))!
+    .get('[aria-label="Delete list"]')
+    .trigger("click");
   await flushPromises();
   expect(wrapper.text()).not.toContain("My list");
   await click(wrapper, "New list");
@@ -330,4 +342,73 @@ it("ignores an older gallery response after navigating to another gallery", asyn
   release();
   await flushPromises();
   expect(wrapper.get("h1").text()).toBe("Second story");
+});
+
+it("defaults to the first gallery library, follows all pages, and isolates selection facets", async () => {
+  api.db.libraries = [
+    { ...api.db.libraries[0]!, id: "first", name: "Artwork", kind: "gallery" },
+    { ...api.db.libraries[0]!, id: "second", name: "Photos", kind: "gallery" },
+  ];
+  const requests: string[] = [];
+  api.server.use(
+    http.get("http://localhost/api/series", ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const id = params.get("libraryId")!;
+      requests.push(id);
+      return HttpResponse.json({
+        items: [
+          makeSeries(params.get("cursor") ?? id, {
+            kind: "gallery",
+            title: id === "first" ? "Drawing" : "Photography",
+            artists: [id === "first" ? "Illustrator" : "Photographer"],
+          }),
+        ],
+        nextCursor: id === "first" && !params.has("cursor") ? "page-two" : null,
+      });
+    }),
+  );
+  const { wrapper } = await renderView(GalleryView);
+  expect(wrapper.get<HTMLSelectElement>('[aria-label="Gallery library"]').element.value).toBe(
+    "first",
+  );
+  expect(requests).toEqual(["first", "first"]);
+  expect(wrapper.findAll('a[href^="/gallery/"]')).toHaveLength(2);
+  await wrapper.get('[aria-label="Filter by artist"]').setValue("Illustrator");
+  await wrapper.get('[aria-label="Gallery library"]').setValue("second");
+  await flushPromises();
+  expect(wrapper.text()).toContain("Photography");
+  expect(wrapper.text()).not.toContain("Drawing");
+  expect(wrapper.text()).not.toContain("Illustrator");
+  expect(wrapper.get<HTMLSelectElement>('[aria-label="Filter by artist"]').element.value).toBe("");
+  expect(requests.at(-1)).toBe("second");
+});
+
+it("shows galleries load failures and retries, and handles no gallery libraries", async () => {
+  api.db.libraries[0]!.kind = "gallery";
+  api.failNext("GET", "/api/series");
+  const { wrapper } = await renderView(GalleryView);
+  expect(wrapper.text()).toContain("Rejected by server");
+  await click(wrapper, "Try again");
+  expect(wrapper.text()).toContain("Gallery");
+  expect(wrapper.text()).not.toContain("Rejected by server");
+  wrapper.unmount();
+  api.db.libraries = [];
+  const empty = await renderView(GalleryView);
+  expect(empty.wrapper.text()).toContain("No gallery libraries yet");
+});
+
+it("sorts Lists alphabetically with natural numbers and mixed letter cases", async () => {
+  useListsDefaultTab().listsDefaultTab.value = "all";
+  api.db.collections = ["zebra", "Album 10", "apple", "Album 2"].map((name, i) => ({
+    id: `list-${i}`,
+    name,
+    seriesIds: [],
+  }));
+  const { wrapper } = await renderView(ListsView);
+  expect(wrapper.findAll("h3").map((h) => h.text())).toEqual([
+    "Album 2",
+    "Album 10",
+    "apple",
+    "zebra",
+  ]);
 });

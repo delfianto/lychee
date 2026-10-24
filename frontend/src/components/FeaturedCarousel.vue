@@ -37,7 +37,13 @@ function progress(s: Series | undefined): number {
       <!-- Info -->
       <div class="flex min-w-0 grow flex-col gap-3">
         <div>
-          <h2 class="text-2xl font-bold">{{ current.title }}</h2>
+          <h2 class="text-2xl font-bold">
+            <RouterLink
+              :to="current.kind === 'gallery' ? `/gallery/${current.id}` : `/series/${current.id}`"
+              class="link link-hover"
+              >{{ current.title }}</RouterLink
+            >
+          </h2>
           <p class="text-sm text-base-content/70">{{ current.authors.join(", ") }}</p>
         </div>
 

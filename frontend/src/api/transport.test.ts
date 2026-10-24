@@ -469,13 +469,13 @@ describe("HTTP request contracts", () => {
     for (const action of [
       settings.fetchProviders,
       settings.fetchTrackers,
-      settings.fetchLibraryRows,
       settings.fetchTaxonomy,
       settings.fetchDownloadTasks,
     ])
       expect(await action()).toEqual([]);
     for (const action of [settings.fetchSyncState, settings.fetchImportConfig, settings.fetchAbout])
       expect(await action()).toBeNull();
+    await expect(settings.fetchLibraryRows()).rejects.toThrow("load libraries");
     await expect(settings.browsePath()).rejects.toThrow("Couldn't read");
   });
 
@@ -567,10 +567,10 @@ describe("HTTP request contracts", () => {
       () => queries.fetchRelated("s1"),
       () => queries.fetchArt("s1"),
       () => queries.fetchChapters("s1"),
-      () => queries.fetchGalleries(),
       () => queries.fetchMatchCandidates("s1"),
     ])
       expect(await action()).toEqual([]);
+    await expect(queries.fetchGalleries()).rejects.toThrow("Server refused the change");
     expect(await queries.fetchCollection("list")).toBeNull();
     await expect(queries.fetchSeries("missing")).rejects.toThrow("Series not found");
     await expect(queries.fetchChapterDetail("missing")).rejects.toThrow("Chapter not found");

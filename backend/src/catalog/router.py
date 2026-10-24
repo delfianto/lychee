@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from functools import partial
+
+from anyio.to_thread import run_sync
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import FileResponse
 
 from src.catalog import adhoc, matching, media, purge, service
-from src.catalog.deps import RenderCacheDep, ThumbnailStoreDep
+from src.catalog.deps import ImageLimiterDep, RenderCacheDep, ThumbnailStoreDep
 from src.catalog.media import Served
 from src.catalog.schema import (
     ChapterAvailabilityOut,
@@ -50,6 +53,7 @@ def _image_response(request: Request, served: Served) -> Response:
 def list_series(
     db: DbSession,
     kind: str | None = None,
+    library_id: str | None = Query(None, alias="libraryId"),
     shelf: str | None = None,
     favorite: bool | None = None,
     q: str | None = None,
@@ -68,6 +72,7 @@ def list_series(
     """The one list endpoint behind every grid (library, favorites, gallery, …)."""
     filters = service.build_series_filters(
         kind=kind,
+        library_id=library_id,
         shelf=shelf,
         favorite=favorite,
         q=q,
@@ -224,39 +229,55 @@ def gallery_images(
 
 
 @router.get("/series/{series_id}/cover")
-def series_cover(
+async def series_cover(
     request: Request,
+    image_limiter: ImageLimiterDep,
     db: DbSession,
     store: ThumbnailStoreDep,
     series_id: str,
     size: str = "cover",
 ) -> Response:
     """640px-wide AVIF cover preview (cover and detail reuse the same file)."""
-    return _image_response(request, media.get_cover(db, store, series_id, size))
+    return _image_response(
+        request,
+        await run_sync(partial(media.get_cover, db, store, series_id, size), limiter=image_limiter),
+    )
 
 
 @router.get("/series/{series_id}/images/{index}/thumb")
-def gallery_image_thumb(
+async def gallery_image_thumb(
     request: Request,
+    image_limiter: ImageLimiterDep,
     db: DbSession,
     store: ThumbnailStoreDep,
     series_id: str,
     index: int,
 ) -> Response:
     """Aspect-aware square grid preview (up to 640px AVIF). Generated on first request if scan has not warmed it."""
-    return _image_response(request, media.get_gallery_thumb(db, store, series_id, index))
+    return _image_response(
+        request,
+        await run_sync(
+            partial(media.get_gallery_thumb, db, store, series_id, index), limiter=image_limiter
+        ),
+    )
 
 
 @router.get("/series/{series_id}/images/{index}/poster")
-def gallery_image_poster(
+async def gallery_image_poster(
     request: Request,
+    image_limiter: ImageLimiterDep,
     db: DbSession,
     store: ThumbnailStoreDep,
     series_id: str,
     index: int,
 ) -> Response:
     """Poster frame for a gallery video (same store entry as /thumb)."""
-    return _image_response(request, media.get_gallery_poster(db, store, series_id, index))
+    return _image_response(
+        request,
+        await run_sync(
+            partial(media.get_gallery_poster, db, store, series_id, index), limiter=image_limiter
+        ),
+    )
 
 
 @router.get("/series/{series_id}/images/{index}")
@@ -275,8 +296,9 @@ def gallery_image(request: Request, db: DbSession, series_id: str, index: int) -
 
 
 @router.get("/chapters/{chapter_id}/pages/{n}")
-def chapter_page(
+async def chapter_page(
     request: Request,
+    image_limiter: ImageLimiterDep,
     db: DbSession,
     render_cache: RenderCacheDep,
     chapter_id: str,
@@ -287,5 +309,9 @@ def chapter_page(
     AVIF re-encoded to at most that width (cached on disk)."""
     width = clamp_width(w) if w is not None else None
     return _image_response(
-        request, media.get_page(db, chapter_id, n, width=width, render_cache=render_cache)
+        request,
+        await run_sync(
+            partial(media.get_page, db, chapter_id, n, width=width, render_cache=render_cache),
+            limiter=image_limiter,
+        ),
     )

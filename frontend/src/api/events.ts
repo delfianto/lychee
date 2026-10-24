@@ -37,27 +37,57 @@ function upsert(task: Task): void {
   );
 }
 
+/** Seed accepted operations immediately; an SSE update always wins over its HTTP response. */
+export function rememberTask(value: unknown): void {
+  const task = value as Task | undefined;
+  if (!task?.id || !task.kind || !task.status || tasks.value.some((t) => t.id === task.id)) return;
+  upsert(task);
+  for (const handler of eventHandlers) handler(`${task.kind}.started`, task);
+}
+
+/** Reconcile connection gaps without replacing events that arrived during the request. */
+export async function refreshTasks(): Promise<void> {
+  const requestedAt = revision;
+  try {
+    const { data } = await api.GET("/api/tasks");
+    for (const task of data ?? []) {
+      if ((revisions.get(task.id) ?? 0) > requestedAt) continue;
+      const previous = tasks.value.find((t) => t.id === task.id);
+      upsert(task);
+      for (const handler of eventHandlers) handler(`${task.kind}.snapshot`, task);
+      if (
+        previous &&
+        ["queued", "running", "cancelling"].includes(previous.status) &&
+        ["done", "failed", "cancelled"].includes(task.status)
+      ) {
+        for (const handler of doneHandlers) handler(task);
+      }
+    }
+  } catch {
+    // Keep the last known state; the next connection or focus retries the snapshot.
+  }
+}
+
 /** Open the shared event stream (idempotent). Call once at app start. */
 export function connectTaskStream(): void {
   if (source) return;
+  // Snapshot before onopen: a proxy or an idle stream must not delay the badge.
+  void refreshTasks();
   source = new EventSource("/api/events");
+  window.addEventListener("online", () => {
+    void refreshTasks();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshTasks();
+  });
   source.onopen = () => {
     connected.value = true;
-    const requestedAt = revision;
-    void api
-      .GET("/api/tasks")
-      .then(({ data }) => {
-        for (const task of data ?? []) {
-          if ((revisions.get(task.id) ?? 0) <= requestedAt) upsert(task);
-        }
-      })
-      .catch(() => {
-        /* The event stream continues; reconnect retries the snapshot. */
-      });
+    void refreshTasks();
   };
   source.onerror = () => {
     // EventSource reconnects on its own; just reflect the gap.
     connected.value = false;
+    void refreshTasks();
   };
   source.onmessage = (e: MessageEvent<string>) => {
     let payload: TaskEvent;

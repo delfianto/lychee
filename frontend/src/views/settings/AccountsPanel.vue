@@ -86,9 +86,13 @@ async function onMangadexConnected(): Promise<void> {
 async function setSyncOnRead(a: AccountRow): Promise<void> {
   await setTrackerSyncOnRead(a.id, a.syncOnRead);
 }
-function syncAccount(a: AccountRow): void {
-  void syncProvider(a.id);
-  toast("Syncing your MangaDex account…");
+async function syncAccount(a: AccountRow): Promise<void> {
+  try {
+    await syncProvider(a.id);
+    toast("Syncing your MangaDex account…");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn’t start account sync", "error");
+  }
 }
 
 const disposeDone = onTaskDone((task) => {

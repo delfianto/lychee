@@ -69,6 +69,13 @@ useful at 2x display density. The three sampled live sources encoded to 17–29 
 per 640px square preview (quality 75, 4:4:4), roughly 220–370 MB for 12,985 items;
 actual size depends on the library. Covers add one preview per series.
 
+HTTP cover, thumbnail/poster, and chapter render requests use a separate AnyIO
+worker budget (8 concurrent image requests), so waiting for image encoding cannot
+occupy all ordinary API workers and delay library/task/settings requests. CPU
+work still uses the same bounded process pool as background jobs. Admission is
+bounded before image dependencies acquire database connections; waiting image
+requests therefore cannot exhaust the database pool either.
+
 Concurrent generators share an artifact lock; unique temporary files and atomic
 replacement protect publication. All preview generation uses the shared AVIF
 process pool described in [ADR 08](08-task-runner.md).

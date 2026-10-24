@@ -88,6 +88,7 @@ it("wraps featured slides and handles missing reading progress", async () => {
     makeSeries("second", { lastReadChapter: 0, totalChapters: undefined, description: undefined }),
   ];
   const { wrapper } = await renderView(FeaturedCarousel, { props: { items } });
+  expect(wrapper.get("h2 a").attributes("href")).toBe(`/series/${items[0]!.id}`);
   expect(wrapper.get("progress").attributes("value")).toBe("33");
   await wrapper.get('[aria-label="Next"]').trigger("click");
   expect(wrapper.get("h2").text()).toBe("Story second");

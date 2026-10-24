@@ -9,6 +9,7 @@ import { activeTasks } from "../api/events";
 import { api } from "../api/client";
 import { toast } from "../lib/toast";
 import PhaseProgress from "./PhaseProgress.vue";
+import OverallProgress from "./OverallProgress.vue";
 
 async function cancelTask(id: string): Promise<void> {
   const { error } = await api.POST("/api/tasks/{task_id}/cancel", {
@@ -82,18 +83,14 @@ function kindLabel(kind: string): string {
             </div>
           </div>
           <PhaseProgress :phases="task.phases ?? {}" />
-          <div class="mt-1.5 text-xs">
-            <div class="flex justify-between gap-3 text-base-content/60">
-              <span class="min-w-0 truncate">{{ task.detail ?? "Overall" }}</span>
-              <span class="shrink-0 tabular-nums">{{ task.progress }}%</span>
-            </div>
-            <progress
-              class="progress progress-primary h-1 w-full"
-              aria-label="Overall progress"
-              :value="task.progress"
-              max="100"
-            />
-          </div>
+          <p
+            v-if="task.detail"
+            class="mt-1 truncate text-xs text-base-content/60"
+            :title="task.detail"
+          >
+            {{ task.detail }}
+          </p>
+          <OverallProgress :progress="task.progress" />
         </li>
       </ul>
     </div>

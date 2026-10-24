@@ -13,6 +13,8 @@ import {
   scanLibrary,
 } from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
+import ErrorState from "../../components/ErrorState.vue";
+import { createStaleGuard } from "../../lib/staleGuard";
 import AddLibraryModal from "./AddLibraryModal.vue";
 import ThumbnailStorageCard from "./ThumbnailStorageCard.vue";
 
@@ -26,20 +28,34 @@ interface LibraryRow {
 }
 const libraries = ref<LibraryRow[]>([]);
 const showAdd = ref(false);
+const loading = ref(true);
+const loadError = ref("");
+const loadGuard = createStaleGuard();
 // A scan runs in the background; disable the triggers while one is in flight.
 const scanning = computed(() =>
   activeTasks.value.some((t) => t.kind === "scan" || t.kind === "thumbs"),
 );
 async function loadLibraries(): Promise<void> {
-  const data = await fetchLibraryRows();
-  libraries.value = data.map((l) => ({
-    id: l.id,
-    name: l.name,
-    path: l.path,
-    managed: /^[a-z][a-z0-9+.-]*:/i.test(l.path.trim()),
-    series: l.seriesCount,
-    lastScan: l.lastScan ? relativeTime(l.lastScan) : "never",
-  }));
+  const token = loadGuard.next();
+  loading.value = true;
+  loadError.value = "";
+  try {
+    const data = await fetchLibraryRows();
+    if (!loadGuard.isCurrent(token)) return;
+    libraries.value = data.map((l) => ({
+      id: l.id,
+      name: l.name,
+      path: l.path,
+      managed: /^[a-z][a-z0-9+.-]*:/i.test(l.path.trim()),
+      series: l.seriesCount,
+      lastScan: l.lastScan ? relativeTime(l.lastScan) : "never",
+    }));
+  } catch (e) {
+    if (loadGuard.isCurrent(token))
+      loadError.value = e instanceof Error ? e.message : "Couldn’t load libraries";
+  } finally {
+    if (loadGuard.isCurrent(token)) loading.value = false;
+  }
 }
 async function scanAll(): Promise<void> {
   try {
@@ -110,6 +126,13 @@ onMounted(loadLibraries);
           </button>
         </div>
       </div>
+      <p v-if="loading && !libraries.length" role="status" class="text-sm text-base-content/60">
+        Loading libraries…
+      </p>
+      <ErrorState v-if="loadError" :message="loadError" @retry="loadLibraries" />
+      <p v-else-if="!loading && !libraries.length" class="text-sm text-base-content/60">
+        No libraries yet. Add a library to get started.
+      </p>
       <div class="grid gap-4 lg:grid-cols-2">
         <div v-for="lib in libraries" :key="lib.id" class="card bg-base-100">
           <div class="card-body flex-row flex-wrap items-center gap-4 p-4">

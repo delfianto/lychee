@@ -30,6 +30,7 @@ class SeriesFilters:
     """Parsed filters for the series grid (see PART C of the plan)."""
 
     kind: str | None = None
+    library_id: str | None = None
     shelf: str | None = None
     favorite: bool | None = None
     q: str | None = None
@@ -130,6 +131,8 @@ def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]
             conds.append(Series.kind == kinds[0])
         elif kinds:
             conds.append(Series.kind.in_(kinds))
+    if f.library_id is not None:
+        conds.append(Series.library_id == f.library_id)
     if f.shelf:
         conds.append(Series.library_status == f.shelf)
     if f.favorite is not None:

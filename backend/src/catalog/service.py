@@ -128,6 +128,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
 def build_series_filters(
     *,
     kind: str | None = None,
+    library_id: str | None = None,
     shelf: str | None = None,
     favorite: bool | None = None,
     q: str | None = None,
@@ -144,6 +145,7 @@ def build_series_filters(
     include, exclude = _parse_tags(tags)
     return SeriesFilters(
         kind=kind,
+        library_id=library_id,
         shelf=shelf,
         favorite=favorite,
         q=q,

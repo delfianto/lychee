@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from anyio import CapacityLimiter
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +49,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     register_tracker(AniListTracker())
     register_tracker(MyAnimeListTracker())
     register_tracker(MangaUpdatesTracker())
+    # Image requests may wait for AVIF encoding; keep them off the API worker budget.
+    _app.state.image_limiter = CapacityLimiter(8)
+    _app.state.image_admission = CapacityLimiter(8)
     broker.bind_loop(asyncio.get_running_loop())
     yield
     queue.shutdown()
