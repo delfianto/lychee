@@ -18,9 +18,10 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any, cast
 
 from sqlalchemy import select, update
@@ -41,6 +42,7 @@ from src.downloads.provider import (
     StreamingDownloadProvider,
     get_provider,
 )
+from src.integrations.models import Provider as ProviderConfig
 from src.media.containers import write_cbz
 from src.media.encode_pool import encode_pages
 from src.media.staging import workspace
@@ -187,7 +189,9 @@ def _parse_published(value: str | None) -> datetime | None:
         return None
 
 
-def _phase(session: Session, task: DownloadTask, name: str, done: int, total: int) -> None:
+def _phase(
+    session: Session, task: DownloadTask, name: str, done: int, total: int, *, persist: bool = True
+) -> None:
     check_cancelled(task.series_id)
     phases = dict(task.phases_json or {})
     phases[name] = {"completed": done, "total": total}
@@ -206,7 +210,8 @@ def _phase(session: Session, task: DownloadTask, name: str, done: int, total: in
             )
         ),
     )
-    session.commit()
+    if persist:
+        session.commit()
     report_phase(name, done, total, f"{task.chapter_label}: {name} {done}/{total}")
 
 
@@ -224,11 +229,22 @@ def _download_chapter(
     label = task.chapter_label
 
     total_pages = 0
+    last_saved = 0.0
+
+    def phase(name: str, done: int, total: int) -> None:
+        nonlocal last_saved
+        now = monotonic()
+        # Keep live phase counters accurate, but coalesce database writes within
+        # a stage. Boundaries/completion always flush immediately.
+        persist = done == 0 or (total > 0 and done == total) or now - last_saved >= 0.25
+        _phase(session, task, name, done, total, persist=persist)
+        if persist:
+            last_saved = now
 
     def _on_fetch(done: int, total: int) -> None:
         nonlocal total_pages
         total_pages = total
-        _phase(session, task, "fetching", done, total)
+        phase("fetching", done, total)
         if on_progress is not None:
             on_progress(task.progress, f"Fetching {label} ({done}/{total})")
 
@@ -238,7 +254,7 @@ def _download_chapter(
         "encoding": {"completed": 0, "total": 0},
         "thumbnails": {"completed": 0, "total": 1},
     }
-    _phase(session, task, "fetching", 0, 0)
+    phase("fetching", 0, 0)
 
     rel = chapter_path_rel(series, remote)
     dest = Path(library.path) / rel
@@ -269,7 +285,7 @@ def _download_chapter(
             pages = list(sources)
             total_pages = len(pages)
             sources = iter(pages)
-            _phase(session, task, "fetching", total_pages, total_pages)
+            phase("fetching", total_pages, total_pages)
 
         def raw_pages():
             for path in sources:
@@ -279,7 +295,7 @@ def _download_chapter(
 
         def _on_encode(done: int) -> None:
             fetch_progress.drain()
-            _phase(session, task, "encoding", done, total_pages)
+            phase("encoding", done, total_pages)
             if on_progress is not None:
                 on_progress(task.progress, f"Encoding {label} ({done}/{total_pages})")
 
@@ -417,107 +433,137 @@ def plan_downloads(
     return queued
 
 
+@dataclass(frozen=True)
+class _ChapterContext:
+    series: Series
+    provider: Provider
+    library: Library
+    store: ThumbnailStore
+    directory: Path
+    data_saver: bool
+
+
+def _chapter_context(
+    session: Session, series_id: str, storage_root: Path, data_saver: bool | None
+) -> _ChapterContext | None:
+    series = session.get(Series, series_id)
+    if series is None:
+        return None
+    provider = get_provider(series.provider or "")
+    if provider is None:
+        return None
+    config = session.get(ProviderConfig, series.provider)
+    use_data_saver = data_saver if data_saver is not None else bool(config and config.data_saver)
+    library = resolve_manga_library(session)
+    bind_series_to_manga_library(session, series, library)
+    context = _ChapterContext(
+        series,
+        provider,
+        library,
+        ThumbnailStore(thumbnail_root(session, storage_root)),
+        Path(library.path) / _series_dir_name(series),
+        use_data_saver,
+    )
+    session.commit()
+    return context
+
+
 def run_download_queue(
     session: Session,
     series_id: str,
     storage_root: Path,
     *,
-    data_saver: bool = False,
-    on_progress: Callable[[int, str], None] | None = None,
+    data_saver: bool | None = None,
+    on_progress: Callable[[str, int, str], None] | None = None,
 ) -> int:
-    """Drain the series' ``queued`` rows one at a time into the manga library."""
+    """Drain chapters while keeping waiting workers out of the database pool."""
     operation = current_operation.get()
-    if operation is not None:
 
-        def check_series() -> None:
-            if is_cancelled(series_id):
-                raise DownloadCancelled(f"download cancelled for series {series_id}")
-
-        operation.checks.append(check_series)
-    series = session.get(Series, series_id)
-    if series is None:
-        return 0
-    provider = get_provider(series.provider or "")
-    if provider is None:
-        return 0
-    library = resolve_manga_library(session)
-    bind_series_to_manga_library(session, series, library)
-    session.commit()
-    store = ThumbnailStore(thumbnail_root(session, storage_root))
-    series_dir = Path(library.path) / _series_dir_name(series)
-
-    processed = 0
-    while True:
+    def check_series() -> None:
         if is_cancelled(series_id):
-            break
-        with queue.chapter_limit.slot():
-            with _CLAIM_LOCK:
-                row = session.scalar(
-                    select(DownloadTask)
-                    .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
-                    .order_by(DownloadTask.created_at)
-                )
-                if row is None:
-                    break
-                row.status = "downloading"
-                row.progress = 0
-                row.phase = "fetching"
-                row.detail = None
-                row.error = None
-                session.commit()  # claim the row — it shows as "downloading" in /api/downloads at once
-            row_id = row.id
-            try:
-                if not row.remote_json:
-                    raise ValueError("queued download is missing chapter data")
-                remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
-                if row.chapter_id is None:
-                    _download_chapter(
-                        session,
-                        series=series,
-                        library=library,
-                        remote=remote,
-                        provider=provider,
-                        task=row,
-                        data_saver=data_saver,
-                        on_progress=on_progress,
+            raise DownloadCancelled(f"download cancelled for series {series_id}")
+
+    if operation is not None:
+        operation.checks.append(check_series)
+    processed = 0
+    context: _ChapterContext | None = None
+    try:
+        while not is_cancelled(series_id):
+            with queue.chapter_limit.slot():
+                if context is None:
+                    context = _chapter_context(session, series_id, storage_root, data_saver)
+                    if context is None:
+                        return 0
+                with _CLAIM_LOCK:
+                    row = session.scalar(
+                        select(DownloadTask)
+                        .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
+                        .order_by(DownloadTask.created_at, DownloadTask.id)
                     )
-                _phase(session, row, "thumbnails", 0, 1)
-                _ = write_series_cover(session, series_id, series_dir)
-                check_cancelled(series_id)
-                _ = generate_series_cover(session, store, series_id)
-                _phase(session, row, "thumbnails", 1, 1)
-                row.status = "done"
-                row.progress = 100
-                row.phase = None
-                row.detail = None
-            except OperationCancelled:
-                # DELETE may have removed the active row already. An UPDATE tolerates
-                # that race while ORM flushing a deleted instance would fail.
-                session.rollback()
-                session.execute(
-                    update(DownloadTask)
-                    .where(DownloadTask.id == row_id)
-                    .values(
-                        status="cancelled",
-                        error="cancelled",
-                        phase=None,
-                        detail=None,
+                    if row is None:
+                        break
+                    row.status = "downloading"
+                    row.progress = 0
+                    row.phase = "fetching"
+                    row.detail = None
+                    row.error = None
+                    session.commit()
+                row_id = row.id
+
+                def chapter_progress(pct: int, detail: str, *, task_id: str = row_id) -> None:
+                    if on_progress is not None:
+                        on_progress(task_id, pct, detail)
+
+                try:
+                    if not row.remote_json:
+                        raise ValueError("queued download is missing chapter data")
+                    remote = RemoteChapter(**cast("dict[str, Any]", row.remote_json))
+                    if row.chapter_id is None:
+                        _download_chapter(
+                            session,
+                            series=context.series,
+                            library=context.library,
+                            remote=remote,
+                            provider=context.provider,
+                            task=row,
+                            data_saver=context.data_saver,
+                            on_progress=chapter_progress,
+                        )
+                    _phase(session, row, "thumbnails", 0, 1)
+                    _ = write_series_cover(session, series_id, context.directory)
+                    check_cancelled(series_id)
+                    _ = generate_series_cover(session, context.store, series_id)
+                    _phase(session, row, "thumbnails", 1, 1)
+                    row.status = "done"
+                    row.progress = 100
+                    row.phase = None
+                    row.detail = None
+                    session.commit()
+                    processed += 1
+                    chapter_progress(100, row.chapter_label)
+                except OperationCancelled:
+                    session.rollback()
+                    session.execute(
+                        update(DownloadTask)
+                        .where(DownloadTask.id == row_id)
+                        .values(status="cancelled", error="cancelled", phase=None, detail=None)
                     )
-                )
-                session.commit()
-                raise
-            except Exception as exc:  # noqa: BLE001 - record failure on the row, keep draining
-                row.status = "failed"
-                row.error = str(exc)
-                row.phase = None
-                row.detail = None
-            session.commit()  # persist the row's final status so the table settles
-            if row.status == "done":
-                processed += 1
-                if on_progress is not None:
-                    on_progress(100, row.chapter_label)
-            if is_cancelled(series_id):
-                break
-    if is_cancelled(series_id):
-        raise DownloadCancelled(f"download cancelled for series {series_id}")
-    return processed
+                    session.commit()
+                    raise
+                except Exception as exc:  # noqa: BLE001 - record failure and keep draining
+                    # Failed flushes invalidate the transaction. Roll back before
+                    # recording failure, and tolerate an active row being deleted.
+                    session.rollback()
+                    session.execute(
+                        update(DownloadTask)
+                        .where(DownloadTask.id == row_id)
+                        .values(status="failed", error=str(exc), phase=None, detail=None)
+                    )
+                    session.commit()
+                    context = None  # rollback expires cached ORM objects
+        check_series()
+        return processed
+    finally:
+        session.rollback()  # release empty-queue/read transactions before joining siblings
+        if operation is not None:
+            operation.checks.remove(check_series)

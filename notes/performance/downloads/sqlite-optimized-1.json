@@ -1,0 +1,45 @@
+{
+  "python": "3.14.8",
+  "cpu_threads": 32,
+  "config": {
+    "series": 3,
+    "chapters": 10,
+    "pages": 8,
+    "catalog": 2000,
+    "width": 640,
+    "height": 960,
+    "conversion": 16,
+    "thumbnails": 8,
+    "network_ms": 5,
+    "pool_timeout": 0.3,
+    "seconds": 15,
+    "output": "/srv/project/github/lychee/notes/performance/downloads/sqlite-optimized-1.json"
+  },
+  "submitted_http": [
+    202,
+    202,
+    202
+  ],
+  "wall_s": 3.679,
+  "chapter_states": {
+    "done": 30
+  },
+  "completed_pages_per_s": 65.24,
+  "api_requests": 394,
+  "api_http": {
+    "200": 394
+  },
+  "api_p50_ms": 6.77,
+  "api_p95_ms": 17.123,
+  "api_max_ms": 66.566,
+  "sql_statements": 1757,
+  "background_sql_statements": 589,
+  "api_sql_statements": 1168,
+  "db_peak_connections": 13,
+  "db_hold_p95_ms": 11.798,
+  "tasks": [
+    "done",
+    "done",
+    "done"
+  ]
+}

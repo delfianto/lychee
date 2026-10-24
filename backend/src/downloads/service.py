@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from threading import Lock
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.catalog import repository as catalog_repo
@@ -63,52 +64,41 @@ def list_downloads(session: Session) -> list[DownloadTaskOut]:
     return _tasks_out(session, rows)
 
 
-def _drain_queue(
-    session: Session,
-    series_id: str,
-    storage_root: Path,
-    on_progress: Callable[[int, str], None],
-) -> int:
-    """Look up the series' data-saver preference and drain its queued download rows."""
-    series = session.get(Series, series_id)
-    if series is None or not series.provider:
-        raise BadRequestError("series is not linked to a provider")
-    config = session.get(ProviderConfig, series.provider)
-    data_saver = config.data_saver if config else False
-    return run_download_queue(
-        session, series_id, storage_root, data_saver=data_saver, on_progress=on_progress
-    )
-
-
 def _drain_parallel(
     session: Session, series_id: str, storage_root: Path, on_progress: Callable[[int, str], None]
 ) -> int:
     """All chapter workers belong to one operation and are joined before it finishes."""
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
-    ids = list(
-        session.scalars(
-            select(DownloadTask.id).where(
+    values = dict(
+        session.execute(
+            select(DownloadTask.id, DownloadTask.progress).where(
                 DownloadTask.series_id == series_id,
                 DownloadTask.status.in_(("queued", "downloading")),
             )
-        )
+        ).all()
     )
     session.commit()
+    if not values:
+        return 0
+    progress_lock = Lock()
 
-    def progress(_pct: int, detail: str) -> None:
-        with factory() as reader:
-            average = reader.scalar(
-                select(func.avg(DownloadTask.progress)).where(DownloadTask.id.in_(ids))
-            )
-        on_progress(min(99, round(average or 0)), detail)
+    def progress(task_id: str, pct: int, detail: str) -> None:
+        # Progress must never need another connection while its owner is doing
+        # chapter work. The starting snapshot plus live callbacks replaces a
+        # SELECT avg(...) on every page/phase update.
+        with progress_lock:
+            values[task_id] = pct
+            average = sum(values.values()) / max(1, len(values))
+        on_progress(min(99, round(average)), detail)
 
     def drain(_: int) -> int:
+        # A Session object itself is cheap; its first database query happens only
+        # after run_download_queue acquires global chapter capacity.
         with factory() as worker_session:
-            return _drain_queue(worker_session, series_id, storage_root, progress)
+            return run_download_queue(worker_session, series_id, storage_root, on_progress=progress)
 
-    return sum(
-        parallel_map(drain, range(MAX_WORKERS), workers=MAX_WORKERS, limit=queue.chapter_limit)
-    )
+    workers = min(MAX_WORKERS, len(values))
+    return sum(parallel_map(drain, range(workers), workers=workers, limit=queue.chapter_limit))
 
 
 def _download_work(
@@ -128,6 +118,7 @@ def _download_work(
             raise BadRequestError(f"provider {series.provider!r} is not available")
         config = session.get(ProviderConfig, series.provider)
         language = config.language if config else "en"
+        session.commit()  # do not retain a connection during provider HTTP requests
         _ = plan_downloads(
             session,
             series,
