@@ -13,7 +13,9 @@ const clipped = ref(false);
 const parsed = computed(() => parseMangaDescription(props.text));
 // Ordinary multi-paragraph blurbs should be readable without opening a dialog.
 // Only substantial descriptions need the bounded seven-line preview.
-const longSynopsis = computed(() => parsed.value.synopsis.length > 1200);
+const longSynopsis = computed(
+  () => parsed.value.synopsis.length > 1200 && !parsed.value.synopsisHtml.includes("<details"),
+);
 const hasTags = computed(() => parsed.value.tagGroups.length > 0);
 let observer: ResizeObserver | undefined;
 
@@ -44,6 +46,15 @@ watch(
     <div ref="preview">
       <SeriesDescription :text="text" :clamp="longSynopsis" :show-tag-table="false" />
     </div>
+    <p v-if="!parsed.synopsis && hasTags" class="text-sm text-base-content/60">
+      <template v-if="parsed.tagSections.some((section) => section.label)">{{
+        parsed.tagSections
+          .map((section) => section.label)
+          .filter(Boolean)
+          .join(" · ")
+      }}</template>
+      <template v-else>Additional tags</template>
+    </p>
     <button
       v-if="clipped || hasTags"
       class="btn btn-ghost btn-xs mt-2"

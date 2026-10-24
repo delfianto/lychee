@@ -106,6 +106,8 @@
 - [x] **Reading / Unread** — reading shelf reuses `LibraryView`; unread feed via `/api/updates/unread`.
 - [x] **Series detail** — hero + info panel + `ChapterList` (Related/Art tabs) from `/api/series/{id}`,
       `/chapters`, `/related`, `/art`. Action row (favorite / shelf / rating) persists via `PATCH`.
+      Descriptions use shared Markdown rendering with scoped tag tables and a repeatable
+      [library corpus audit/preview harness](description-rendering.md).
 - [x] **Reader** — modes/direction/fit/background; serves `/api/chapters/{id}/pages/{n}`; chapter
       selector + next; **writes progress** as pages turn.
 - [x] **Lists** — `/lists` + `/lists/:id`, API-backed collections store; list cards sort

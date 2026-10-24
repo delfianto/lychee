@@ -69,3 +69,12 @@ directly, not a precedence-ranked patch merge).
 
 No per-library "prefer provider over embedded" toggle either — moot, since
 there's no embedded source to prefer over.
+
+
+## Description rendering
+
+Provider descriptions are stored verbatim and rendered by the frontend's shared
+Markdown parser (`lib/description.ts`), including scoped tag tables with arbitrary
+Book/Part headings. Rendering does not modify provider metadata or manual locks.
+The read-only backend corpus exporter, frontend audit, and browser preview lab
+are documented in [description rendering](../description-rendering.md).

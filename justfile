@@ -230,6 +230,16 @@ stop-all: be-stop fe-stop
     done
     echo "Done."
 
+# Export live descriptions without modifying SQLite or contacting providers.
+[group('diagnostics')]
+description-export database output:
+    cd {{ backend_dir }} && uv run python scripts/export_descriptions.py --database {{quote(database)}} --output {{quote(output)}}
+
+# Audit a corpus with the exact renderer used by the webapp.
+[group('diagnostics')]
+description-audit corpus:
+    cd {{ frontend_dir }} && bun run descriptions:audit {{quote(corpus)}}
+
 # ──────────────────────────────── helpers ───────────────────────────────
 
 # (internal) Kill whatever is *listening* on a TCP port (not client connections).

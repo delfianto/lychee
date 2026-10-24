@@ -71,3 +71,26 @@ it("shows the complete Giséle Alain blurb even when it exceeds seven lines", as
   expect(wrapper.get(".series-desc").text()).toContain("An amusing yet calm service");
   expect(wrapper.find('[aria-haspopup="dialog"]').exists()).toBe(false);
 });
+
+it("previews multiple book sections and shows each scope in the full description", async () => {
+  const { wrapper } = await renderComponent(SeriesSynopsis, {
+    props: {
+      title: "Collected books",
+      text: "| Book 1 | Tags |\n|---|---|\n|Genre|drama|\n>\n| Book 2 | Tags |\n|---|---|\n|Genre|comedy|",
+    },
+  });
+  expect(wrapper.text()).toContain("Book 1 · Book 2");
+  await wrapper.get('[aria-haspopup="dialog"]').trigger("click");
+  expect(wrapper.findAll("h3").map((heading) => heading.text())).toEqual(["Book 1", "Book 2"]);
+  expect(wrapper.findAll("table")).toHaveLength(2);
+  expect(wrapper.text()).not.toContain("| Book 1 | Tags |");
+});
+
+it("keeps long anthology spoiler volumes expandable without clipping their contents", async () => {
+  const { wrapper } = await renderComponent(SeriesSynopsis, {
+    props: { title: "Anthology", text: "Volume 1: ||\n" + "Hidden story. ".repeat(120) + "\n||" },
+  });
+  expect(wrapper.get("details summary").text()).toBe("Volume 1");
+  expect(wrapper.get("details").text()).toContain("Hidden story.");
+  expect(wrapper.get(".series-desc").classes()).not.toContain("line-clamp-7");
+});
