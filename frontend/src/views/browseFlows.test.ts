@@ -346,6 +346,7 @@ it("ignores an older gallery response after navigating to another gallery", asyn
 
 it("defaults to the first gallery library, follows all pages, and isolates selection facets", async () => {
   api.db.libraries = [
+    { ...api.db.libraries[0]!, id: "provider", name: "MangaDex", kind: "mixed" },
     { ...api.db.libraries[0]!, id: "first", name: "Artwork", kind: "gallery" },
     { ...api.db.libraries[0]!, id: "second", name: "Photos", kind: "gallery" },
   ];
@@ -372,6 +373,7 @@ it("defaults to the first gallery library, follows all pages, and isolates selec
     "first",
   );
   expect(requests).toEqual(["first", "first"]);
+  expect(wrapper.findAll('[aria-label="Gallery library"] option')).toHaveLength(2);
   expect(wrapper.findAll('a[href^="/gallery/"]')).toHaveLength(2);
   await wrapper.get('[aria-label="Filter by artist"]').setValue("Illustrator");
   await wrapper.get('[aria-label="Gallery library"]').setValue("second");

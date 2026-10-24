@@ -101,7 +101,7 @@
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
       cursor-pagination via `/api/series`.
 - [x] **Gallery** — `GalleryView` + `GalleryDetail` + `Lightbox`, from `/api/series?kind=gallery` and
-      `/api/series/{id}/images`. Library selector defaults to the first gallery/mixed root;
+      `/api/series/{id}/images`. Library selector defaults to the first gallery root;
       `libraryId` scopes every cursor page and its artist/source facets.
 - [x] **Reading / Unread** — reading shelf reuses `LibraryView`; unread feed via `/api/updates/unread`.
 - [x] **Series detail** — hero + info panel + `ChapterList` (Related/Art tabs) from `/api/series/{id}`,
