@@ -59,76 +59,86 @@ onMounted(load);
 </script>
 
 <template>
-  <form class="flex flex-col gap-3 border-t border-base-content/10 pt-4" @submit.prevent="save">
+  <form class="settings-row" @submit.prevent="save">
     <div class="flex items-start gap-3">
       <Cpu class="mt-0.5 size-5 shrink-0 text-primary" />
       <div>
         <h4 class="text-sm font-medium">Image processing</h4>
-        <p class="text-xs text-base-content/50">
-          Separate worker limits for page conversion and thumbnails
+        <p class="mt-1 text-xs text-base-content/50">
+          Separate limits for conversion and thumbnail workers
         </p>
       </div>
     </div>
-    <p v-if="loading" class="text-xs text-base-content/60" role="status">
-      Loading worker settings…
-    </p>
-    <template v-if="config">
-      <div class="grid grid-cols-2 gap-3">
-        <label class="flex min-w-0 flex-col gap-1 text-xs">
-          <span class="font-medium">Conversion workers</span>
-          <input
-            v-model.number="conversion"
-            type="number"
-            min="1"
-            max="64"
-            step="1"
-            class="input input-bordered input-sm w-full"
-            aria-label="Conversion workers"
-            :disabled="saving"
-          />
-          <span class="text-base-content/50">Full-size AVIF pages and imports</span>
-        </label>
-        <label class="flex min-w-0 flex-col gap-1 text-xs">
-          <span class="font-medium">Thumbnail workers</span>
-          <input
-            v-model.number="thumbnails"
-            type="number"
-            min="1"
-            max="64"
-            step="1"
-            class="input input-bordered input-sm w-full"
-            aria-label="Thumbnail workers"
-            :disabled="saving"
-          />
-          <span class="text-base-content/50">Covers and gallery previews</span>
-        </label>
-      </div>
-      <p class="text-xs text-base-content/50">
-        {{ config.cpuThreads }} CPU threads available. Each worker encodes one image at a time;
-        download concurrency is separate. Changes apply without restarting.
+    <div class="flex min-w-0 flex-col gap-3 xl:col-span-2">
+      <p v-if="loading" class="text-xs text-base-content/60" role="status">
+        Loading worker settings…
       </p>
-      <div class="flex flex-wrap items-center gap-2">
-        <button type="button" class="btn btn-ghost btn-xs" :disabled="saving" @click="recommend">
-          Use recommended ({{ config.recommendedConversionWorkers }} /
-          {{ config.recommendedThumbnailWorkers }})
-        </button>
-        <button
-          type="submit"
-          class="btn btn-primary btn-xs ml-auto"
-          :disabled="saving || !dirty || !valid"
-        >
-          {{ saving ? "Saving…" : "Save image processing" }}
-        </button>
-      </div>
-    </template>
-    <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
-    <button
-      v-if="!config && !loading"
-      type="button"
-      class="btn btn-ghost btn-xs self-start"
-      @click="load"
-    >
-      Retry worker settings
-    </button>
+      <template v-if="config">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label
+            class="flex min-w-0 items-center justify-between gap-3 rounded-md bg-base-200/50 px-3 py-2"
+          >
+            <span class="min-w-0 text-xs">
+              <span class="block font-medium">Conversion workers</span>
+              <span class="mt-0.5 block text-base-content/50">Pages and imports</span>
+            </span>
+            <input
+              v-model.number="conversion"
+              type="number"
+              min="1"
+              max="64"
+              step="1"
+              class="input input-bordered input-sm w-20 shrink-0"
+              aria-label="Conversion workers"
+              :disabled="saving"
+            />
+          </label>
+          <label
+            class="flex min-w-0 items-center justify-between gap-3 rounded-md bg-base-200/50 px-3 py-2"
+          >
+            <span class="min-w-0 text-xs">
+              <span class="block font-medium">Thumbnail workers</span>
+              <span class="mt-0.5 block text-base-content/50">Covers and gallery previews</span>
+            </span>
+            <input
+              v-model.number="thumbnails"
+              type="number"
+              min="1"
+              max="64"
+              step="1"
+              class="input input-bordered input-sm w-20 shrink-0"
+              aria-label="Thumbnail workers"
+              :disabled="saving"
+            />
+          </label>
+        </div>
+        <p class="text-xs text-base-content/50">
+          {{ config.cpuThreads }} CPU threads available. Changes apply immediately; download
+          concurrency is separate.
+        </p>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" class="btn btn-ghost btn-xs" :disabled="saving" @click="recommend">
+            Use recommended ({{ config.recommendedConversionWorkers }} /
+            {{ config.recommendedThumbnailWorkers }})
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary btn-xs"
+            :disabled="saving || !dirty || !valid"
+          >
+            {{ saving ? "Saving…" : "Save image processing" }}
+          </button>
+        </div>
+      </template>
+      <p v-if="error" role="alert" class="text-xs text-error">{{ error }}</p>
+      <button
+        v-if="!config && !loading"
+        type="button"
+        class="btn btn-ghost btn-xs self-start"
+        @click="load"
+      >
+        Retry worker settings
+      </button>
+    </div>
   </form>
 </template>

@@ -2,7 +2,7 @@
 // Labeled server path input + Browse button that opens the shared PathBrowserModal.
 // Used by Add Library and Local Import so both pick paths the same way.
 import { FolderSearch } from "@lucide/vue";
-import { ref } from "vue";
+import { ref, useId } from "vue";
 
 import PathBrowserModal from "./PathBrowserModal.vue";
 
@@ -32,6 +32,7 @@ const emit = defineEmits<{
 }>();
 
 const showBrowser = ref(false);
+const inputId = useId();
 
 function onPicked(path: string): void {
   emit("update:modelValue", path);
@@ -42,9 +43,10 @@ function onPicked(path: string): void {
 
 <template>
   <div class="flex flex-col gap-1">
-    <label v-if="label" class="text-xs text-base-content/60">{{ label }}</label>
+    <label v-if="label" :for="inputId" class="text-xs text-base-content/60">{{ label }}</label>
     <div class="flex gap-2">
       <input
+        :id="inputId"
         :value="modelValue"
         type="text"
         class="input input-bordered input-sm min-w-0 flex-1 font-mono"

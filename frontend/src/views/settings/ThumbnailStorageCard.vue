@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Clock, Folder, GalleryThumbnails, HardDrive, Images } from "@lucide/vue";
+import { ChevronDown, Clock, GalleryThumbnails, HardDrive, Images, Layers } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { fetchThumbnailStorage, saveThumbnailStorage } from "../../api/settingsQueries";
 import ImageProcessingSettings from "./ImageProcessingSettings.vue";
@@ -16,7 +16,6 @@ const selectedKindsLabel = computed(() => {
   return labels.length ? labels.join(", ") : "None";
 });
 
-const mode = ref("default");
 const path = ref("");
 const defaultPath = ref("");
 const savedPath = ref<string | null>(null);
@@ -24,13 +23,12 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref("");
 const ready = ref(false);
-const dirty = computed(
-  () => (mode.value === "custom" ? path.value.trim() : null) !== savedPath.value,
-);
-const displayedPath = computed(() => (mode.value === "custom" ? path.value : defaultPath.value));
-function onPathUpdate(nextPath: string): void {
-  if (mode.value === "custom") path.value = nextPath;
-}
+const selectedPath = computed(() => {
+  const value = path.value.trim();
+  return value === defaultPath.value ? null : value;
+});
+const usingDefault = computed(() => selectedPath.value === null);
+const dirty = computed(() => selectedPath.value !== savedPath.value);
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -39,8 +37,7 @@ async function load(): Promise<void> {
     const config = await fetchThumbnailStorage();
     defaultPath.value = config.defaultPath;
     savedPath.value = config.path;
-    path.value = config.path ?? "";
-    mode.value = config.path === null ? "default" : "custom";
+    path.value = config.effectivePath;
     ready.value = true;
   } catch (err) {
     error.value = (err as Error).message;
@@ -50,12 +47,13 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
+  if (!ready.value || saving.value || !dirty.value || !path.value.trim()) return;
   saving.value = true;
   error.value = "";
   try {
-    const config = await saveThumbnailStorage(mode.value === "custom" ? path.value.trim() : null);
+    const config = await saveThumbnailStorage(selectedPath.value);
     savedPath.value = config.path;
-    path.value = config.path ?? "";
+    path.value = config.effectivePath;
     toast("Thumbnail storage saved");
   } catch (err) {
     error.value = (err as Error).message;
@@ -71,163 +69,151 @@ onMounted(load);
     <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
       Library settings
     </h3>
-    <div class="card bg-base-100">
-      <div class="card-body grid gap-6 p-4 lg:grid-cols-2">
-        <div class="flex flex-col gap-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-start gap-3">
-              <Clock class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <h4 class="text-sm font-medium">Recently added</h4>
-                <p class="text-xs text-base-content/50">
-                  Content shown in the Recently added section
-                </p>
-              </div>
-            </div>
-            <div class="dropdown dropdown-end">
-              <div
-                tabindex="0"
-                role="button"
-                aria-label="Recently added content"
-                class="btn btn-sm h-8 min-h-8 w-44 justify-between gap-2 border border-base-content/20 bg-base-100 px-3 font-normal"
-              >
-                <span class="truncate text-xs">{{ selectedKindsLabel }}</span>
-                <ChevronDown class="size-4 shrink-0 opacity-60" />
-              </div>
-              <ul
-                tabindex="0"
-                class="menu dropdown-content z-20 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
-              >
-                <li v-for="opt in RECENTLY_ADDED_OPTIONS" :key="opt.value">
-                  <label class="flex cursor-pointer items-center gap-2.5">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-primary checkbox-xs"
-                      :checked="recentlyAddedKinds.includes(opt.value)"
-                      :aria-label="opt.label"
-                      @change="toggleRecentlyAddedKind(opt.value)"
-                    />
-                    <span>{{ opt.label }}</span>
-                  </label>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <p class="pl-8 text-xs text-base-content/50">
-            Choose which libraries appear in the Recently added rail and feed.
-          </p>
-
-          <div class="mt-2 flex flex-col gap-3 border-t border-base-content/10 pt-3">
-            <div class="text-xs font-medium uppercase tracking-wide text-base-content/40">
-              Main bar icons
-            </div>
-            <label class="flex items-center justify-between gap-4">
-              <div class="flex items-start gap-3">
-                <Images class="mt-0.5 size-5 shrink-0 text-primary" />
-                <div>
-                  <div class="text-sm font-medium">Show Comics icon</div>
-                  <div class="text-xs text-base-content/50">
-                    Display Comics in the main navigation bar
-                  </div>
-                </div>
-              </div>
-              <input
-                v-model="mainBarIcons.comics"
-                type="checkbox"
-                aria-label="Show Comics icon"
-                class="toggle toggle-primary toggle-sm"
-              />
-            </label>
-            <label class="flex items-center justify-between gap-4">
-              <div class="flex items-start gap-3">
-                <GalleryThumbnails class="mt-0.5 size-5 shrink-0 text-primary" />
-                <div>
-                  <div class="text-sm font-medium">Show Gallery icon</div>
-                  <div class="text-xs text-base-content/50">
-                    Display Gallery in the main navigation bar
-                  </div>
-                </div>
-              </div>
-              <input
-                v-model="mainBarIcons.gallery"
-                type="checkbox"
-                aria-label="Show Gallery icon"
-                class="toggle toggle-primary toggle-sm"
-              />
-            </label>
+    <div class="card divide-y divide-base-content/10 bg-base-100">
+      <div class="settings-row">
+        <div class="flex items-start gap-3">
+          <Clock class="mt-0.5 size-5 shrink-0 text-primary" />
+          <div>
+            <h4 class="text-sm font-medium">Recently added</h4>
+            <p class="mt-1 text-xs text-base-content/50">
+              Content in the home rail and Recently added
+            </p>
           </div>
         </div>
-
-        <div
-          class="flex flex-col gap-4 border-t border-base-content/10 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-        >
-          <form class="flex flex-col gap-3" @submit.prevent="save">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-start gap-3">
-                <HardDrive class="mt-0.5 size-5 shrink-0 text-primary" />
-                <div>
-                  <h4 class="text-sm font-medium">Thumbnail storage</h4>
-                  <p class="text-xs text-base-content/50">
-                    Cover and gallery thumbnails for all libraries
-                  </p>
-                </div>
-              </div>
-              <select
-                v-if="ready"
-                v-model="mode"
-                aria-label="Thumbnail storage location"
-                class="select select-bordered select-sm w-32 shrink-0"
-                :disabled="saving"
-              >
-                <option value="default">Default folder</option>
-                <option value="custom">Custom folder</option>
-              </select>
-            </div>
-            <p v-if="loading" class="text-xs text-base-content/60" role="status">
-              Loading storage settings…
-            </p>
-            <template v-if="ready">
-              <div class="mt-2 flex flex-col gap-2 border-t border-base-content/10 pt-3">
-                <div class="flex items-start gap-3">
-                  <Folder class="mt-0.5 size-5 shrink-0 text-primary" />
-                  <div>
-                    <div class="text-sm font-medium">Thumbnail folder</div>
-                    <div class="text-xs text-base-content/50">Absolute path on the server</div>
-                  </div>
-                </div>
-                <ServerPathField
-                  :model-value="displayedPath"
-                  label=""
-                  placeholder="/data/thumbnails"
-                  browser-title="Choose thumbnail folder"
-                  :disabled="saving || mode === 'default'"
-                  @update:model-value="onPathUpdate"
-                />
-                <p v-if="dirty" class="text-xs text-base-content/50">
-                  Existing thumbnails stay in place; missing ones regenerate here.
-                </p>
-              </div>
-            </template>
-            <p v-if="error" class="text-xs text-error" role="alert">{{ error }}</p>
-            <button
-              v-if="!ready && !loading"
-              type="button"
-              class="btn btn-ghost btn-xs self-start"
-              @click="load"
+        <div class="min-w-0 xl:col-span-2">
+          <div class="dropdown">
+            <div
+              tabindex="0"
+              role="button"
+              aria-label="Recently added content"
+              class="btn btn-sm h-8 min-h-8 w-44 justify-between gap-2 border border-base-content/20 bg-base-100 px-3 font-normal"
             >
-              Retry
+              <span class="truncate text-xs">{{ selectedKindsLabel }}</span>
+              <ChevronDown class="size-4 shrink-0 opacity-60" />
+            </div>
+            <ul
+              tabindex="0"
+              class="menu dropdown-content z-20 mt-1 w-44 rounded-box bg-base-100 p-2 shadow"
+            >
+              <li v-for="opt in RECENTLY_ADDED_OPTIONS" :key="opt.value">
+                <label class="flex cursor-pointer items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-primary checkbox-xs"
+                    :checked="recentlyAddedKinds.includes(opt.value)"
+                    :aria-label="opt.label"
+                    @change="toggleRecentlyAddedKind(opt.value)"
+                  />
+                  <span>{{ opt.label }}</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="flex items-start gap-3">
+          <Images class="mt-0.5 size-5 shrink-0 text-primary" />
+          <div>
+            <h4 class="text-sm font-medium">Main bar icons</h4>
+            <p class="mt-1 text-xs text-base-content/50">Items visible in the main navigation</p>
+          </div>
+        </div>
+        <div
+          class="flex min-w-0 flex-wrap items-center gap-x-8 gap-y-3 xl:col-span-2 xl:self-center"
+        >
+          <label class="flex items-center gap-3 text-sm">
+            <Images class="size-4 text-base-content/60" />
+            Comics
+            <input
+              v-model="mainBarIcons.comics"
+              type="checkbox"
+              aria-label="Show Comics icon"
+              class="toggle toggle-primary toggle-sm"
+            />
+          </label>
+          <label class="flex items-center gap-3 text-sm">
+            <GalleryThumbnails class="size-4 text-base-content/60" />
+            Gallery
+            <input
+              v-model="mainBarIcons.gallery"
+              type="checkbox"
+              aria-label="Show Gallery icon"
+              class="toggle toggle-primary toggle-sm"
+            />
+          </label>
+          <label class="flex items-center gap-3 text-sm">
+            <Layers class="size-4 text-base-content/60" />
+            Lists
+            <input
+              v-model="mainBarIcons.lists"
+              type="checkbox"
+              aria-label="Show Lists icon"
+              class="toggle toggle-primary toggle-sm"
+            />
+          </label>
+        </div>
+      </div>
+
+      <form class="settings-row" @submit.prevent="save">
+        <div class="flex items-start gap-3">
+          <HardDrive class="mt-0.5 size-5 shrink-0 text-primary" />
+          <div>
+            <h4 class="text-sm font-medium">Thumbnail storage</h4>
+            <p class="mt-1 text-xs text-base-content/50">Folder for covers and gallery previews</p>
+          </div>
+        </div>
+        <div class="flex min-w-0 flex-col gap-3 xl:col-span-2">
+          <p v-if="loading" class="text-xs text-base-content/60" role="status">
+            Loading storage settings…
+          </p>
+          <template v-if="ready">
+            <ServerPathField
+              v-model="path"
+              label="Thumbnail folder"
+              placeholder="/data/thumbnails"
+              browser-title="Choose thumbnail folder"
+              :disabled="saving"
+            />
+            <p v-if="dirty" class="text-xs text-base-content/50">
+              Existing thumbnails stay in place; missing ones regenerate here.
+            </p>
+          </template>
+          <p v-if="error" class="text-xs text-error" role="alert">{{ error }}</p>
+          <button
+            v-if="!ready && !loading"
+            type="button"
+            class="btn btn-ghost btn-xs self-start"
+            @click="load"
+          >
+            Retry
+          </button>
+          <div v-if="ready" class="flex flex-wrap items-center justify-between gap-2">
+            <span v-if="usingDefault" class="text-xs text-base-content/50">
+              Using the default folder
+            </span>
+            <button
+              v-else
+              type="button"
+              class="btn btn-ghost btn-xs"
+              :disabled="saving"
+              @click="path = defaultPath"
+            >
+              Use default folder
             </button>
             <button
-              v-if="ready && dirty"
-              class="btn btn-primary btn-xs self-end"
-              :disabled="saving || (mode === 'custom' && !path.trim())"
+              v-if="dirty"
+              type="submit"
+              class="btn btn-primary btn-xs ml-auto"
+              :disabled="saving || !path.trim()"
             >
               {{ saving ? "Saving…" : "Save thumbnail storage" }}
             </button>
-          </form>
-          <ImageProcessingSettings />
+          </div>
         </div>
-      </div>
+      </form>
+      <ImageProcessingSettings />
     </div>
   </section>
 </template>

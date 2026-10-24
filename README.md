@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.8** — independent conversion and thumbnail workers, persistent concurrency settings, and scroll restoration for long library lists.
+Current release: **v0.1.0-beta.9** — compact library settings, simpler thumbnail folder selection, and optional Lists navigation.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.
