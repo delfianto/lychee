@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends
+from anyio import CapacityLimiter
+from fastapi import Depends, Request
 
 from src.core.config import settings
 from src.core.persistence.database import DbSession
@@ -28,3 +30,17 @@ def get_render_cache() -> RenderCache:
 
 
 RenderCacheDep = Annotated[RenderCache, Depends(get_render_cache)]
+
+
+async def get_image_limiter(request: Request) -> AsyncGenerator[CapacityLimiter]:
+    """Admit images before DB dependencies, then use a separate thread budget.
+
+    Waiting image requests must not hold database connections or ordinary API
+    workers. Admission and worker tokens are separate because run_sync acquires
+    its own token on the same requesting task.
+    """
+    async with request.app.state.image_admission:
+        yield request.app.state.image_limiter
+
+
+ImageLimiterDep = Annotated[CapacityLimiter, Depends(get_image_limiter)]

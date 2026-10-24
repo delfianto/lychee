@@ -2487,6 +2487,7 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: string | null;
+                libraryId?: string | null;
                 shelf?: string | null;
                 favorite?: boolean | null;
                 q?: string | null;

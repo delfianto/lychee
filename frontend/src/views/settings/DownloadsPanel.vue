@@ -5,7 +5,7 @@ import { Gauge, Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import type { DownloadTask } from "../../api/client";
-import { onTaskDone, onTaskEvent } from "../../api/events";
+import { activeTasks, onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
 import {
   bulkDownloadAction,
@@ -21,6 +21,7 @@ import {
   updateDownloadConfig,
 } from "../../api/settingsQueries";
 import PhaseProgress from "../../components/PhaseProgress.vue";
+import OverallProgress from "../../components/OverallProgress.vue";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 import CoverImage from "../../components/CoverImage.vue";
 import { toast } from "../../lib/toast";
@@ -117,15 +118,26 @@ async function loadSync(): Promise<void> {
   if (!data) return;
   sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "never";
   sync.newChapters = data.newChapters;
+  sync.syncing = data.syncing || activeTasks.value.some((task) => task.kind === "sync");
 }
 async function syncNow(): Promise<void> {
   sync.syncing = true;
-  await runSync(); // runs on the queue; state reloads on the sync task's done event
-  toast("Checking for new chapters…");
+  try {
+    await runSync();
+    toast("Checking for new chapters…");
+    await loadSync();
+  } catch (e) {
+    sync.syncing = false;
+    toast(e instanceof Error ? e.message : "Couldn’t start sync", "error");
+  }
 }
 async function retryDownload(d: DlRow): Promise<void> {
-  await retryDownloadRemote(d.id);
-  toast("Download queued"); // the list refreshes when the download.done event arrives
+  try {
+    await retryDownloadRemote(d.id);
+    toast("Download queued");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn’t retry download", "error");
+  }
 }
 async function pauseDownload(d: DlRow): Promise<void> {
   const data = await pauseDownloadRemote(d.id);
@@ -320,6 +332,10 @@ onMounted(() => {
               <span class="text-base-content/50">{{ d.size }}</span>
             </div>
             <PhaseProgress :phases="d.phases" />
+            <OverallProgress
+              v-if="['queued', 'downloading', 'paused'].includes(d.status)"
+              :progress="d.progress"
+            />
           </div>
           <div class="flex shrink-0 items-center gap-1">
             <button

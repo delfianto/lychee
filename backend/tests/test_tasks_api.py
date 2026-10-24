@@ -45,6 +45,7 @@ def test_broker_delivers_events_to_subscribers() -> None:
         broker.publish({"event": "test.ping", "task": {"id": "x"}})
         event = await asyncio.wait_for(pending, timeout=1.0)
         await stream.aclose()
+        assert event is not None
         return event
 
     assert asyncio.run(go())["event"] == "test.ping"
@@ -54,3 +55,16 @@ def test_events_route_registered() -> None:
     # Full SSE streaming can't be consumed by TestClient (infinite stream); just
     # confirm the route exists. Live behaviour is exercised via the broker test.
     assert "/api/events" in app.openapi()["paths"]
+
+
+def test_broker_heartbeat_keeps_idle_stream_alive_and_still_delivers() -> None:
+    async def go() -> None:
+        broker.bind_loop(asyncio.get_running_loop())
+        stream = broker.subscribe(heartbeat_seconds=0.001)
+        assert await anext(stream) is None
+        broker.publish({"event": "scan.started", "task": {"id": "live"}})
+        event = await anext(stream)
+        assert event is not None and event["event"] == "scan.started"
+        await stream.aclose()
+
+    asyncio.run(go())

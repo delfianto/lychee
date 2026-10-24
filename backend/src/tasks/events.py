@@ -21,12 +21,20 @@ class EventBroker:
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
-    async def subscribe(self) -> AsyncGenerator[dict[str, Any]]:
+    async def subscribe(
+        self, *, heartbeat_seconds: float = 15
+    ) -> AsyncGenerator[dict[str, Any] | None]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._subscribers.add(queue)
         try:
             while True:
-                yield await queue.get()
+                try:
+                    async with asyncio.timeout(heartbeat_seconds):
+                        event = await queue.get()
+                except TimeoutError:
+                    yield None
+                else:
+                    yield event
         finally:
             self._subscribers.discard(queue)
 

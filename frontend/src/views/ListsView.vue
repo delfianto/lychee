@@ -36,7 +36,13 @@ watch(listsDefaultTab, (t) => {
 function matchesTab(list: Collection): boolean {
   return activeTab.value === "all" || list.kind === activeTab.value;
 }
-const visibleLists = computed(() => collections.lists.filter(matchesTab));
+const visibleLists = computed(() =>
+  collections.lists
+    .filter(matchesTab)
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+    ),
+);
 const activeTabLabel = computed(
   () => kindTabs.find((t) => t.value === activeTab.value)?.label ?? "",
 );

@@ -95,18 +95,21 @@
       Lists), icon-only below `xl`, mobile drawer, static brand, search → `/search`, random dice
       (`/api/series`), light/dark toggle, settings↔back, 404 route.
 - [x] **Home dashboard** — stats + per-library storage · continue-reading · reading-list shelf · recent updates · recently
-      added — all from `/api/dashboard` + `/api/libraries/summary`.
+      added — all from `/api/dashboard` + `/api/libraries/summary`. Continue-reading titles link to
+      the work detail page alongside the reader button.
 - [x] **Library** (`LibraryView`) — 3 density modes, shelf tabs, search + `FilterPanel` (tags from
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
       cursor-pagination via `/api/series`.
 - [x] **Gallery** — `GalleryView` + `GalleryDetail` + `Lightbox`, from `/api/series?kind=gallery` and
-      `/api/series/{id}/images`.
+      `/api/series/{id}/images`. Library selector defaults to the first gallery/mixed root;
+      `libraryId` scopes every cursor page and its artist/source facets.
 - [x] **Reading / Unread** — reading shelf reuses `LibraryView`; unread feed via `/api/updates/unread`.
 - [x] **Series detail** — hero + info panel + `ChapterList` (Related/Art tabs) from `/api/series/{id}`,
       `/chapters`, `/related`, `/art`. Action row (favorite / shelf / rating) persists via `PATCH`.
 - [x] **Reader** — modes/direction/fit/background; serves `/api/chapters/{id}/pages/{n}`; chapter
       selector + next; **writes progress** as pages turn.
-- [x] **Lists** — `/lists` + `/lists/:id`, API-backed collections store.
+- [x] **Lists** — `/lists` + `/lists/:id`, API-backed collections store; list cards sort
+      alphabetically (case-insensitive natural numbers).
 - [x] **Settings** — General (libraries CRUD/scan, provider, trackers), Content (taxonomy table),
       Downloads (queue + sync), About — all on the API.
 - [x] **Theming**, [x] **Transitions**.

@@ -341,3 +341,51 @@ def test_gallery_preview_cache_upgrade_keeps_full_image_and_one_size(
     assert Image.open(io.BytesIO(cover.content)).size == (640, 960)
     assert client.get(cover_url + "&size=detail").content == cover.content
     assert len(list(store.root.rglob("*.avif"))) == 2  # one item + its separate cover frame
+
+
+def test_slow_previews_do_not_starve_task_or_library_requests(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    from anyio.to_thread import current_default_thread_limiter
+    from src.catalog import media
+    from src.catalog.deps import get_thumbnail_store
+    from src.main import app
+
+    # Use the real dependency so queued previews exercise DB connection admission.
+    _ = app.dependency_overrides.pop(get_thumbnail_store)
+    release = Event()
+    busy = Event()
+    lock = Lock()
+    entered = 0
+
+    def slow_cover(*_args: object) -> media.Served:
+        nonlocal entered
+        with lock:
+            entered += 1
+            if entered >= 4:
+                busy.set()
+        assert release.wait(5), "Test did not release blocked previews"
+        return media.Served(data=b"preview", media_type="image/avif", etag='"preview"')
+
+    async def set_request_capacity(tokens: int) -> None:
+        current_default_thread_limiter().total_tokens = tokens
+
+    monkeypatch.setattr(media, "get_cover", slow_cover)
+    assert client.portal is not None
+    client.portal.call(set_request_capacity, 4)
+    with ThreadPoolExecutor(max_workers=21) as executor:
+        covers = [executor.submit(client.get, f"/api/series/preview-{i}/cover") for i in range(20)]
+        try:
+            assert busy.wait(2)
+            assert executor.submit(client.get, "/api/tasks").result(timeout=1).status_code == 200
+            assert (
+                executor.submit(client.get, "/api/libraries").result(timeout=1).status_code == 200
+            )
+        finally:
+            release.set()
+            for cover in covers:
+                _ = cover.result(timeout=3)
+            client.portal.call(set_request_capacity, 40)

@@ -3,6 +3,7 @@
 // with its own domain: providers, trackers, libraries, taxonomy, downloads/sync,
 // import config, and the server path browser.
 
+import { rememberTask } from "./events";
 import { apiErrorMessage } from "./queries";
 import {
   type About,
@@ -47,9 +48,13 @@ export async function disconnectProvider(id: string): Promise<void> {
   });
 }
 
-/** Best-effort, fire-and-forget (matches existing UI: kicked off, not awaited). */
+/** Accept account sync and seed its task immediately while SSE takes over progress. */
 export async function syncProvider(id: string): Promise<void> {
-  await api.POST("/api/providers/{provider_id}/sync", { params: { path: { provider_id: id } } });
+  const { data, error } = await api.POST("/api/providers/{provider_id}/sync", {
+    params: { path: { provider_id: id } },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn’t start operation"));
+  rememberTask(data);
 }
 
 export interface MangaDexConnectData {
@@ -132,20 +137,23 @@ export async function loginTracker(
 // --- libraries -----------------------------------------------------------------
 
 export async function fetchLibraryRows(): Promise<LibraryRow[]> {
-  const { data } = await api.GET("/api/libraries");
-  return data ?? [];
+  const { data, error } = await api.GET("/api/libraries");
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn’t load libraries"));
+  return data;
 }
 
 export async function scanAllLibraries(): Promise<void> {
-  const { error } = await api.POST("/api/libraries/scan");
+  const { data, error } = await api.POST("/api/libraries/scan");
   if (error) throw new Error(apiErrorMessage(error, "Couldn't start scan"));
+  rememberTask(data);
 }
 
 export async function scanLibrary(id: string): Promise<void> {
-  const { error } = await api.POST("/api/libraries/{library_id}/scan", {
+  const { data, error } = await api.POST("/api/libraries/{library_id}/scan", {
     params: { path: { library_id: id } },
   });
   if (error) throw new Error(apiErrorMessage(error, "Couldn't start scan"));
+  rememberTask(data);
 }
 
 export async function deleteLibrary(id: string): Promise<void> {
@@ -290,11 +298,17 @@ export async function controlSync(action: string, jobId?: string): Promise<SyncS
 
 /** Runs on the queue; UI state reloads on the sync task's `done` SSE event. */
 export async function runSync(): Promise<void> {
-  await api.POST("/api/sync");
+  const { data, error } = await api.POST("/api/sync");
+  if (error) throw new Error(apiErrorMessage(error, "Couldn’t start operation"));
+  rememberTask(data);
 }
 
 export async function retryDownload(id: string): Promise<void> {
-  await api.POST("/api/downloads/{task_id}/retry", { params: { path: { task_id: id } } });
+  const { data, error } = await api.POST("/api/downloads/{task_id}/retry", {
+    params: { path: { task_id: id } },
+  });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn’t start operation"));
+  rememberTask(data);
 }
 
 export async function pauseDownload(id: string): Promise<DownloadTask[] | null> {
@@ -329,6 +343,7 @@ export async function bulkDownloadAction(
 ): Promise<BulkDownloadResult> {
   const { data, error, response } = await api.POST("/api/downloads", { body: { action } });
   if (error) throw new Error(apiErrorMessage(error, "Couldn't update downloads"));
+  rememberTask(data);
   return { rows: response.status === 200 && Array.isArray(data) ? (data as DownloadTask[]) : null };
 }
 

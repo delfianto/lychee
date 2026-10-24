@@ -397,3 +397,22 @@ it("manages background sync jobs, displays file/manga progress and errors, and e
     vi.useRealTimers();
   }
 });
+
+it.each([DownloadsPanel, SyncPanel])(
+  "recovers the sync button when starting sync fails",
+  async (panel) => {
+    const { wrapper } = await renderView(panel);
+    api.failNext("POST", "/api/sync", "Sync unavailable", 503);
+    await click(wrapper, "Sync now");
+    expect(messages()).toContain("Sync unavailable");
+    expect(button(wrapper, "Sync now").attributes("disabled")).toBeUndefined();
+  },
+);
+
+it("shows an already running sync when opening Downloads and labels chapter overall progress", async () => {
+  api.db.sync.syncing = true;
+  api.db.downloads = [makeDownload("active", "downloading")];
+  const { wrapper } = await renderView(DownloadsPanel);
+  expect(button(wrapper, "Syncing…").attributes("disabled")).toBeDefined();
+  expect(wrapper.text()).toContain("Overall progress");
+});

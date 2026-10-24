@@ -300,3 +300,27 @@ def test_chapters_synced_at_reflects_index_sync(client: TestClient, db_session: 
     got = client.get(f"/api/series/{matched.id}").json()
     assert got["chaptersSyncedAt"] is not None
     assert got["availableChapters"] == 0
+
+
+def test_library_filter_scopes_gallery_cursor_pages(
+    client: TestClient, db_session: Session
+) -> None:
+    from src.catalog.models import Library
+
+    first = Library(name="First gallery", path="/gallery/first", kind="gallery")
+    second = Library(name="Second gallery", path="/gallery/second", kind="gallery")
+    db_session.add_all([first, second])
+    db_session.flush()
+    for title, library in [("A", first), ("B", second), ("C", first)]:
+        series = make_series(db_session, title=title, kind="gallery")
+        series.library_id = library.id
+    db_session.commit()
+
+    params = {"kind": "gallery", "libraryId": first.id, "sort": "title", "limit": 1}
+    page = client.get("/api/series", params=params).json()
+    assert [s["title"] for s in page["items"]] == ["A"]
+    assert page["nextCursor"]
+    page = client.get("/api/series", params={**params, "cursor": page["nextCursor"]}).json()
+    assert [s["title"] for s in page["items"]] == ["C"]
+    assert page["nextCursor"] is None
+    assert client.get("/api/series", params={"libraryId": "missing"}).json()["items"] == []

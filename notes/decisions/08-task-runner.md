@@ -28,7 +28,10 @@ chapter workers; resume and retry use the same fanout as initial downloads.
 `cancelled`, `done`, and `failed` states. It retains active operations and bounded
 completed history, publishes SSE lifecycle events, and records independent
 `phases` counters (`completed` / `total`). `GET /api/tasks` supplies a snapshot
-for initial connection and reconnect. `POST /api/tasks/{id}/cancel` requests
+for initial connection and reconnect. The stream sends idle heartbeats every
+15 seconds. The UI seeds accepted operations from action responses immediately,
+loads a snapshot without waiting for SSE to open, and reconciles missed terminal
+events on reconnect or return to a visible tab. `POST /api/tasks/{id}/cancel` requests
 cancellation of the entire operation. The UI keeps cancelling work visible until
 its child workers stop.
 

@@ -274,8 +274,8 @@ export function useAppApi() {
           headers: { "Content-Type": "application/json" },
         });
       const done = () => new HttpResponse(null, { status: 204 });
-      const task = () =>
-        json({ id: "task", kind: "scan", label: "Test task", status: "running", progress: 0 });
+      const task = (kind = "scan") =>
+        json({ id: `task-${kind}`, kind, label: "Test task", status: "running", progress: 0 });
       if (path.endsWith("/chapter-availability"))
         return json({
           status: "ready",
@@ -516,7 +516,7 @@ export function useAppApi() {
         }
         return json(db.downloads);
       }
-      if (path === "/api/sync") return method === "GET" ? json(db.sync) : task();
+      if (path === "/api/sync") return method === "GET" ? json(db.sync) : task("sync");
       if (path === "/api/sync/config") {
         db.sync.parallelSyncs = Number(body.parallelSyncs ?? 1);
         return json(db.sync);

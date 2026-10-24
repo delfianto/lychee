@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { Search } from "@lucide/vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
+import { onTaskDone } from "../api/events";
+import type { LibraryRow } from "../api/client";
+import { fetchLibraryRows } from "../api/settingsQueries";
+import { createStaleGuard } from "../lib/staleGuard";
+import ErrorState from "../components/ErrorState.vue";
 import { fetchGalleries } from "../api/queries";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { sortSeries } from "../lib/sort";
@@ -9,18 +14,57 @@ import type { Series } from "../types";
 
 defineOptions({ name: "GalleryView" });
 
-// Galleries are image sets, not chaptered reading — so this page is deliberately
-// different from the manga/comics library: always a large-image grid (no density
-// toggle), no shelf-status tabs or filter presets, and filtering by the things
-// that matter for artwork — artist/model and source series. Galleries are few, so
-// we fetch them once and filter/derive facets client-side.
+// Fetch and derive facets within the selected library, including every cursor page.
+const libraries = ref<LibraryRow[]>([]);
+const selectedLibrary = ref("");
 const all = ref<Series[]>([]);
 const loading = ref(true);
-onMounted(async () => {
+const loadError = ref("");
+const loadGuard = createStaleGuard();
+
+async function loadGalleries(): Promise<void> {
+  const token = loadGuard.next();
   loading.value = true;
-  all.value = await fetchGalleries();
-  loading.value = false;
+  loadError.value = "";
+  all.value = [];
+  try {
+    const data = selectedLibrary.value ? await fetchGalleries(selectedLibrary.value) : [];
+    if (loadGuard.isCurrent(token)) all.value = data;
+  } catch (e) {
+    if (loadGuard.isCurrent(token))
+      loadError.value = e instanceof Error ? e.message : "Couldn’t load galleries";
+  } finally {
+    if (loadGuard.isCurrent(token)) loading.value = false;
+  }
+}
+async function load(): Promise<void> {
+  loading.value = true;
+  loadError.value = "";
+  try {
+    libraries.value = (await fetchLibraryRows()).filter(
+      (l) => l.kind === "gallery" || l.kind === "mixed",
+    );
+    if (!libraries.value.some((l) => l.id === selectedLibrary.value)) {
+      selectedLibrary.value = libraries.value[0]?.id ?? "";
+      if (selectedLibrary.value) return; // the selection watcher loads it
+    }
+    await loadGalleries();
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : "Couldn’t load libraries";
+    loading.value = false;
+  }
+}
+watch(selectedLibrary, () => {
+  artist.value = "";
+  source.value = "";
+  void loadGalleries();
 });
+onMounted(load);
+onUnmounted(
+  onTaskDone((task) => {
+    if (task.kind === "scan") void load();
+  }),
+);
 
 const query = ref("");
 const artist = ref("");
@@ -56,6 +100,19 @@ const filtered = computed(() => {
       <h1 class="text-3xl font-bold">Gallery</h1>
       <p class="text-sm text-base-content/60">{{ filtered.length }} galleries</p>
     </div>
+
+    <label v-if="libraries.length" class="flex flex-wrap items-center gap-2 text-sm">
+      Library
+      <select
+        v-model="selectedLibrary"
+        class="select select-bordered select-sm w-full sm:w-72"
+        aria-label="Gallery library"
+      >
+        <option v-for="library in libraries" :key="library.id" :value="library.id">
+          {{ library.name }}
+        </option>
+      </select>
+    </label>
 
     <!-- Gallery-specific toolbar: search + artist / series filters + sort -->
     <div class="flex flex-wrap items-center gap-2">
@@ -94,11 +151,17 @@ const filtered = computed(() => {
     </div>
 
     <!-- Always the large-image (gallery) density. -->
+    <ErrorState v-if="loadError" :message="loadError" @retry="load" />
     <SeriesCollection
+      v-else
       :series="filtered"
       density="gallery"
       :loading="loading"
-      empty-text="No galleries match."
+      :empty-text="
+        libraries.length
+          ? 'No galleries match.'
+          : 'No gallery libraries yet. Add one in Settings → Libraries.'
+      "
     />
   </div>
 </template>

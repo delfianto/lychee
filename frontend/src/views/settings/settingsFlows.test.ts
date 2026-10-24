@@ -1,3 +1,4 @@
+import { http, HttpResponse } from "msw";
 import { flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { useAppApi, taskEvent } from "../../test/appApi";
@@ -315,4 +316,56 @@ it("keeps font-size drag geometry stable while the page rescales and stops after
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("shows a retryable library failure rather than an empty library list", async () => {
+  api.failNext("GET", "/api/libraries", "Library request failed", 503);
+  const { wrapper } = await renderView(LibrariesPanel);
+  expect(wrapper.text()).toContain("Library request failed");
+  expect(wrapper.text()).not.toContain("No libraries yet");
+  await click(wrapper, "Try again");
+  expect(wrapper.text()).toContain("Manga root");
+  expect(wrapper.text()).not.toContain("Library request failed");
+  api.failNext("GET", "/api/libraries", "Refresh failed", 503);
+  taskEvent("scan");
+  await flushPromises();
+  expect(wrapper.text()).toContain("Manga root");
+  expect(wrapper.text()).toContain("Refresh failed");
+});
+
+it("ignores an older empty library response after a scan refresh loaded existing roots", async () => {
+  let resolveOlder!: (response: Response) => void;
+  let requests = 0;
+  api.server.use(
+    http.get("http://localhost/api/libraries", () => {
+      if (++requests === 1)
+        return new Promise<Response>((resolve) => {
+          resolveOlder = resolve;
+        });
+      return HttpResponse.json(api.db.libraries);
+    }),
+  );
+  const { wrapper } = await renderView(LibrariesPanel);
+  expect(wrapper.text()).toContain("Loading libraries");
+  taskEvent("scan");
+  await flushPromises();
+  expect(wrapper.text()).toContain("Manga root");
+  resolveOlder(HttpResponse.json([]));
+  await flushPromises();
+  expect(wrapper.text()).toContain("Manga root");
+  expect(wrapper.text()).not.toContain("No libraries yet");
+});
+
+it("reports an account sync start failure", async () => {
+  api.db.providers[0]!.connected = true;
+  const { wrapper } = await renderView(AccountsPanel);
+  api.failNext(
+    "POST",
+    `/api/providers/${api.db.providers[0]!.id}/sync`,
+    "Account sync unavailable",
+    503,
+  );
+  await click(wrapper, "Sync");
+  expect(messages()).toContain("Account sync unavailable");
+  expect(messages()).not.toContain("Syncing your MangaDex account");
 });

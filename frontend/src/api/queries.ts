@@ -2,6 +2,7 @@
 // ../types. The API returns wider unions (plain strings) and ISO timestamps; the
 // boundary cast + relativeTime bridge them so components stay strictly typed.
 
+import { rememberTask } from "./events";
 import { computed, ref } from "vue";
 
 import { createStaleGuard } from "../lib/staleGuard";
@@ -89,13 +90,14 @@ export async function queueDownload(
   seriesId: string,
   providerChapterIds?: string[],
 ): Promise<void> {
-  const { error, response } = await api.POST("/api/downloads", {
+  const { data, error, response } = await api.POST("/api/downloads", {
     body: {
       seriesId,
       ...(providerChapterIds?.length ? { providerChapterIds } : {}),
     },
   });
   if (error) throw new Error(apiErrorMessage(error, `Download failed (${response.status})`));
+  rememberTask(data);
 }
 
 export interface DeleteChapterResult {
@@ -462,12 +464,18 @@ export async function fetchCollection(
   };
 }
 
-export async function fetchGalleries(): Promise<Series[]> {
-  const { data, error } = await api.GET("/api/series", {
-    params: { query: { kind: "gallery", limit: 100, sort: "recentlyAdded" } },
-  });
-  if (error || !data) return [];
-  return data.items.map(toSeries);
+export async function fetchGalleries(libraryId?: string): Promise<Series[]> {
+  const items: Series[] = [];
+  let cursor: string | undefined;
+  do {
+    const { data, error } = await api.GET("/api/series", {
+      params: { query: { kind: "gallery", libraryId, limit: 100, sort: "recentlyAdded", cursor } },
+    });
+    if (error || !data) throw new Error(apiErrorMessage(error, "Couldn’t load galleries"));
+    items.push(...data.items.map(toSeries));
+    cursor = data.nextCursor ?? undefined;
+  } while (cursor);
+  return items;
 }
 
 /** Every media item of a gallery (follows the cursor to the end). */
