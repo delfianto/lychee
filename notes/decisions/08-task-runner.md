@@ -64,6 +64,16 @@ poster extraction polls the operation state and kills/reaps ffmpeg on cancellati
   the live limit while waiting, so increasing it expands an active download.
   Reducing it stops new chapter claims until active chapters drain below the
   new limit; running chapters are not interrupted.
+- Waiting chapter workers do not query the database until a global chapter slot
+  is available. Their setup transaction ends before fetching/encoding starts;
+  parents release planning reads before provider HTTP and child dispatch.
+  Empty series do not create drainers, and per-series drainer capacity is bounded
+  by the number of pending chapter rows. Parent progress averages use a locked
+  in-memory snapshot updated by chapter ID, without nested database connections.
+  Page-counter database writes coalesce within 250ms; stage completion and terminal
+  status flush immediately. Cancellation checkpoints remain unthrottled. Failed
+  writes roll back before recording chapter failure, preventing invalid sessions
+  from leaving rows stuck in `downloading`.
 - Sync operation and provider-item limits use `parallelSyncs`; filesystem/container
   inspection uses bounded workers too. Database reconciliation stays on its owner
   thread, with short commits before CPU work.

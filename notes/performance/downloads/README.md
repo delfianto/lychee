@@ -30,3 +30,23 @@ All three series operations fail under connection pressure, leaving unfinished
 chapter rows. Completed-page throughput is therefore not a successful full-job
 throughput measurement. Treat completion/error counts as acceptance criteria
 before comparing latency and throughput.
+
+## SQLite optimization stage
+
+Waiting chapter workers now acquire admission before querying the database.
+Progress averages are calculated from live counters instead of nested SQL reads;
+phase persistence coalesces page counters within 250ms while stage boundaries and
+terminal states flush immediately. Failed writes roll back before recording failure.
+The regression suite also runs three series against a two-connection pool while
+chapter capacity is held, asserting API reads remain available.
+
+| Stage | Completed chapters per run | Median API p95 | Worst API request | Median background SQL |
+| --- | --- | --- | --- | --- |
+| Baseline | 27/30, 24/30, 28/30 | 26.1ms | 311.4ms | 1091 |
+| Optimized SQLite | 30/30, 30/30, 30/30 | 17.6ms | 66.6ms | 591 |
+
+All optimized runs finish their three operations successfully. The baseline
+operations fail, so their shorter wall times must not be interpreted as higher
+throughput. Optimized successful throughput is about 65 pages/second for this
+synthetic workload. The accelerated timeout limits the baseline latency spikes;
+production was waiting up to 30 seconds instead.
