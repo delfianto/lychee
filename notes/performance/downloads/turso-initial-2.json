@@ -1,0 +1,46 @@
+{
+  "python": "3.14.8",
+  "cpu_threads": 32,
+  "config": {
+    "series": 3,
+    "chapters": 10,
+    "pages": 8,
+    "catalog": 2000,
+    "width": 640,
+    "height": 960,
+    "conversion": 16,
+    "thumbnails": 8,
+    "engine": "turso",
+    "network_ms": 5,
+    "pool_timeout": 0.3,
+    "seconds": 15,
+    "output": "../notes/performance/downloads/turso-initial-2.json"
+  },
+  "submitted_http": [
+    202,
+    202,
+    202
+  ],
+  "wall_s": 3.712,
+  "chapter_states": {
+    "done": 30
+  },
+  "completed_pages_per_s": 64.66,
+  "api_requests": 311,
+  "api_http": {
+    "200": 311
+  },
+  "api_p50_ms": 9.772,
+  "api_p95_ms": 43.74,
+  "api_max_ms": 80.594,
+  "sql_statements": 2083,
+  "background_sql_statements": 1149,
+  "api_sql_statements": 934,
+  "db_peak_connections": 6,
+  "db_hold_p95_ms": 36.931,
+  "tasks": [
+    "done",
+    "done",
+    "done"
+  ]
+}

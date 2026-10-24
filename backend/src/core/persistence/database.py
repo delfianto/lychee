@@ -9,31 +9,50 @@ from collections.abc import Generator
 from typing import Annotated, Any
 
 from fastapi import Depends
-from sqlalchemy import create_engine, event
+from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.dialects import registry
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import settings
 
-_is_sqlite = settings.database_url.startswith("sqlite")
-
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False} if _is_sqlite else {},
-)
+registry.register("sqlite.turso", "src.core.persistence.turso", "TursoDialect")
 
 
-if _is_sqlite:
+def create_database_engine(url: str, *, migrations: bool = False, **options: Any) -> Engine:
+    """One engine factory for app, migrations, test harnesses and benchmarks."""
+    driver = make_url(url).drivername
+    is_turso = driver == "sqlite+turso"
+    if is_turso:
+        options.setdefault("connect_args", {})["isolation_level"] = (
+            "DEFERRED" if migrations else "CONCURRENT"
+        )
+    elif driver.startswith("sqlite"):
+        options.setdefault("connect_args", {}).setdefault("check_same_thread", False)
+    instance = create_engine(url, **options)
+    if driver.startswith("sqlite") and not is_turso:
 
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragmas(dbapi_connection: Any, _record: Any) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
-        # Scans + cover warm can contend; 5s was too short under a stuck writer.
-        cursor.execute("PRAGMA busy_timeout=30000")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.close()
+        @event.listens_for(instance, "connect")
+        def pragmas(connection: Any, _record: Any) -> None:
+            cursor = connection.cursor()
+            for pragma in [
+                "journal_mode=WAL",
+                "foreign_keys=ON",
+                "busy_timeout=30000",
+                "synchronous=NORMAL",
+            ]:
+                cursor.execute("PRAGMA " + pragma)
+                cursor.fetchall()  # pyturso PRAGMAs are lazy until their result is stepped
+            cursor.close()
 
+    if is_turso:
+        from src.catalog.search_index import sync_turso_search
+
+        event.listen(instance, "commit", sync_turso_search)
+    return instance
+
+
+engine = create_database_engine(settings.database_url)
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 

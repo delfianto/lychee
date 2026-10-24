@@ -15,7 +15,7 @@ the sibling directories one level up (`../komga/`, `../lanraragi/`,
 | [01](01-repo-structure-monorepo.md) | Unified monorepo (backend + frontend + mcp) | Implemented |
 | [02](02-backend-stack.md) | Backend: Python 3.14 + FastAPI + SQLAlchemy + Alembic | Implemented |
 | [03](03-frontend-stack.md) | Frontend: Vue 3 + Tailwind + DaisyUI (SPA) | Implemented |
-| [04](04-database-sqlite.md) | Database: SQLite (WAL) + FTS5 trigram for search | Implemented — FTS5 table never created outside tests, see the ADR |
+| [04](04-database-sqlite.md) | Database: SQLite (WAL) + FTS5 trigram for search | Implemented; SQLite default, optional local Turso in ADR 23 |
 | [05](05-domain-model.md) | Domain data model & filesystem mapping (Library → Series → Book → Chapter) | Implemented |
 | [06](06-filename-parser.md) | Filename / volume-chapter parser | Implemented |
 | [07](07-scan-pipeline.md) | Library scan pipeline | Implemented — manual/on-demand only, no watcher or scheduler |
@@ -28,13 +28,15 @@ the sibling directories one level up (`../komga/`, `../lanraragi/`,
 | [14](14-metadata-mapping.md) | Metadata field mapping & lock-merge rules | Implemented — no embedded-format (ComicInfo/OPF) support |
 | [15](15-api-surface.md) | API surface & client scope — internal webapp-only | Implemented |
 | [16](16-tracker-sync.md) | Read-status tracker sync | Implemented — AniList/MyAnimeList/MangaUpdates + MangaDex two-way; no Kitsu |
-| [17](17-search-fts.md) | Full-text search tokenizer — FTS5 `trigram` | Implemented in code — see ADR 04's production gap |
+| [17](17-search-fts.md) | Full-text search tokenizer — FTS5 `trigram` | Implemented; deployed through an Alembic migration |
 | [18](18-title-variants.md) | Title & name variants | Implemented — storage only, no display-resolution logic |
 | [19](19-avif-storage.md) | AVIF as the served image format | Implemented |
 | [20](20-lychee-info-metadata.md) | `lychee.info` — native YAML metadata sidecar | Implemented — reader and writer both |
 | [21](21-tag-aliases.md) | Tag aliases — synonym resolution + a renamable display label | Implemented |
 
 | [22](22-mdlists-chapters-staging.md) | MDLists, chapter availability, and fixed ingest staging | Implemented |
+
+| [23](23-local-turso.md) | Optional local Turso MVCC database and portable search | Implemented; opt-in, benchmarked alongside SQLite |
 
 ## Open questions
 

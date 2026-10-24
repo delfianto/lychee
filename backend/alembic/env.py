@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -13,9 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import src.models  # noqa: E402, F401
 from src.core.config import settings  # noqa: E402
 from src.core.persistence.base_model import Base  # noqa: E402
+from src.core.persistence.database import create_database_engine  # noqa: E402
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+database_url = config.attributes.get("database_url", settings.database_url)
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     # disable_existing_loggers=False: fileConfig defaults to True, which would silently
@@ -29,12 +31,16 @@ target_metadata = Base.metadata
 def _include_object(_object: object, name: str | None, type_: str, *_args: object) -> bool:
     """Hide the FTS5 virtual table (+ its shadow tables) from autogenerate — they're
     hand-managed raw SQL, not ORM models, so a diff would otherwise try to drop them."""
-    return not (type_ == "table" and name is not None and name.startswith("series_fts"))
+    return not (
+        type_ == "table"
+        and name is not None
+        and name.startswith(("series_fts", "__turso_internal_"))
+    )
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -47,9 +53,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_database_engine(
+        database_url,
+        migrations=True,
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:

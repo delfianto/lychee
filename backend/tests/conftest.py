@@ -7,13 +7,13 @@ from typing import Any
 import pytest
 import src.models  # noqa: F401  (register every model on Base.metadata)
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from src.catalog.deps import get_render_cache, get_thumbnail_store
 from src.catalog.search_index import create_search_index
 from src.core.config import settings
 from src.core.persistence.base_model import Base
-from src.core.persistence.database import SessionLocal, get_db
+from src.core.persistence.database import SessionLocal, create_database_engine, get_db
 from src.downloads.deps import get_storage_root
 from src.downloads.provider import MangaMatch, RemoteChapter, SeriesMetadata, register_provider
 from src.integrations.sync import sync_jobs
@@ -60,12 +60,17 @@ settings.auto_bootstrap = False
 settings.encode_workers = 1
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--database-driver", choices=("sqlite", "turso"), default="sqlite")
+
+
 @pytest.fixture
-def db_engine(tmp_path: Path) -> Iterator[Engine]:
+def db_engine(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[Engine]:
     """A fresh SQLite database with the full schema, seeded with default data."""
-    engine = create_engine(
-        f"sqlite:///{tmp_path}/test.db", connect_args={"check_same_thread": False}
+    scheme = (
+        "sqlite+turso" if request.config.getoption("--database-driver") == "turso" else "sqlite"
     )
+    engine = create_database_engine(f"{scheme}:///{tmp_path}/test.db")
 
     @event.listens_for(engine, "connect")
     def _pragmas(dbapi_connection: Any, _record: Any) -> None:
@@ -74,9 +79,8 @@ def db_engine(tmp_path: Path) -> Iterator[Engine]:
         # enforcement must match production too — otherwise ON DELETE CASCADE/SET NULL
         # behavior across the schema goes completely unverified by the test suite.
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.fetchall()
         cursor.close()
 
     Base.metadata.create_all(engine)

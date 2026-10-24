@@ -8,7 +8,7 @@ FastAPI service for lychee, a self-hosted manga/comic/ebook media server. See th
 
 - **Runtime:** Python 3.14, managed by [`uv`](https://docs.astral.sh/uv/) (`backend/.venv`).
 - **Framework:** FastAPI (async), served by `uvicorn`.
-- **Persistence:** SQLAlchemy 2.1 (sync ORM) + Alembic migrations, SQLite (WAL mode).
+- **Persistence:** SQLAlchemy 2.1 (sync ORM) + Alembic migrations, SQLite (WAL mode), or opt-in local Turso (MVCC).
 - **Validation:** Pydantic v2 / pydantic-settings.
 - **Logging:** `structlog` (console renderer in dev, JSON in production — `LOG_FORMAT`).
 - **Quality gate:** ruff (lint + format), basedpyright (`standard` mode), pytest.
@@ -124,8 +124,15 @@ On startup (`src/bootstrap.py`), the app auto-migrates to head and seeds default
 rows (taxonomy, the default user, integration providers/trackers) — idempotent,
 so this runs on every boot except in tests (`settings.auto_bootstrap = False`,
 set in `tests/conftest.py`). Full-text search uses a **FTS5 `trigram`** virtual
-table created by raw SQL (`src/catalog/search_index.py`), not part of
-`Base.metadata` — it's created explicitly in both app bootstrap and test fixtures.
+table created by migration `f3a82c65e190` (`src/catalog/search_index.py`), not part
+of `Base.metadata`; test fixtures also create it explicitly.
+
+Local Turso is opt-in with `DATABASE_URL=sqlite+turso:////absolute/path/lychee.db`.
+It uses pinned `pyturso`, MVCC runtime transactions, and native Tantivy n-grams
+instead of FTS5. Run `just be-turso` to exercise the whole suite on this driver.
+Never point it directly at an existing SQLite library: `just db-to-turso SOURCE
+DESTINATION` creates a separate verified copy. See [ADR 23](../notes/decisions/23-local-turso.md)
+for migration, conflict and backup constraints. SQLite remains the deployment default.
 
 ## Commands
 

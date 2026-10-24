@@ -33,6 +33,16 @@
   display label for the two system taxonomy groups. See PART L below and
   [ADR 21](decisions/21-tag-aliases.md).
 
+## Download concurrency and database performance (2026-10-25)
+
+- [x] Release database connections before chapter admission/network waits; coalesce
+      persisted page progress while preserving live task updates and stage boundaries.
+- [x] Reproducible offline download/API benchmark, baseline and optimized SQLite samples:
+      [results and method](performance/downloads/README.md).
+- [x] Optional local Turso/MVCC driver, native search, full backend suite on both engines,
+      and verified conversion into a new database file. SQLite remains the default;
+      existing deployments are not switched automatically. See [ADR 23](decisions/23-local-turso.md).
+
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
    - [x] `PATCH /api/series/{id}` — favorite / library-status / personal rating now persist (migration

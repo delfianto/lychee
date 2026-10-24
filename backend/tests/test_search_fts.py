@@ -75,3 +75,46 @@ def test_empty_query_returns_nothing(client: TestClient, db_session: Session) ->
 
     assert client.get("/api/search", params={"q": ""}).json() == []
     assert client.get("/api/search", params={"q": "   "}).json() == []
+
+
+def test_search_reparented_credits_refresh_both_series(
+    client: TestClient, db_session: Session
+) -> None:
+    from sqlalchemy import select
+    from src.catalog.models import SeriesCredit
+
+    first = make_series(db_session, title="First", authors=("Unique Writer",))
+    second = make_series(db_session, title="Second")
+    db_session.commit()
+    assert _titles(client, "Unique Writer") == ["First"]
+    credit = db_session.scalar(
+        select(SeriesCredit).where(
+            SeriesCredit.series_id == first.id, SeriesCredit.role == "author"
+        )
+    )
+    assert credit is not None
+    credit.series_id = second.id
+    db_session.commit()
+    assert _titles(client, "Unique Writer") == ["Second"]
+
+
+def test_search_uncommitted_flush_and_rollback(db_session: Session) -> None:
+    from src.catalog.search_index import search_ids
+
+    series = make_series(db_session, title="Original")
+    db_session.commit()
+    series_id = series.id
+    series.title = "Temporary"
+    db_session.flush()
+    assert search_ids(db_session, "Temporary") == [series_id]
+    db_session.rollback()
+    assert search_ids(db_session, "Original") == [series_id]
+    assert search_ids(db_session, "Temporary") == []
+
+
+def test_literal_search_terms_are_escaped(client: TestClient, db_session: Session) -> None:
+    make_series(db_session, title="O'Brien Chronicle")
+    make_series(db_session, title="Unrelated")
+    db_session.commit()
+    assert _titles(client, "O'Brien") == ["O'Brien Chronicle"]
+    assert _titles(client, "x' OR 1=1 --") == []

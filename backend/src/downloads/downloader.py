@@ -490,11 +490,11 @@ def run_download_queue(
     try:
         while not is_cancelled(series_id):
             with queue.chapter_limit.slot():
-                if context is None:
-                    context = _chapter_context(session, series_id, storage_root, data_saver)
-                    if context is None:
-                        return 0
                 with _CLAIM_LOCK:
+                    if context is None:
+                        context = _chapter_context(session, series_id, storage_root, data_saver)
+                        if context is None:
+                            return 0
                     row = session.scalar(
                         select(DownloadTask)
                         .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")

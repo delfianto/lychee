@@ -62,6 +62,21 @@ be-check:
 be-coverage:
     cd {{ backend_dir }} && uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
 
+# Run the backend test suite against the native local Turso/MVCC driver.
+[group('backend')]
+be-turso:
+    cd {{ backend_dir }} && uv run pytest -q --database-driver=turso
+
+# Offline benchmark; all media and databases are temporary synthetic fixtures.
+[group('backend')]
+bench-downloads *args:
+    cd {{ backend_dir }} && uv run python scripts/bench_downloads.py {{args}}
+
+# Make a verified local Turso copy without modifying the SQLite source.
+[group('database')]
+db-to-turso source destination:
+    cd {{ backend_dir }} && uv run python scripts/convert_turso.py --source {{quote(source)}} --destination {{quote(destination)}}
+
 # Stop the backend.
 [group('backend')]
 be-stop: (kill-port be_port "backend")

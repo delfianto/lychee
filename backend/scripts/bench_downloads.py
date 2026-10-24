@@ -31,7 +31,7 @@ def percentile(values, fraction):
 def run(args):
     import src.models  # noqa: F401
     from PIL import Image
-    from sqlalchemy import create_engine, event, select
+    from sqlalchemy import event, select
     from sqlalchemy.orm import sessionmaker
     from src.core.config import settings
 
@@ -40,7 +40,7 @@ def run(args):
     from src.catalog.models import Library, Series
     from src.catalog.search_index import create_search_index
     from src.core.persistence.base_model import Base
-    from src.core.persistence.database import get_db
+    from src.core.persistence.database import create_database_engine, get_db
     from src.downloads.deps import get_storage_root
     from src.downloads.models import DownloadTask
     from src.downloads.provider import RemoteChapter, register_provider
@@ -95,8 +95,9 @@ def run(args):
 
     with tempfile.TemporaryDirectory(prefix="lychee-benchmark-") as root:
         work = Path(root)
-        engine = create_engine(
-            f"sqlite:///{work / 'bench.db'}",
+        scheme = "sqlite+turso" if args.engine == "turso" else "sqlite"
+        engine = create_database_engine(
+            f"{scheme}:///{work / 'bench.db'}",
             pool_size=5,
             max_overflow=10,
             pool_timeout=args.pool_timeout,
@@ -104,13 +105,7 @@ def run(args):
 
         @event.listens_for(engine, "connect")
         def configure(connection, _record):
-            for pragma in [
-                "journal_mode=WAL",
-                "foreign_keys=ON",
-                "busy_timeout=2000",
-                "synchronous=NORMAL",
-            ]:
-                connection.execute("PRAGMA " + pragma)
+            connection.execute("PRAGMA busy_timeout=2000").fetchall()
 
         Base.metadata.create_all(engine)
         with engine.begin() as connection:
@@ -270,6 +265,7 @@ if __name__ == "__main__":
         ("thumbnails", 8),
     ]:
         parser.add_argument("--" + name, type=int, default=value)
+    parser.add_argument("--engine", choices=("sqlite", "turso"), default="sqlite")
     parser.add_argument("--network-ms", type=float, default=5)
     parser.add_argument("--pool-timeout", type=float, default=0.3)
     parser.add_argument("--seconds", type=float, default=15)

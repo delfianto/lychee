@@ -82,7 +82,7 @@ def test_provider_progress_migration_backfills_existing_reads(db_session) -> Non
         )
     )
     chapters[0].provider_chapter_id = "remote-read"
-    db_session.flush()
+    db_session.commit()  # historical DDL starts outside a runtime MVCC transaction
     db_session.execute(text("DROP TABLE provider_reading_progress"))
     migration = runpy.run_path(
         str(
