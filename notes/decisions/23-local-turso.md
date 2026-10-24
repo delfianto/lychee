@@ -77,7 +77,9 @@ surfaces those errors to the existing transaction error handling; there is no
 blanket retry of arbitrary service work, which could replay provider or filesystem
 side effects. This opt-in engine does not claim every overlapping business action
 is retry-safe. Its experimental native index and observed workload performance
-are reasons to keep SQLite as the default pending deployment evaluation.
+are reasons to keep SQLite as the default pending deployment evaluation. A [follow-up attribution study](../performance/database/README.md)
+separates driver, WAL/MVCC, indexed reads and disjoint concurrent writes on tmpfs
+and NVMe; Turso's write advantage does not remove its read cost on this workload.
 
 References: [Python SDK](https://docs.turso.tech/sdk/python/quickstart),
 [MVCC/conflicts](https://docs.turso.tech/tursodb/concurrent-writes),
