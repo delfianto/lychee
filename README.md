@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.6** — durable reading progress, creator search, cleaner library filters, and reliable gallery video playback.
+Current release: **v0.1.0-beta.7** — reliable Favorites updates across manga, comics, and galleries, including cached views and pending saves.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.

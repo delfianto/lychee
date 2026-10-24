@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronUp, Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "@lucide/vue";
-import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
+import { type Component, computed, onActivated, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { buildLibraryQuery, fetchTagGroups, type TagGroup, useSeriesList } from "../api/queries";
@@ -217,7 +217,17 @@ const title = computed(() => TITLES[props.libraryKey] ?? "Library");
 // "reading" is a fixed-status shelf, so the shelf-status tabs are hidden there.
 const showTabs = computed(() => props.libraryKey !== "reading");
 
-const { items: results, loading, failed, hasMore, reload, loadMore, retry } = useSeriesList();
+const {
+  items: results,
+  loading,
+  failed,
+  hasMore,
+  reload,
+  loadMore,
+  retry,
+  refreshIfChanged,
+} = useSeriesList();
+onActivated(refreshIfChanged);
 
 const queryParams = computed(() =>
   buildLibraryQuery(props.libraryKey, { activeTab: activeTab.value, filters, sort: sort.value }),

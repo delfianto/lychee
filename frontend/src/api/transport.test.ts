@@ -636,3 +636,78 @@ it("sends creator roles and names, persists manual batches, and reports progress
     "creator suggestions",
   );
 });
+
+it.each([false, true])(
+  "preserves edit order and reads the final state when an earlier save fails=%s",
+  async (fails) => {
+    let release!: () => void;
+    const edits: boolean[] = [];
+    let favorite = false;
+    let reads = 0;
+    server.use(
+      http.patch(`${root}/api/series/s1`, async ({ request }) => {
+        const body = (await request.json()) as { favorite: boolean };
+        edits.push(body.favorite);
+        if (edits.length === 1) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          if (fails) return denied();
+        }
+        favorite = body.favorite;
+        return HttpResponse.json(series("s1", { favorite }));
+      }),
+      http.get(`${root}/api/series`, () => {
+        reads++;
+        return HttpResponse.json({
+          items: favorite ? [series("s1", { favorite })] : [],
+          nextCursor: null,
+        });
+      }),
+    );
+    const first = queries.patchSeries("s1", { favorite: true });
+    const firstOutcome = first.then(
+      () => "saved",
+      () => "failed",
+    );
+    const second = queries.patchSeries("s1", { favorite: false });
+    const list = queries.useSeriesList();
+    const loaded = list.reload({ favorite: true });
+    await flushPromises();
+    expect(edits).toEqual([true]);
+    expect(reads).toBe(0);
+    release();
+    await Promise.all([firstOutcome, second, loaded]);
+    expect(await firstOutcome).toBe(fails ? "failed" : "saved");
+    expect(edits).toEqual([true, false]);
+    expect(reads).toBe(1);
+    expect(list.items.value).toEqual([]);
+    expect(list.loading.value).toBe(false);
+  },
+);
+
+it("ignores an older grid load while both loads wait for a save", async () => {
+  let release!: () => void;
+  const reads: string[] = [];
+  server.use(
+    http.patch(`${root}/api/series/s1`, async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return HttpResponse.json(series("s1"));
+    }),
+    http.get(`${root}/api/series`, ({ request }) => {
+      reads.push(new URL(request.url).searchParams.get("kind") ?? "all");
+      return HttpResponse.json({ items: [series("comic", { kind: "comic" })], nextCursor: null });
+    }),
+  );
+  const saved = queries.patchSeries("s1", { favorite: true });
+  const list = queries.useSeriesList();
+  const older = list.reload({ favorite: true });
+  const newer = list.reload({ kind: "comic" });
+  await flushPromises();
+  release();
+  await Promise.all([saved, older, newer]);
+  expect(reads).toEqual(["comic"]);
+  expect(list.items.value.map((item) => item.id)).toEqual(["comic"]);
+});

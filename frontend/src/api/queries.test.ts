@@ -74,6 +74,7 @@ describe("useSeriesList paging guard", () => {
 
     const list = useSeriesList();
     list.loadMore(); // sentinel fires on an empty grid — must be a no-op
+    list.refreshIfChanged(); // activation must not start an unfiltered request either
     expect(api.GET).not.toHaveBeenCalled();
 
     await list.reload({ kind: "manga" }); // first real (filtered) load

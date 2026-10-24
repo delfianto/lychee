@@ -242,6 +242,11 @@ export async function randomSeriesId(): Promise<string | null> {
 
 export type SeriesQuery = NonNullable<paths["/api/series"]["get"]["parameters"]["query"]>;
 
+// Detail edits can outlive their screen. Grids wait for them before reading so
+// navigating to Favorites never caches the state from before the heart was saved.
+const seriesWrites = new Map<string, Promise<void>>();
+let seriesRevision = 0;
+
 /** Cursor-paginated series list: accumulate pages, fetch more on demand. */
 export function useSeriesList() {
   const items = ref<Series[]>([]);
@@ -252,6 +257,7 @@ export function useSeriesList() {
   const cursor = ref<string | null>(null);
   let params: SeriesQuery = {};
   let started = false; // no paging until the first reload sets a real query
+  let loadedRevision = seriesRevision;
   // Guards against an in-flight page/reset landing after a newer one already did —
   // e.g. filter change A's request still pending when filter change B's lands first.
   const staleGuard = createStaleGuard();
@@ -262,11 +268,17 @@ export function useSeriesList() {
     loading.value = true;
     const query: SeriesQuery = { ...params, limit: 24 };
     if (!reset && cursor.value) query.cursor = cursor.value;
+    while (seriesWrites.size) {
+      await Promise.allSettled(seriesWrites.values());
+      if (!staleGuard.isCurrent(token)) return;
+    }
+    const requestedRevision = seriesRevision;
     const { data, error } = await api.GET("/api/series", { params: { query } });
     if (!staleGuard.isCurrent(token)) return;
     if (!error && data) {
       const mapped = data.items.map(toSeries);
       items.value = reset ? mapped : [...items.value, ...mapped];
+      loadedRevision = requestedRevision;
       cursor.value = data.nextCursor ?? null;
       done.value = !data.nextCursor;
       failed.value = false;
@@ -299,17 +311,44 @@ export function useSeriesList() {
     void fetchPage(true);
   }
 
-  return { items, loading, failed, hasMore: computed(() => !done.value), reload, loadMore, retry };
+  // KeepAlive preserves filters and pagination. Refresh on return only if a
+  // detail edit changed the data (or its save is still in flight).
+  function refreshIfChanged(): void {
+    if (started && (seriesWrites.size || loadedRevision !== seriesRevision)) void reload(params);
+  }
+
+  return {
+    items,
+    loading,
+    failed,
+    hasMore: computed(() => !done.value),
+    reload,
+    loadMore,
+    retry,
+    refreshIfChanged,
+  };
 }
 
 // --- series detail -------------------------------------------------------------
 
 export async function patchSeries(id: string, body: SeriesUpdate): Promise<void> {
-  const { error } = await api.PATCH("/api/series/{series_id}", {
-    params: { path: { series_id: id } },
-    body,
-  });
-  if (error) throw new Error(apiErrorMessage(error, "Couldn't save changes"));
+  const previous = seriesWrites.get(id);
+  const write = (async () => {
+    // Preserve click order for the same work; a failed save must not block a later edit.
+    if (previous) await previous.catch(() => {});
+    const { error } = await api.PATCH("/api/series/{series_id}", {
+      params: { path: { series_id: id } },
+      body,
+    });
+    if (error) throw new Error(apiErrorMessage(error, "Couldn't save changes"));
+    seriesRevision++;
+  })();
+  seriesWrites.set(id, write);
+  try {
+    await write;
+  } finally {
+    if (seriesWrites.get(id) === write) seriesWrites.delete(id);
+  }
 }
 
 export interface MatchCandidate {
