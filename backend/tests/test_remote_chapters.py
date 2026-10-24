@@ -147,8 +147,8 @@ def test_materialize_cover_writes_both_variants(db_session: Session, tmp_path, m
 
     assert materialize_series_cover(db_session, store, series.id) is True
     assert store.exists(series.id, ThumbVariant.COVER)
-    assert store.exists(series.id, ThumbVariant.DETAIL)
+    assert len(list(store.root.rglob("*.avif"))) == 1
 
     served = get_cover(db_session, store, series.id, "detail")
     assert served.media_type == "image/avif"
-    assert store.read(series.id, ThumbVariant.DETAIL) == served.data
+    assert store.read(series.id, ThumbVariant.COVER) == served.data

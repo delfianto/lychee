@@ -43,7 +43,7 @@ def test_storage_selection_and_serving(
     # Background writers resolve exactly the same selected folder.
     store = ThumbnailStore(thumbnail_root(db_session, default))
     store.generate("background", Image.new("RGB", (10, 10)), ThumbVariant.COVER)
-    assert (custom / "ba" / "background.cover.avif").is_file()
+    assert (custom / "ba" / "background.cover-v2.avif").is_file()
     # A fresh request reads the persisted setting; resetting regenerates in default storage.
     assert client.get(URL).json()["path"] == str(custom)
     assert client.put(URL, json={"path": None}).json()["effectivePath"] == str(

@@ -41,9 +41,11 @@ RGB spread → `LINE_ART`; else high unique-color density → `PHOTO`; else
 - **Scanned local archives (the user's own files) are never rewritten.**
   Original page bytes are still served as-is; only AVIF thumbnails and
   on-demand resized derivatives are generated and cached separately.
-- **Thumbnails are AVIF** — a content-addressed, sharded store
-  (`<root>/<id[:2]>/<id>.<cover|detail>.avif`), two sizes (~320/~640 px),
-  idempotent + atomic generation.
+- **Thumbnails are AVIF** — one 640px-wide derivative per image, shaped to the
+  UI frame (square gallery tile or 2:3 cover), quality 75 / 4:4:4 and LANCZOS.
+  Source proportions are preserved with a center crop; small sources are never
+  enlarged. Versioned cache keys replace the old 320px/640px longest-edge policy
+  and its forced photo preset for gallery artwork. See [ADR 09](09-image-serving.md).
 
 ## Consequences
 

@@ -83,7 +83,7 @@ export interface GalleryMediaItem {
   kind: GalleryMediaKind;
   /** Full-size still or progressive video stream (lightbox). */
   url: string;
-  /** Small grid preview (~320px AVIF); lazy-built on first request if needed. */
+  /** Square grid preview (up to 640px AVIF); proportions preserved with a center crop. */
   thumbUrl: string;
   posterUrl?: string | null;
 }

@@ -225,9 +225,13 @@ def gallery_images(
 
 @router.get("/series/{series_id}/cover")
 def series_cover(
-    request: Request, db: DbSession, store: ThumbnailStoreDep, series_id: str, size: str = "cover"
+    request: Request,
+    db: DbSession,
+    store: ThumbnailStoreDep,
+    series_id: str,
+    size: str = "cover",
 ) -> Response:
-    """AVIF cover thumbnail (size = cover | detail)."""
+    """640px-wide AVIF cover preview (cover and detail reuse the same file)."""
     return _image_response(request, media.get_cover(db, store, series_id, size))
 
 
@@ -239,7 +243,7 @@ def gallery_image_thumb(
     series_id: str,
     index: int,
 ) -> Response:
-    """Grid preview (~320px AVIF). Generated on first request if scan has not warmed it."""
+    """Aspect-aware square grid preview (up to 640px AVIF). Generated on first request if scan has not warmed it."""
     return _image_response(request, media.get_gallery_thumb(db, store, series_id, index))
 
 

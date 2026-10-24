@@ -57,7 +57,7 @@ onBeforeUnmount(() => observer?.disconnect());
     </div>
     <div
       v-else-if="density === 'gallery'"
-      class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+      class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:gallery-columns"
     >
       <SeriesCoverCard v-for="s in series" :key="s.id" :series="s" />
     </div>

@@ -20,7 +20,7 @@ from contextlib import suppress
 from functools import partial
 from threading import Lock
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from src.core.config import settings
 from src.media.avif import ContentClass, encode, encode_bytes, load_image
@@ -104,25 +104,40 @@ def encode_pages(raws: Iterable[bytes], *, quality: int | None = None) -> Genera
 
 
 def _thumbnail(
-    source: bytes | Image.Image, edge: int, content_class: ContentClass, quality: int | None
+    source: bytes | Image.Image,
+    edge: int,
+    content_class: ContentClass,
+    quality: int | None,
+    aspect: float | None = None,
 ) -> bytes:
     image = load_image(source).copy()
-    image.thumbnail((edge, edge))
+    if aspect is None:
+        image.thumbnail((edge, edge), resample=Image.Resampling.LANCZOS)
+    else:
+        width, height = edge, round(edge / aspect)
+        scale = min(1.0, image.width / width, image.height / height)
+        size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
     return encode(image, content_class=content_class, quality=quality)
 
 
 def encode_thumbnail(
-    source: bytes | Image.Image, edge: int, content_class: ContentClass, quality: int | None
+    source: bytes | Image.Image,
+    edge: int,
+    content_class: ContentClass,
+    quality: int | None,
+    *,
+    aspect: float | None = None,
 ) -> bytes:
     """Use the same global CPU pool for page conversion, covers and thumbnails."""
     checkpoint()
     pool = _get_pool()
     if pool is None:
         with _serial_cpu.slot():
-            result = _thumbnail(source, edge, content_class, quality)
+            result = _thumbnail(source, edge, content_class, quality, aspect)
         checkpoint()
         return result
-    future = pool.submit(_thumbnail, source, edge, content_class, quality)
+    future = pool.submit(_thumbnail, source, edge, content_class, quality, aspect)
     try:
         return _result(future)
     finally:

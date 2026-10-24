@@ -53,5 +53,7 @@ def test_thumbnails_share_the_page_encoding_process_pool(monkeypatch: pytest.Mon
         image = Image.open(io.BytesIO(cover))
         assert image.format == "AVIF"
         assert max(image.size) == 32
+        square = encode_pool.encode_thumbnail(_png(60), 32, ContentClass.COLOR_ART, 75, aspect=1.0)
+        assert Image.open(io.BytesIO(square)).size == (32, 32)
     finally:
         encode_pool.shutdown()
