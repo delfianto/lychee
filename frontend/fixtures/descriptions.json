@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "basic",
+      "title": "Ordinary prose",
+      "kind": "manga",
+      "description": "A **bold** beginning, *emphasis*, and a [source](https://example.test/story).",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "namespace",
+      "title": "Namespace table",
+      "kind": "manga",
+      "description": "Synopsis.\n\n| Namespace | Tags |\n|:-|:-\n| OTHER | anthology, comedy |",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 2
+      }
+    },
+    {
+      "id": "blank-heading",
+      "title": "Blank namespace header",
+      "kind": "manga",
+      "description": "Story.\n\n||TAGS|\n|:-|:-\n| genre | adventure, drama",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 2
+      }
+    },
+    {
+      "id": "bold-heading",
+      "title": "Bold table headings",
+      "kind": "manga",
+      "description": "| **NAMESPACE** | **TAGS** |\n|---|---|\n| Themes | mystery, time travel |",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 2
+      }
+    },
+    {
+      "id": "book-sections",
+      "title": "Book sections (library vMxnYOrgxw0K)",
+      "kind": "manga",
+      "description": "| Book 1 | Tags |\n| :--- | :--- |\n| publication | collection one |\n| parody | original |\n| characters | Alex, Robin |\n>\n| Book 2 | Tags |\n| :--- | :--- |\n| publication | collection two |\n| characters | Casey |",
+      "expected": {
+        "sectionLabels": ["Book 1", "Book 2"],
+        "tags": 6
+      }
+    },
+    {
+      "id": "part-sections",
+      "title": "Part sections (library TflzmsI7CZn6)",
+      "kind": "manga",
+      "description": "Intro.\n\n| Part 1 | Tags |\n|---|---|\n|Genre|drama|\n\nA note between parts.\n\n| Part 2 | Tags |\n|---|---|\n|Genre|comedy|\n\nClosing note.",
+      "expected": {
+        "sectionLabels": ["Part 1", "Part 2"],
+        "tags": 2
+      }
+    },
+    {
+      "id": "adjacent-tables",
+      "title": "Consecutive tables without blank lines",
+      "kind": "manga",
+      "description": "| Volume A | Tags |\n|---|---|\n|Genre|drama|\n| Volume B | Tags |\n|---|---|\n|Genre|comedy|",
+      "expected": {
+        "sectionLabels": ["Volume A", "Volume B"],
+        "tags": 2
+      }
+    },
+    {
+      "id": "optional-pipes",
+      "title": "Optional outer pipes",
+      "kind": "manga",
+      "description": "Namespace | Tags\n:--|--:\nTheme | **friendship**, `travel`",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 2
+      }
+    },
+    {
+      "id": "escaped-pipes",
+      "title": "Escaped pipes and formatted cells",
+      "kind": "manga",
+      "description": "|Namespace|Tags|\n|---|---|\n|Theme|one\\|two, [three](https://example.test/three)|",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 2
+      }
+    },
+    {
+      "id": "generic-table",
+      "title": "Four-column comparison (library SbtzNkaAv7d9)",
+      "kind": "manga",
+      "description": "| Web Ch. | Volume Ch. | Change | Difference |\n|---|---|---|---|\n|1|2|Revised|New scenes|",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "incomplete",
+      "title": "Incomplete table stays visible",
+      "kind": "manga",
+      "description": "Intro.\n\n||TAGS|\n|:-|:-\nUnfinished.",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "trailing-prose",
+      "title": "Notes without a blank line",
+      "kind": "manga",
+      "description": "Intro.\n|Namespace|Tags|\n|---|---|\n|Genre|drama|\nTranslator note without a blank line.",
+      "expected": {
+        "sectionLabels": [null],
+        "tags": 1
+      }
+    },
+    {
+      "id": "markdown-blocks",
+      "title": "Headings, lists and quotations",
+      "kind": "manga",
+      "description": "# Introduction\n\n- First **item**\n- Second item\n\n1. First chapter\n2. Second chapter\n\n> A quotation.\n\n---\n\nFinal paragraph.",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "links",
+      "title": "Links, references and parentheses",
+      "kind": "manga",
+      "description": "[Source](https://example.test/a_(b)) and <https://example.test/automatic>.\n\n[Publisher][pub]\n\n[pub]: https://example.test/publisher",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "image-link",
+      "title": "Image banners become links",
+      "kind": "manga",
+      "description": "![Publisher banner](https://example.test/banner.png)",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "literal-html",
+      "title": "Literal angle brackets stay text",
+      "kind": "manga",
+      "description": "The agent <Twilight> follows an order. <script>alert(1)</script> <img src=x onerror=alert(2)>",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "code",
+      "title": "Table syntax inside code stays code",
+      "kind": "manga",
+      "description": "```text\n| Namespace | Tags |\n|---|---|\n|Other|sample|\n```",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "legacy-breaks",
+      "title": "Loose anthology separators (library aBQAZEeYSnoY)",
+      "kind": "manga",
+      "description": "Volume 1:\n||\nStory one.\n||\nStory two.\n\nVolume 2:\n||\nStory three.",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "prose-pipes",
+      "title": "Pipes in prose are preserved",
+      "kind": "manga",
+      "description": "An anthology | a collection of short stories.\n\n[Source A](https://example.test/a) | [Source B](https://example.test/b)",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "security",
+      "title": "Unsafe URLs remain inert",
+      "kind": "manga",
+      "description": "[bad](javascript:alert(1)) [bad](data:text/html,hello) [bad](file:///etc/passwd) [good](https://example.test/)",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "spoiler-volumes",
+      "title": "Anthology spoiler volumes (library ohAINPcqryVz)",
+      "kind": "manga",
+      "description": "Intro.\n\nVolume 1: ||\nA **hidden** story.\n\nSecond hidden paragraph.\n||\n\nVolume 2: ||\nAnother story.\n||",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "spoiler-marker-lines",
+      "title": "Standalone spoiler markers (library aBQAZEeYSnoY)",
+      "kind": "manga",
+      "description": "Volume 1\n\n||\n- First story\n- Second story\n||\n\nClosing note.",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "spoiler-unmatched",
+      "title": "Unpaired spoiler markers stay visible",
+      "kind": "manga",
+      "description": "Volume 1: ||\nAn unfinished source description.",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    },
+    {
+      "id": "nested-table",
+      "title": "Tag tables inside a spoiler stay inside it",
+      "kind": "manga",
+      "description": "Volume 1: ||\n|Namespace|Tags|\n|---|---|\n|Genre|hidden theme|\n||",
+      "expected": {
+        "sectionLabels": [],
+        "tags": 0
+      }
+    }
+  ]
+}

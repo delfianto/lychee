@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.4** — typed lists, adaptive previews, accurate sorting, and responsive background tasks.
+Current release: **v0.1.0-beta.5** — robust Markdown descriptions, scoped tag tables, and a repeatable corpus audit.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.

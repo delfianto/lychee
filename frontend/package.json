@@ -1,6 +1,6 @@
 {
   "name": "lychee-frontend",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,11 +15,13 @@
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "lint": "vp lint",
-    "check": "vp check && bun run typecheck"
+    "check": "vp check && bun run typecheck",
+    "descriptions:audit": "bun scripts/audit-descriptions.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.61.0",
     "flag-icons": "^7.6.0",
+    "markdown-it": "^15.0.3",
     "openapi-fetch": "^0.17.0",
     "pinia": "^4.1.0",
     "plyr": "^3.8.5",

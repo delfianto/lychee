@@ -1,146 +1,204 @@
-// MangaDex descriptions are free-form Markdown. Many adult titles append a
-// "Namespace | Tags" pipe table (rendered as a real table on mangadex.org).
-// We split that table out for a structured UI and lightly render the synopsis.
+// Provider descriptions are Markdown, not a fixed synopsis + one named table.
+// Keep source text intact and recognize two-column tag tables by their structure.
+import MarkdownIt, { type Token } from "markdown-it";
 
 export interface DescriptionTagGroup {
   namespace: string;
   tags: string[];
 }
 
+export interface DescriptionTagSection {
+  /** A source heading such as Book 1 or Part 2; null for a generic namespace table. */
+  label: string | null;
+  groups: DescriptionTagGroup[];
+}
+
 export interface ParsedDescription {
-  /** Plain-text synopsis (no namespace table) — safe for clamps / cards. */
+  /** Source Markdown excluding recognized tag tables. */
   synopsis: string;
-  /** HTML for the synopsis (escaped + light markdown). */
   synopsisHtml: string;
-  /** Parsed Namespace/Tags groups, if present. */
+  tagSections: DescriptionTagSection[];
+  /** Flattened groups for consumers that only need to know whether extra tags exist. */
   tagGroups: DescriptionTagGroup[];
 }
 
-/** MangaDex also uses a blank namespace heading: ||TAGS|. */
-const TABLE_HEADER = /^\|[\t ]*(?:Namespace)?[\t ]*\|[\t ]*Tags[\t ]*\|?[\t ]*$/im;
-/** Separator row like |:-|:- or | --- | --- | (trailing | optional). */
-const TABLE_SEP = /^\|?[\s:\-|]+\s*$/;
+const markdown = new MarkdownIt({ html: false, breaks: true, linkify: false });
+markdown.validateLink = (url) => /^(?:https?:\/\/|mailto:)/i.test(url);
+markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
+  tokens[index]!.attrSet("target", "_blank");
+  tokens[index]!.attrSet("rel", "noopener noreferrer");
+  tokens[index]!.attrSet("class", "link link-primary");
+  return renderer.renderToken(tokens, index, options);
+};
+// Provider banners remain useful links without silently loading external images.
+markdown.renderer.rules.image = (tokens, index, options, env, renderer) => {
+  const token = tokens[index]!;
+  const href = markdown.utils.escapeHtml(String(token.attrGet("src") ?? ""));
+  const label = renderer.renderInlineAsText(token.children ?? [], options, env) || "Image";
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="link link-primary">${label}</a>`;
+};
+markdown.renderer.rules.table_open = () =>
+  '<div class="description-table"><table class="table table-sm">\n';
+markdown.renderer.rules.table_close = () => "</table></div>\n";
 
-/**
- * Split a MangaDex-style description into synopsis + optional namespace tag groups.
- * Tolerates the slightly broken tables MD authors often paste (|:-|:- without trailing |).
- */
+// MangaDex anthology descriptions also use paired || blocks, sometimes after
+// a Volume label. Generate native details tokens, keeping HTML input disabled.
+markdown.block.ruler.before(
+  "table",
+  "description_spoiler",
+  (state, startLine, endLine, silent) => {
+    if (state.sCount[startLine]! - state.blkIndent >= 4) return false;
+    const line = state.src.slice(
+      state.bMarks[startLine]! + state.tShift[startLine]!,
+      state.eMarks[startLine],
+    );
+    const opening = /^([^|]*?)\|\|[\t ]*$/.exec(line);
+    if (!opening) return false;
+    let closing = startLine + 1;
+    for (; closing < endLine; closing++) {
+      const content = state.src.slice(
+        state.bMarks[closing]! + state.tShift[closing]!,
+        state.eMarks[closing],
+      );
+      if (/^\|\|[\t ]*$/.test(content)) break;
+    }
+    if (closing === endLine) return false;
+    if (silent) return true;
+    const open = state.push("description_spoiler_open", "details", 1);
+    open.attrSet("class", "description-spoiler");
+    open.map = [startLine, closing + 1];
+    state.push("summary_open", "summary", 1);
+    const label = state.push("inline", "", 0);
+    label.content = opening[1]!.trim().replace(/:$/, "") || "Spoiler";
+    label.children = [];
+    state.push("summary_close", "summary", -1);
+    const previousParent = state.parentType;
+    const previousMax = state.lineMax;
+    state.parentType = "container";
+    state.lineMax = closing;
+    state.md.block.tokenize(state, startLine + 1, closing);
+    state.parentType = previousParent;
+    state.lineMax = previousMax;
+    state.push("description_spoiler_close", "details", -1);
+    state.line = closing + 1;
+    return true;
+  },
+  { alt: ["paragraph", "reference", "blockquote"] },
+);
+
+/** Extract visible text, never Markdown punctuation or link destinations. */
+function tokenText(tokens: Token[]): string {
+  let hidden = 0;
+  return tokens
+    .map((token) => {
+      if (token.type === "description_spoiler_open") {
+        hidden++;
+        return "";
+      }
+      if (token.type === "description_spoiler_close") {
+        hidden--;
+        return "";
+      }
+      if (hidden) return "";
+      if (token.children) return tokenText(token.children);
+      if (["text", "code_inline", "code_block", "fence"].includes(token.type)) return token.content;
+      if (
+        [
+          "softbreak",
+          "hardbreak",
+          "paragraph_close",
+          "heading_close",
+          "tr_close",
+          "td_close",
+          "th_close",
+        ].includes(token.type)
+      )
+        return "\n";
+      return "";
+    })
+    .join("");
+}
+
+function tableRows(tokens: Token[]): { cells: string[]; line: number | null }[] {
+  const rows: { cells: string[]; line: number | null }[] = [];
+  for (const token of tokens) {
+    if (token.type === "tr_open") rows.push({ cells: [], line: token.map?.[0] ?? null });
+    if (token.type === "inline") rows.at(-1)?.cells.push(tokenText(token.children ?? []));
+  }
+  return rows;
+}
+
+const isTagHeader = (cells: string[]) => cells.length === 2 && /^tags?$/i.test(cells[1]!.trim());
+const isAlignment = (cells: string[]) =>
+  cells.length === 2 && cells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+const sectionLabel = (header: string) =>
+  !header.trim() || /^namespace$/i.test(header.trim()) ? null : header.trim();
+
+function tagSections(rows: string[][]): DescriptionTagSection[] {
+  if (!rows[0] || !isTagHeader(rows[0])) return [];
+  const sections: DescriptionTagSection[] = [{ label: sectionLabel(rows[0][0]!), groups: [] }];
+  for (let i = 1; i < rows.length; i++) {
+    const cells = rows[i]!;
+    // Some authors paste consecutive tables without a separating blank line.
+    if (isTagHeader(cells) && rows[i + 1] && isAlignment(rows[i + 1]!)) {
+      sections.push({ label: sectionLabel(cells[0]!), groups: [] });
+      i++;
+      continue;
+    }
+    const tags = (cells[1] ?? "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    if (tags.length) sections.at(-1)!.groups.push({ namespace: cells[0]?.trim() || "Tags", tags });
+  }
+  return sections.filter((section) => section.groups.length);
+}
+
 export function parseMangaDescription(raw: string | null | undefined): ParsedDescription {
-  const text = (raw ?? "").replace(/\r\n/g, "\n").trim();
-  if (!text) {
-    return { synopsis: "", synopsisHtml: "", tagGroups: [] };
+  const text = (raw ?? "").replace(/\r\n?/g, "\n").trim();
+  const tokens = markdown.parse(text, {});
+  const lines = text.split("\n");
+  const sections: DescriptionTagSection[] = [];
+  const prose: string[] = [];
+  let consumed = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (token.type !== "table_open" || token.level !== 0 || !token.map) continue;
+    const end = tokens.findIndex((item, at) => at > index && item.type === "table_close");
+    const rows = tableRows(tokens.slice(index, end + 1));
+    // GFM permits a single-cell body row; a plain translator note after a table
+    // must remain prose, not disappear during tag extraction.
+    const afterTable = rows
+      .slice(1)
+      .find((row) => row.line !== null && !lines[row.line]!.includes("|"));
+    const tableEnd = afterTable?.line ?? token.map[1];
+    const parsed = tagSections(
+      rows.filter((row) => row.line === null || row.line < tableEnd).map((row) => row.cells),
+    );
+    if (!parsed.length) continue; // Generic/incomplete tables remain ordinary Markdown.
+    sections.push(...parsed);
+    prose.push(lines.slice(consumed, token.map[0]).join("\n").trim());
+    consumed = tableEnd;
+    index = end;
   }
-
-  const headerMatch = TABLE_HEADER.exec(text);
-  if (!headerMatch || headerMatch.index === undefined) {
-    return {
-      synopsis: text,
-      synopsisHtml: markdownToHtml(text),
-      tagGroups: [],
-    };
-  }
-
-  const tableBody = text.slice(headerMatch.index + headerMatch[0].length);
-  const { tagGroups, remainder } = parseNamespaceTable(tableBody);
-  // An incomplete/unrecognized table must not silently eat description text.
-  if (!tagGroups.length) {
-    return { synopsis: text, synopsisHtml: markdownToHtml(text), tagGroups: [] };
-  }
-  const synopsis = [text.slice(0, headerMatch.index).trim(), remainder]
-    .filter(Boolean)
-    .join("\n\n");
-
+  prose.push(lines.slice(consumed).join("\n").trim());
+  let synopsis = prose.filter(Boolean).join("\n\n");
+  // An empty blockquote is sometimes used solely to separate two tag tables.
+  if (/^[\s>]*$/.test(synopsis)) synopsis = "";
   return {
     synopsis,
     synopsisHtml: markdownToHtml(synopsis),
-    tagGroups,
+    tagSections: sections,
+    tagGroups: sections.flatMap((section) => section.groups),
   };
 }
 
-/** Synopsis only — for list cards / carousels that shouldn't show the tag dump. */
+/** Plain-text cards omit tag dumps and strip Markdown formatting. */
 export function synopsisOnly(raw: string | null | undefined): string {
-  return parseMangaDescription(raw).synopsis;
+  return tokenText(markdown.parse(parseMangaDescription(raw).synopsis, {})).trim();
 }
 
-function parseNamespaceTable(afterHeader: string): {
-  tagGroups: DescriptionTagGroup[];
-  remainder: string;
-} {
-  const lines = afterHeader
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const groups: DescriptionTagGroup[] = [];
-
-  for (const [index, line] of lines.entries()) {
-    if (TABLE_SEP.test(line)) continue;
-    if (!line.startsWith("|")) {
-      return { tagGroups: groups, remainder: lines.slice(index).join("\n") };
-    }
-    // |MALE| facesitting, glory hole, ...
-    // or | MALE | a, b, c |
-    const cells = line
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-    if (cells.length < 2) continue;
-    const namespace = cells[0];
-    // Skip header repeats and alignment-only cells (|:-|:- → ":-")
-    if (!namespace || /^namespace$/i.test(namespace) || /^[\s:-]+$/.test(namespace)) continue;
-    const tags = cells
-      .slice(1)
-      .join("|") // tag cell can contain pipes rarely — join remainder
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    if (tags.length) groups.push({ namespace, tags });
-  }
-  return { tagGroups: groups, remainder: "" };
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/**
- * Minimal Markdown → HTML for synopsis prose (no full GFM tables — those are
- * handled by parseNamespaceTable). Escapes first, then applies inline/block rules.
- */
+/** CommonMark prose and GFM tables, with source HTML disabled and safe link rules. */
 export function markdownToHtml(src: string): string {
-  if (!src.trim()) return "";
-
-  // Escape, then restore markdown markers we want to process.
-  let html = escapeHtml(src);
-
-  // Links: [text](url) — only allow http(s)
-  html = html.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="link link-primary">$1</a>',
-  );
-
-  // Bold **text** or __text__
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
-
-  // Italic *text* or _text_ (avoid matching mid-word underscores)
-  html = html.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, "<em>$1</em>");
-  html = html.replace(/(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)/g, "<em>$1</em>");
-
-  // Horizontal rules
-  html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="my-2 border-base-300" />');
-
-  // Paragraphs: double newlines
-  const blocks = html.split(/\n{2,}/).map((block) => {
-    const inner = block.trim().replace(/\n/g, "<br />\n");
-    if (!inner) return "";
-    if (inner.startsWith("<hr")) return inner;
-    return `<p class="mb-2 last:mb-0">${inner}</p>`;
-  });
-
-  return blocks.filter(Boolean).join("\n");
+  return markdown.render(src).trim();
 }
