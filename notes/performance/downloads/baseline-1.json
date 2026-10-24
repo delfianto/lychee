@@ -1,0 +1,47 @@
+{
+  "python": "3.14.8",
+  "cpu_threads": 32,
+  "config": {
+    "series": 3,
+    "chapters": 10,
+    "pages": 8,
+    "catalog": 2000,
+    "width": 640,
+    "height": 960,
+    "conversion": 16,
+    "thumbnails": 8,
+    "network_ms": 5,
+    "pool_timeout": 0.3,
+    "seconds": 15,
+    "output": "/srv/project/github/lychee/notes/performance/downloads/baseline-1.json"
+  },
+  "submitted_http": [
+    202,
+    202,
+    202
+  ],
+  "wall_s": 3.38,
+  "chapter_states": {
+    "done": 27,
+    "downloading": 3
+  },
+  "completed_pages_per_s": 63.91,
+  "api_requests": 330,
+  "api_http": {
+    "200": 329,
+    "500": 1
+  },
+  "api_p50_ms": 6.735,
+  "api_p95_ms": 22.661,
+  "api_max_ms": 311.358,
+  "sql_statements": 2065,
+  "background_sql_statements": 1091,
+  "api_sql_statements": 974,
+  "db_peak_connections": 15,
+  "db_hold_p95_ms": 15.111,
+  "tasks": [
+    "failed",
+    "failed",
+    "failed"
+  ]
+}
