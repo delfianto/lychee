@@ -120,7 +120,7 @@ tag(id slug, name, group[genre|theme|content|format|content_rating|demographic],
 tag_alias(id slug, name, tag_id→tag)
 series_tag(series_id→series, tag_id→tag)         # series-level only, no book_tag
 
-collection(id, name, description, provider, provider_list_id)
+collection(id, name, kind[manga|comic|gallery], description, provider, provider_list_id)
 collection_series(collection_id→collection, series_id→series, position)
 
 reading_progress(id, chapter_id→chapter UNIQUE, series_id→series,
@@ -143,3 +143,27 @@ reorganizing files on disk doesn't lose progress or metadata. Splitting
 `Book`/`Chapter` keeps "physical container" and "reading unit" independent,
 so multi-chapter archives are a future data-population problem, not a future
 schema migration.
+
+
+## Typed lists and browse ordering
+
+Collections persist their content kind, including when empty. New lists select
+Manga, Comic, or Gallery; MangaDex lists are Manga. The API rejects cross-kind
+additions, and the add-to-list menu shows compatible editable lists. Scanning an
+artist folder only reuses a Gallery collection of that name. Migration
+`a5c731d9e204` infers existing types from members (empty lists default to Manga)
+and preserves mixed legacy memberships. Mixed legacy lists cannot accept new
+members; removing mismatched members converts them to the remaining kind.
+
+List previews use one full-frame image, two side-by-side images, one large plus
+two stacked images, or four equal tiles; zero members show an icon. Cover URLs
+use the same versioned 640px cache as other cards.
+
+Catalog rating order is descending community score with unrated works last and
+a stable ID tie-breaker. MangaDex followed-manga metadata fetches community
+statistics in batches; unavailable statistics preserve an existing score.
+`recentlyUpdated` uses the newest cached MangaDex chapter publication date
+(including downloaded chapter source dates), then latest local chapter creation,
+then catalog creation if no chapters exist. Local metadata edits and account
+sync timestamps do not move titles in this order. The timestamp used in the
+keyset cursor is the same expression used to order the query.

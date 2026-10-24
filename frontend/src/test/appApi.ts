@@ -379,7 +379,12 @@ export function useAppApi() {
       }
       if (path === "/api/collections") {
         if (method === "POST") {
-          const created: Collection = { id: "new-list", name: String(body.name), seriesIds: [] };
+          const created: Collection = {
+            id: "new-list",
+            name: String(body.name),
+            kind: (body.kind ?? "manga") as Collection["kind"],
+            seriesIds: [],
+          };
           db.collections.push(created);
           return json(created);
         }

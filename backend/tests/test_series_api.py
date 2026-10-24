@@ -324,3 +324,76 @@ def test_library_filter_scopes_gallery_cursor_pages(
     assert [s["title"] for s in page["items"]] == ["C"]
     assert page["nextCursor"] is None
     assert client.get("/api/series", params={"libraryId": "missing"}).json()["items"] == []
+
+
+def test_rating_sort_is_highest_first_across_ties_and_cursors(
+    client: TestClient, db_session: Session
+) -> None:
+    for index, score in enumerate([None, 3.2, 9.8, 0.0, 9.8]):
+        make_series(db_session, title=f"Rated {index}", rating=score)
+    db_session.commit()
+    ratings = []
+    cursor = None
+    while True:
+        params = {"sort": "rating", "limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        page = client.get("/api/series", params=params).json()
+        ratings.extend(s["rating"] for s in page["items"])
+        cursor = page["nextCursor"]
+        if not cursor:
+            break
+    assert ratings == [9.8, 9.8, 3.2, 0.0, None]
+
+
+def test_recently_updated_uses_source_chapters_then_local_chapter_creation(
+    client: TestClient, db_session: Session
+) -> None:
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+    from src.catalog.models import Chapter, Series
+    from src.catalog.remote_chapters import upsert_provider_chapters
+    from src.downloads.provider import RemoteChapter
+
+    old = make_series(db_session, title="Old source", chapter_count=1)
+    new = make_series(db_session, title="New source", chapter_count=1)
+    local = make_series(db_session, title="Local release", chapter_count=1)
+    no_chapters = make_series(db_session, title="No chapters", chapter_count=0)
+    for series in [old, new, local, no_chapters]:
+        series.created_at = datetime(2020, 1, 1, tzinfo=UTC)
+    for series in [old, new]:
+        series.provider = "mangadex"
+        series.provider_series_id = series.id
+    for series, date in [(old, "2021-01-01T00:00:00+00:00"), (new, "2024-01-01T00:00:00+00:00")]:
+        upsert_provider_chapters(
+            db_session,
+            series,
+            [RemoteChapter("remote-" + series.id, "1", None, None, "en", published_at=date)],
+        )
+        chapter = db_session.scalar(select(Chapter).where(Chapter.series_id == series.id))
+        assert chapter is not None
+        chapter.created_at = datetime(
+            2026, 1, 1, tzinfo=UTC
+        )  # downloading an old release cannot make it new
+    chapter = db_session.scalar(select(Chapter).where(Chapter.series_id == local.id))
+    assert chapter is not None
+    chapter.created_at = datetime(2023, 1, 1, tzinfo=UTC)
+    db_session.commit()
+    # Local metadata edits invert the order, but must not affect content chronology.
+    old.title = "Old source (edited)"
+    db_session.commit()
+    ids = []
+    cursor = None
+    while True:
+        params = {"sort": "recentlyUpdated", "limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        page = client.get("/api/series", params=params).json()
+        ids.extend(s["id"] for s in page["items"])
+        cursor = page["nextCursor"]
+        if not cursor:
+            break
+    assert ids == [new.id, local.id, old.id, no_chapters.id]
+    db_session.expire_all()
+    assert db_session.get(Series, old.id) is not None

@@ -422,7 +422,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 </button>
 
                 <!-- Add to list -->
-                <AddToListMenu :series-id="series.id" />
+                <AddToListMenu :series-id="series.id" :series-kind="series.kind" />
 
                 <!-- Edit metadata -->
                 <button class="btn btn-sm gap-2" @click="editOpen = true">
@@ -511,6 +511,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             :related="related"
             :art-covers="artCovers"
             :series-id="series.id"
+            :series-kind="series.kind"
             :matched="isMatched"
             :synced="chaptersSynced"
             :availability="availability ?? undefined"
@@ -531,6 +532,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
       <MatchSeriesModal
         v-if="matchOpen && series"
         :series-id="series.id"
+        :series-kind="series.kind"
         :initial-query="series.title"
         @close="matchOpen = false"
         @matched="onMatched"

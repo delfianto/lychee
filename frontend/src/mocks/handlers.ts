@@ -951,7 +951,7 @@ export const handlers = [
       name: body.name,
       description: body.description ?? null,
       seriesIds: [],
-      kind: null,
+      kind: body.kind ?? "manga",
     };
     collectionsDb.push(created);
     await delay(150);
@@ -996,8 +996,11 @@ export const handlers = [
     const body = (await request.json()) as components["schemas"]["CollectionSeriesAdd"];
     if (collection.editable === false)
       return apiError(403, "read_only", "This MangaDex list is read-only.");
+    const series = seriesById(body.seriesId);
+    if (!series) return apiError(404, "not_found", "Series not found");
+    if (series.kind !== collection.kind)
+      return apiError(400, "bad_request", "List type does not match this work");
     if (!collection.seriesIds.includes(body.seriesId)) collection.seriesIds.push(body.seriesId);
-    collection.kind = kindFor(collection.seriesIds);
     await delay(100);
     return HttpResponse.json(collection);
   }),
@@ -1008,7 +1011,7 @@ export const handlers = [
     if (collection.editable === false)
       return apiError(403, "read_only", "This MangaDex list is read-only.");
     collection.seriesIds = collection.seriesIds.filter((id) => id !== params.series_id);
-    collection.kind = kindFor(collection.seriesIds);
+    if (collection.kind === "mixed") collection.kind = kindFor(collection.seriesIds) ?? "manga";
     await delay(100);
     return new HttpResponse(null, { status: 204 });
   }),

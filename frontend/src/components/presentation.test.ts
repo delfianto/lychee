@@ -171,7 +171,7 @@ it("toggles list membership without navigating the parent card and handles no li
   wrapper.unmount();
   api.db.collections = [];
   const empty = await renderView(AddToListMenu, { props: { seriesId: "s1" } });
-  expect(empty.wrapper.text()).toContain("No lists yet");
+  expect(empty.wrapper.text()).toContain("No Manga lists yet");
 });
 
 it("shows live task badges and toast variants, then returns to idle", async () => {
@@ -196,4 +196,22 @@ it("shows live task badges and toast variants, then returns to idle", async () =
   expect(toasts.wrapper.text()).toContain("Success");
   expect(toasts.wrapper.text()).toContain("Info");
   expect(toasts.wrapper.text()).toContain("Error");
+});
+
+it("offers only matching list types while allowing removal from a legacy mixed list", async () => {
+  api.db.collections = [
+    { id: "m", name: "Manga picks", kind: "manga", seriesIds: [] },
+    { id: "g", name: "Gallery picks", kind: "gallery", seriesIds: [] },
+    { id: "c", name: "Comic picks", kind: "comic", seriesIds: [] },
+    { id: "legacy", name: "Legacy", kind: "mixed", seriesIds: ["g1"] },
+    { id: "readonly", name: "Followed gallery", kind: "gallery", editable: false, seriesIds: [] },
+  ];
+  const { wrapper } = await renderView(AddToListMenu, {
+    props: { seriesId: "g1", seriesKind: "gallery" },
+  });
+  expect(wrapper.text()).toContain("Gallery picks");
+  expect(wrapper.text()).toContain("Legacy");
+  expect(wrapper.text()).not.toContain("Manga picks");
+  expect(wrapper.text()).not.toContain("Comic picks");
+  expect(wrapper.text()).not.toContain("Followed gallery");
 });

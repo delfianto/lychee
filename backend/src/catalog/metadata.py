@@ -57,7 +57,7 @@ def apply_metadata(
             series.demographic = resolved
     if unlocked("origin_country") and meta.original_language:
         series.origin_country = _LANG_COUNTRY.get(meta.original_language.lower())
-    if unlocked("rating"):
+    if unlocked("rating") and meta.community_rating is not None:
         series.rating = meta.community_rating
     if unlocked("total_chapters"):
         series.total_chapters = meta.total_chapters

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Layers, Plus, Trash2 } from "@lucide/vue";
+import { Plus, Trash2 } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
 import { type ListsTab, useListsDefaultTab } from "../lib/density";
+import CollectionCover from "../components/CollectionCover.vue";
+import { mediaKindLabel } from "../lib/display";
 import { toast } from "../lib/toast";
 import { useCollections } from "../stores/collections";
 import MangaDexListImport from "../components/MangaDexListImport.vue";
@@ -17,6 +19,14 @@ const newName = ref("");
 const location = ref("local");
 const visibility = ref<"public" | "private">("private");
 const busy = ref(false);
+const newKind = ref<"manga" | "comic" | "gallery">("manga");
+watch(location, (value) => {
+  if (value === "mangadex") newKind.value = "manga";
+});
+function toggleCreate(): void {
+  if (!creating.value) newKind.value = activeTab.value === "all" ? "manga" : activeTab.value;
+  creating.value = !creating.value;
+}
 
 // --- Kind tabs (mirrors LibraryView's shelf-status tabs) -----------------
 const { listsDefaultTab } = useListsDefaultTab();
@@ -52,18 +62,16 @@ async function create(): Promise<void> {
   if (!name) return;
   busy.value = true;
   try {
-    await collections.createList(
-      name,
-      location.value === "mangadex"
-        ? { provider: "mangadex", visibility: visibility.value }
-        : undefined,
-    );
+    await collections.createList(name, {
+      kind: newKind.value,
+      ...(location.value === "mangadex"
+        ? { provider: "mangadex" as const, visibility: visibility.value }
+        : {}),
+    });
     toast(`Created “${name}”`);
     newName.value = "";
     creating.value = false;
-    // A brand-new list has no series yet, so it has no kind — jump to "All" so it
-    // doesn't silently vanish from whichever kind tab was active.
-    activeTab.value = "all";
+    activeTab.value = newKind.value;
   } catch (e) {
     toast(e instanceof Error ? e.message : "Couldn't create list", "error");
   } finally {
@@ -77,9 +85,6 @@ async function removeList(id: string) {
     toast(e instanceof Error ? e.message : "Couldn't delete list", "error");
   }
 }
-function covers(seriesIds: string[]): string[] {
-  return seriesIds.slice(0, 4).map((id) => `/api/series/${id}/cover`);
-}
 </script>
 
 <template>
@@ -89,7 +94,7 @@ function covers(seriesIds: string[]): string[] {
         <h1 class="text-3xl font-bold">Lists</h1>
         <p class="text-sm text-base-content/60">{{ visibleLists.length }} lists</p>
       </div>
-      <button class="btn btn-primary btn-sm gap-1.5" @click="creating = !creating">
+      <button class="btn btn-primary btn-sm gap-1.5" @click="toggleCreate">
         <Plus class="size-4" />New list
       </button>
     </div>
@@ -123,6 +128,16 @@ function covers(seriesIds: string[]): string[] {
         @keyup.enter="create"
       />
       <select
+        v-model="newKind"
+        aria-label="List type"
+        class="select select-bordered select-sm"
+        :disabled="location === 'mangadex'"
+      >
+        <option value="manga">Manga</option>
+        <option value="comic">Comic</option>
+        <option value="gallery">Gallery</option>
+      </select>
+      <select
         v-model="location"
         class="select select-bordered select-sm"
         aria-label="List location"
@@ -152,29 +167,19 @@ function covers(seriesIds: string[]): string[] {
       No {{ activeTab === "all" ? "" : `${activeTabLabel} ` }}lists yet.
     </div>
 
-    <div v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <div
+      v-else
+      class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:gallery-columns"
+    >
       <div v-for="l in visibleLists" :key="l.id" class="group relative">
         <RouterLink
           :to="`/lists/${l.id}`"
           class="block overflow-hidden rounded-box surface-border bg-base-100 transition hover:shadow-md"
         >
-          <div class="grid aspect-video grid-cols-2 grid-rows-2 gap-0.5 bg-base-300">
-            <img
-              v-for="(c, i) in covers(l.seriesIds)"
-              :key="i"
-              :src="c"
-              alt=""
-              class="h-full w-full object-cover"
-            />
-            <div
-              v-if="!l.seriesIds.length"
-              class="col-span-2 row-span-2 flex items-center justify-center text-base-content/30"
-            >
-              <Layers class="size-8" />
-            </div>
-          </div>
+          <CollectionCover :series-ids="l.seriesIds" />
           <div class="p-3">
             <h3 class="truncate font-semibold">{{ l.name }}</h3>
+            <span class="badge badge-ghost badge-xs">{{ mediaKindLabel[l.kind ?? "manga"] }}</span>
             <span v-if="l.provider === 'mangadex'" class="badge badge-outline badge-xs"
               >MangaDex · {{ l.owned ? "Owned" : l.followed ? "Followed" : "Imported" }} ·
               {{ l.visibility }}</span

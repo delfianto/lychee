@@ -142,6 +142,6 @@ export interface Collection {
   name: string;
   description?: string;
   seriesIds: string[];
-  /** Shared kind of every member series; "mixed" if they differ, undefined if empty. */
+  /** Persistent list type; mixed is retained only for existing legacy lists. */
   kind?: "manga" | "comic" | "gallery" | "mixed";
 }

@@ -484,9 +484,11 @@ def _credit_artist(session: Session, series: Series, artist: str) -> None:
     if has_credit is None:
         session.add(SeriesCredit(series_id=series.id, name=artist, role="artist"))
 
-    collection = session.scalar(select(Collection).where(Collection.name == artist))
+    collection = session.scalar(
+        select(Collection).where(Collection.name == artist, Collection.kind == "gallery")
+    )
     if collection is None:
-        collection = Collection(name=artist)
+        collection = Collection(name=artist, kind="gallery")
         session.add(collection)
         session.flush()
     member = session.scalar(

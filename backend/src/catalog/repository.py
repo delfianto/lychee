@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from src.catalog.models import Book, Chapter, Series, SeriesCredit
+from src.catalog.models import Book, Chapter, ProviderChapter, Series, SeriesCredit
 from src.catalog.search_index import search_ids
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
@@ -55,6 +55,7 @@ class SeriesRow:
     chapter_count: int
     unread_count: int
     last_read: float | None
+    content_updated_at: datetime
 
 
 @dataclass(slots=True)
@@ -62,6 +63,7 @@ class _Aggregates:
     chapter_count: ColumnElement[int]
     unread_count: ColumnElement[int]
     last_read: ColumnElement[Any]
+    content_updated_at: ColumnElement[Any]
 
 
 def _aggregates() -> _Aggregates:
@@ -90,7 +92,37 @@ def _aggregates() -> _Aggregates:
         .correlate(Series)
         .scalar_subquery()
     )
-    return _Aggregates(chapter_count, unread_count, last_read)
+    local_update = (
+        select(func.max(Chapter.created_at))
+        .where(Chapter.series_id == Series.id)
+        .correlate(Series)
+        .scalar_subquery()
+    )
+    source_update = (
+        select(func.max(Chapter.source_uploaded_at))
+        .where(Chapter.series_id == Series.id)
+        .correlate(Series)
+        .scalar_subquery()
+    )
+    provider_update = (
+        select(func.max(ProviderChapter.published_at))
+        .where(ProviderChapter.series_id == Series.id, ProviderChapter.provider == Series.provider)
+        .correlate(Series)
+        .scalar_subquery()
+    )
+    remote_update = case(
+        (source_update > provider_update, source_update),
+        else_=func.coalesce(provider_update, source_update),
+    )
+    # Source publication is the reading timeline, not when we edited or synced a row.
+    content_updated_at = case(
+        (
+            Series.provider == "mangadex",
+            func.coalesce(remote_update, local_update, Series.created_at),
+        ),
+        else_=func.coalesce(local_update, Series.created_at),
+    )
+    return _Aggregates(chapter_count, unread_count, last_read, content_updated_at)
 
 
 def _sort_expr(sort: str, agg: _Aggregates) -> tuple[Any, bool]:
@@ -102,7 +134,7 @@ def _sort_expr(sort: str, agg: _Aggregates) -> tuple[Any, bool]:
     if sort == "title":
         return Series.sort_title, False
     if sort == "recentlyUpdated":
-        return Series.updated_at, True
+        return agg.content_updated_at, True
     if sort == "rating":
         return func.coalesce(Series.rating, -1.0), True
     if sort == "unread":
@@ -115,7 +147,7 @@ def _sort_value(sort: str, row: SeriesRow) -> object:
     if sort == "title":
         return row.series.sort_title
     if sort == "recentlyUpdated":
-        return row.series.updated_at.isoformat()
+        return row.content_updated_at.isoformat()
     if sort == "rating":
         return row.series.rating if row.series.rating is not None else -1.0
     if sort == "unread":
@@ -202,6 +234,7 @@ def list_series(
             agg.chapter_count.label("chapter_count"),
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
         )
         .where(*_conditions(filters, agg))
         .options(selectinload(Series.tags), selectinload(Series.credits))
@@ -227,7 +260,13 @@ def list_series(
     ).limit(limit + 1)
 
     rows = [
-        SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        SeriesRow(
+            series=r[0],
+            chapter_count=r[1],
+            unread_count=r[2],
+            last_read=r[3],
+            content_updated_at=r[4],
+        )
         for r in session.execute(stmt).all()
     ]
 
@@ -248,6 +287,7 @@ def get_series(session: Session, series_id: str) -> SeriesRow | None:
             agg.chapter_count.label("chapter_count"),
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
         )
         .where(Series.id == series_id)
         .options(selectinload(Series.tags), selectinload(Series.credits))
@@ -255,7 +295,13 @@ def get_series(session: Session, series_id: str) -> SeriesRow | None:
     row = session.execute(stmt).first()
     if row is None:
         return None
-    return SeriesRow(series=row[0], chapter_count=row[1], unread_count=row[2], last_read=row[3])
+    return SeriesRow(
+        series=row[0],
+        chapter_count=row[1],
+        unread_count=row[2],
+        last_read=row[3],
+        content_updated_at=row[4],
+    )
 
 
 def get_series_rows(session: Session, series_ids: list[str]) -> dict[str, SeriesRow]:
@@ -269,12 +315,19 @@ def get_series_rows(session: Session, series_ids: list[str]) -> dict[str, Series
             agg.chapter_count.label("chapter_count"),
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
         )
         .where(Series.id.in_(series_ids))
         .options(selectinload(Series.tags), selectinload(Series.credits))
     )
     return {
-        r[0].id: SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        r[0].id: SeriesRow(
+            series=r[0],
+            chapter_count=r[1],
+            unread_count=r[2],
+            last_read=r[3],
+            content_updated_at=r[4],
+        )
         for r in session.execute(stmt).all()
     }
 
@@ -397,6 +450,7 @@ def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
             agg.chapter_count.label("chapter_count"),
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
         )
         .where(exists().where(ReadingProgress.series_id == Series.id), agg.unread_count > 0)
         .options(selectinload(Series.tags), selectinload(Series.credits))
@@ -404,7 +458,13 @@ def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
         .limit(limit)
     )
     return [
-        SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        SeriesRow(
+            series=r[0],
+            chapter_count=r[1],
+            unread_count=r[2],
+            last_read=r[3],
+            content_updated_at=r[4],
+        )
         for r in session.execute(stmt).all()
     ]
 
@@ -425,6 +485,7 @@ def recently_added(
             agg.chapter_count.label("chapter_count"),
             agg.unread_count.label("unread_count"),
             agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
         )
         .where(Series.kind.in_(kinds))
         .options(selectinload(Series.tags), selectinload(Series.credits))
@@ -432,7 +493,13 @@ def recently_added(
         .limit(limit)
     )
     return [
-        SeriesRow(series=r[0], chapter_count=r[1], unread_count=r[2], last_read=r[3])
+        SeriesRow(
+            series=r[0],
+            chapter_count=r[1],
+            unread_count=r[2],
+            last_read=r[3],
+            content_updated_at=r[4],
+        )
         for r in session.execute(stmt).all()
     ]
 

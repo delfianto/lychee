@@ -225,3 +225,46 @@ def test_fetch_pages_to_streams_source_images_into_library_workspace(tmp_path) -
     assert len(paths) == 2
     assert [path.read_bytes() for path in paths] == [b"PAGE", b"PAGE"]
     assert all(path.parent == tmp_path for path in paths)
+
+
+def test_follow_metadata_fetches_community_ratings_in_one_batch() -> None:
+    statistics_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user/follows/manga":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": mid, "attributes": {"title": {"en": mid}}} for mid in ["m1", "m2"]
+                    ],
+                    "total": 2,
+                },
+            )
+        assert request.url.path == "/statistics/manga"
+        statistics_requests.append(request.url.params.get_list("manga[]"))
+        return httpx.Response(
+            200,
+            json={
+                "statistics": {
+                    "m1": {"rating": {"average": 9.5}},
+                    "m2": {"rating": {"average": 7.2}},
+                }
+            },
+        )
+
+    follows = _provider_for(handler).list_follows()
+    assert [m.community_rating for m in follows] == [9.5, 7.2]
+    assert statistics_requests == [["m1", "m2"]]
+
+
+def test_follow_metadata_survives_unavailable_statistics() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user/follows/manga":
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "m1", "attributes": {"title": {"en": "Title"}}}], "total": 1},
+            )
+        return httpx.Response(404)
+
+    assert _provider_for(handler).list_follows()[0].community_rating is None
