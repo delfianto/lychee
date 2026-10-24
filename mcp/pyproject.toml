@@ -1,6 +1,6 @@
 [project]
 name = "lychee-mcp"
-version = "0.1.0b6"
+version = "0.1.0b7"
 description = "lychee — MCP server for agent-assisted library operations (notes/plan.md PART J)"
 requires-python = ">=3.14"
 

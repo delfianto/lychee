@@ -1,5 +1,6 @@
 """Tests for the series grid + detail API."""
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from src.downloads.provider import RemoteChapter, SeriesMetadata, register_provider
@@ -397,3 +398,28 @@ def test_recently_updated_uses_source_chapters_then_local_chapter_creation(
     assert ids == [new.id, local.id, old.id, no_chapters.id]
     db_session.expire_all()
     assert db_session.get(Series, old.id) is not None
+
+
+@pytest.mark.parametrize("kind", ["manga", "comic", "gallery"])
+def test_completed_favorites_appear_without_a_shelf_filter(
+    client: TestClient, db_session: Session, kind: str
+) -> None:
+    series = make_series(
+        db_session, title="Completed favorite", kind=kind, library_status="completed"
+    )
+    make_series(db_session, title="Not a favorite", kind=kind)
+    db_session.commit()
+    assert (
+        client.patch(f"/api/series/{series.id}", json={"favorite": True}).json()["favorite"] is True
+    )
+    assert [
+        row["id"] for row in client.get("/api/series", params={"favorite": True}).json()["items"]
+    ] == [series.id]
+    assert [
+        row["id"]
+        for row in client.get("/api/series", params={"kind": kind, "favorite": True}).json()[
+            "items"
+        ]
+    ] == [series.id]
+    assert client.patch(f"/api/series/{series.id}", json={"favorite": False}).status_code == 200
+    assert client.get("/api/series", params={"favorite": True}).json()["items"] == []

@@ -99,7 +99,9 @@
       the work detail page alongside the reader button.
 - [x] **Library** (`LibraryView`) — 3 density modes, shelf tabs, search + `FilterPanel` (tags from
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
-      cursor-pagination via `/api/series`.
+      cursor-pagination via `/api/series`. Grids wait for pending detail saves; per-work edits are
+      serialized so immediate Favorites navigation cannot read the pre-save state (manga/comics/gallery).
+      Cached library screens refresh on return after successful edits, retaining their filters.
 - [x] **Gallery** — `GalleryView` + `GalleryDetail` + `Lightbox`, from `/api/series?kind=gallery` and
       `/api/series/{id}/images`. Compact library/artist dropdowns share the toolbar; text search also matches characters and series/franchise names. Library selection defaults to
       all galleries, followed by alphabetically sorted gallery roots; choosing a root scopes every

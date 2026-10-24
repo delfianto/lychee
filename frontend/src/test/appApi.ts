@@ -344,7 +344,12 @@ export function useAppApi() {
         const kindParam = url.searchParams.get("kind");
         const kinds = kindParam ? kindParam.split(",").filter(Boolean) : null;
         return json({
-          items: db.series.filter((s) => !kinds || kinds.includes(s.kind ?? "manga")),
+          items: db.series.filter(
+            (s) =>
+              (!kinds || kinds.includes(s.kind ?? "manga")) &&
+              (!url.searchParams.has("favorite") ||
+                s.favorite === (url.searchParams.get("favorite") === "true")),
+          ),
           nextCursor: null,
         });
       }
