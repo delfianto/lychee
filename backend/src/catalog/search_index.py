@@ -169,6 +169,9 @@ def sync_turso_search(connection: Connection) -> None:
         connection.execute(text("DELETE FROM series_fts WHERE series_id=:sid"), {"sid": sid})
         connection.execute(text(SEARCH_INDEX_STATEMENTS[-1] + " WHERE s.id=:sid"), {"sid": sid})
         connection.execute(text("DELETE FROM series_fts_dirty WHERE series_id=:sid"), {"sid": sid})
+    # The top-level projection writes above are deliberately conservative raw
+    # SQL and mark the connection too. They do not dirty source metadata again.
+    reset_turso_search(connection)
 
 
 def drop_search_index(connection: Connection) -> None:

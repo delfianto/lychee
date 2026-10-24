@@ -52,6 +52,14 @@ jobs:
       - name: Tests (pytest)
         run: uv run pytest --cov=src --cov-report=term:skip-covered --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=json:coverage/coverage.json -q
 
+      - name: Native Turso migrations in sync
+        env:
+          DATABASE_URL: sqlite+turso:///./ci-turso.db
+        run: uv run alembic upgrade head && uv run alembic check
+
+      - name: Tests on native Turso
+        run: uv run pytest -q --database-driver=turso
+
       - name: Upload coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

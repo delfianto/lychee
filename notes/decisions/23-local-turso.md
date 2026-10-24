@@ -68,7 +68,8 @@ Quiesce writers and checkpoint successfully before taking a single-file backup.
 backend suite with native Turso fixtures. Additional tests cover overlapping
 independent writes, fresh/idempotent migrations, rollback-visible search, safe
 conversion, reopen and original-file preservation. `just db-check` works with an
-explicit DATABASE_URL for either engine. Benchmarks are offline and use temporary
+explicit DATABASE_URL for either engine. CI also runs native migration/drift checks
+and the full native test suite. Benchmarks are offline and use temporary
 databases/media; existing production deployments are not switched by this change.
 
 MVCC allows disjoint writers, but writes to the same data can conflict. The engine

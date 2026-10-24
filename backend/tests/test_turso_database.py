@@ -138,7 +138,7 @@ def test_progress_commits_skip_native_search_queries(tmp_path: Path) -> None:
             series = make_series(session, title="Progress Test")
             task = DownloadTask(series_id=series.id, chapter_label="Ch. 1")
             session.add(task)
-            session.commit()
+            session.flush()
             task_id = task.id
             session.commit()
         statements: list[str] = []

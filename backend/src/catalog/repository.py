@@ -235,18 +235,10 @@ def list_series(
 ) -> tuple[list[SeriesRow], str | None]:
     """Return one page of grid rows and the cursor for the next page (or None)."""
     agg = _aggregates()
-    stmt = (
-        select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
-        )
-        .where(*_conditions(filters, agg))
-        .options(selectinload(Series.tags), selectinload(Series.credits))
-    )
-
+    # Bound the candidate page before evaluating the display-only chapter and
+    # progress aggregates. Some engines otherwise evaluate correlated subqueries
+    # for the entire matching catalog before applying ORDER BY/LIMIT.
+    page = select(Series.id).where(*_conditions(filters, agg))
     order_expr, descending = _sort_expr(filters.sort, agg)
     if cursor is not None:
         data = decode_cursor(cursor)
@@ -259,12 +251,25 @@ def list_series(
             if descending
             else or_(order_expr > value, and_(order_expr == value, Series.id > last_id))
         )
-        stmt = stmt.where(after)
+        page = page.where(after)
 
-    stmt = stmt.order_by(
+    ordering = (
         order_expr.desc() if descending else order_expr.asc(),
         Series.id.desc() if descending else Series.id.asc(),
-    ).limit(limit + 1)
+    )
+    candidates = page.order_by(*ordering).limit(limit + 1).subquery()
+    stmt = (
+        select(
+            Series,
+            agg.chapter_count.label("chapter_count"),
+            agg.unread_count.label("unread_count"),
+            agg.last_read.label("last_read"),
+            agg.content_updated_at.label("content_updated_at"),
+        )
+        .join(candidates, Series.id == candidates.c.id)
+        .order_by(*ordering)
+        .options(selectinload(Series.tags), selectinload(Series.credits))
+    )
 
     rows = [
         SeriesRow(
