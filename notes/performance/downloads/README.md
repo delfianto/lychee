@@ -67,3 +67,17 @@ including 31,043 provider chapters, and a new process reopened the converted fil
 with all 1,671 series indexed, MVCC enabled and integrity check `ok`. Alembic's
 native schema drift check reports no changes. No source library data is included
 in this repository.
+
+## Turso progress-write tuning
+
+`turso-optimized-*.json` skip search queue checks for compiled writes to unrelated
+tables, while retaining them for catalog writes, library cascades and unknown raw
+SQL. Median background SQL falls from 1149 to 617 (46.3%). All chapters and
+operations complete; every API response succeeds. Median wall time is 3.752s,
+63.97 pages/s, API p95 45.4ms and worst request 77.4ms. This reduces database work
+but does **not** demonstrate a throughput or p95 latency improvement.
+
+Per-endpoint timings added here identify the series grid as the remaining Turso
+hotspot: its median is about 40ms while the other two endpoints are around 8–9ms.
+Aggregate timings remain directly comparable with previous runs; the workload
+and request pacing are unchanged.

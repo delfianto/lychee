@@ -104,6 +104,12 @@ provider or tracker accounts; it encrypts their stored credentials.
 For the optional agent interface, see [mcp/AGENTS.md](mcp/AGENTS.md).
 Run `just` or `just --list` to see all development, database, and test commands.
 
+Local Turso/MVCC is also available as an opt-in database engine. Use
+`just db-to-turso SOURCE DESTINATION` to create a verified copy, then configure a
+`sqlite+turso:///...` URL. Read the [conversion and backup instructions](notes/decisions/23-local-turso.md)
+before switching an existing installation. SQLite remains the default; see the
+[download/API benchmark](notes/performance/downloads/README.md) for measured results.
+
 ## Development
 
 | Surface  | Stack                                                                   |

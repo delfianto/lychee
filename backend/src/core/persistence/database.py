@@ -1,8 +1,8 @@
 """Database engine and session.
 
-SQLite by default, opened in WAL mode with sane pragmas (see
-../notes/decisions/04-database-sqlite.md). CRUD is synchronous — the slow,
-I/O-bound work in lychee is media/scan, not DB access.
+SQLite/WAL by default; sqlite+turso URLs select optional local Turso/MVCC.
+See notes/decisions/04-database-sqlite.md and 23-local-turso.md. CRUD uses
+synchronous SQLAlchemy sessions; slow media work must release connections.
 """
 
 from collections.abc import Generator
@@ -46,9 +46,15 @@ def create_database_engine(url: str, *, migrations: bool = False, **options: Any
             cursor.close()
 
     if is_turso:
-        from src.catalog.search_index import sync_turso_search
+        from src.catalog.search_index import (
+            mark_turso_search,
+            reset_turso_search,
+            sync_turso_search,
+        )
 
+        event.listen(instance, "after_cursor_execute", mark_turso_search)
         event.listen(instance, "commit", sync_turso_search)
+        event.listen(instance, "rollback", reset_turso_search)
     return instance
 
 

@@ -1,23 +1,13 @@
-"""SQLite FTS5 full-text search index over series title / alt-titles / authors.
+"""Portable title/alternative/credit search projection.
 
-`series_fts` is a standalone own-content FTS5 virtual table with the **trigram**
-tokenizer, which gives substring + typo-tolerant matching and bm25 ranking. The
-series primary key is a 12-char nanoid (FTS5 rowids are integers), so it is
-stored as an ``UNINDEXED`` column and used to map matches back to catalog rows.
-
-The index is kept in sync entirely by **SQLite triggers** on the source tables
-(`series`, `title_variant`, `series_credit`): every insert/update/delete rebuilds
-the affected series' FTS row by re-aggregating its variants and credits. This
-covers every write path (scanner, provider import, metadata apply, seeding) with
-no application hooks, and the ``EXISTS``-guarded rebuild leaves no orphan row when
-a series is cascade-deleted.
-
-The DDL constants here are the single source of truth: the Alembic migration runs
-them against the real database, and the test harness runs them after
-``create_all`` (which doesn't know about virtual tables or triggers).
+SQLite uses trigger-maintained FTS5 trigrams; optional local Turso uses native
+Tantivy n-grams with a dirty-ID queue refreshed in the same write transaction.
+Both are created/backfilled by Alembic and explicitly by isolated test fixtures.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from sqlalchemy import Connection, String, bindparam, text
 from sqlalchemy.orm import Session
@@ -130,8 +120,42 @@ def create_search_index(connection: Connection) -> None:
     connection.execute(text(statements[-1]))
 
 
+_SEARCH_DIRTY_KEY = "lychee_search_dirty"
+_SEARCH_SOURCE_TABLES = frozenset({"series", "title_variant", "series_credit", "library"})
+
+
+def mark_turso_search(
+    connection: Connection,
+    _cursor: Any,
+    statement: str,
+    _parameters: Any,
+    context: Any,
+    _executemany: bool,
+) -> None:
+    """Skip index work for writes that cannot affect the searchable projection.
+
+    Compiled ORM/Core DML identifies its target table reliably, including library
+    deletes that cascade into series. Treat unstructured SQL conservatively:
+    unknown writes/DDL may fire triggers, so keep the queue check for those.
+    """
+    if context.isinsert or context.isupdate or context.isdelete:
+        compiled_statement = getattr(context.compiled, "statement", None)
+        table = getattr(getattr(compiled_statement, "table", None), "name", None)
+        if table is not None and table not in _SEARCH_SOURCE_TABLES:
+            return
+    elif statement.lstrip().upper().startswith(("SELECT", "PRAGMA", "EXPLAIN")):
+        return
+    connection.info[_SEARCH_DIRTY_KEY] = True
+
+
+def reset_turso_search(connection: Connection) -> None:
+    connection.info.pop(_SEARCH_DIRTY_KEY, None)
+
+
 def sync_turso_search(connection: Connection) -> None:
     """Apply native index updates atomically before a Turso write commits."""
+    if not connection.info.pop(_SEARCH_DIRTY_KEY, False):
+        return
     raw = connection.connection.dbapi_connection
     if not getattr(raw, "in_transaction", False):
         return
