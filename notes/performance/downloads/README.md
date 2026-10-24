@@ -3,10 +3,11 @@
 These are offline synthetic integration benchmarks, not MangaDex/network speed claims.
 The production container and database are never changed by the harness.
 
-Run from `backend/`:
+Run from the repository root:
 
 ```sh
-uv run python scripts/bench_downloads.py --output /tmp/download-benchmark.json
+just bench-downloads --engine sqlite --output /tmp/download-benchmark.json
+just bench-downloads --engine turso --output /tmp/turso-benchmark.json
 ```
 
 Each fresh run seeds 2,000 catalog entries and downloads three series with ten
@@ -50,3 +51,19 @@ operations fail, so their shorter wall times must not be interpreted as higher
 throughput. Optimized successful throughput is about 65 pages/second for this
 synthetic workload. The accelerated timeout limits the baseline latency spikes;
 production was waiting up to 30 seconds instead.
+
+## Initial local Turso stage
+
+`turso-initial-*.json` use pyturso 0.8.3, MVCC/BEGIN CONCURRENT and the same
+workload, worker counts and pool limits. All runs complete 30/30 chapters and all
+three operations, with no API errors. Median wall time is 3.723s (64.46 pages/s),
+API p95 44.9ms, worst API request 82.1ms, and median background SQL 1149.
+This stage still checks the native search dirty queue on every write commit,
+including page progress writes that cannot affect searchable metadata.
+
+The native driver is opt-in, not a production cutover. Conversion was also tested
+on a private 1,671-series SQLite backup: all application table contents matched,
+including 31,043 provider chapters, and a new process reopened the converted file
+with all 1,671 series indexed, MVCC enabled and integrity check `ok`. Alembic's
+native schema drift check reports no changes. No source library data is included
+in this repository.

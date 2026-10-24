@@ -1,6 +1,6 @@
 # 04 — Database: SQLite (WAL) + FTS5 trigram
 
-**Status:** Implemented, with one confirmed production gap — see "Known gap" below.
+**Status:** Implemented. SQLite remains the default; optional local Turso is covered by [23](23-local-turso.md).
 
 ## What this is
 
@@ -68,18 +68,13 @@ SQLite) indexes 3-character sequences instead, giving CJK-capable substring
 matching with no extra runtime dependency (no `pysqlite3-binary` pin needed
 or present).
 
-## Known gap: the FTS5 table is never created outside tests
+## Search index migration
 
-`create_search_index()` (`catalog/search_index.py`) is called from
-`tests/conftest.py` only. It is **not** called from `bootstrap()`
-(`backend/src/bootstrap.py`), not from `seed.py`, and there's no Alembic
-migration creating the virtual table either (`alembic/env.py` only
-*excludes* `series_fts*` from autogenerate diffing — it doesn't create it).
-So on a real deployed instance, `series_fts` likely never exists,
-`fts_available()` returns `False`, and `/api/search` silently falls back to
-`LIKE`-only matching — full-text search works in tests but not in
-production. Worth fixing (wire `create_search_index` into `bootstrap()`) as
-a follow-up; flagged here rather than silently documented as "done."
+Migration `f3a82c65e190` creates and backfills the index on deployed databases.
+Previously only the test harness created it, leaving production on LIKE fallback.
+The same helper now creates either SQLite FTS5 or the native Turso index, based on
+the active driver. Alembic excludes both managed search tables and Turso's internal
+tables from ORM schema drift checks.
 
 ## Why SQLite over Postgres
 

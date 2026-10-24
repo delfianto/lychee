@@ -19,10 +19,12 @@ logger = get_logger(__name__)
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
-def run_migrations() -> None:
+def run_migrations(database_url: str | None = None) -> None:
     """Upgrade the configured database to the latest Alembic revision."""
     config = Config(str(_BACKEND_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
+    if database_url is not None:
+        config.attributes["database_url"] = database_url
     command.upgrade(config, "head")
 
 

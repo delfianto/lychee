@@ -1,8 +1,7 @@
 # 17 — Full-text search tokenizer (FTS5 `trigram`)
 
-**Status:** Implemented in code — but see [04](04-database-sqlite.md)'s
-"Known gap": the FTS5 table is never actually created outside tests, so
-production search silently runs `LIKE`-only today.
+**Status:** Implemented and created by migration `f3a82c65e190` for production.
+Optional local Turso uses a native n-gram index; see [23](23-local-turso.md).
 
 ## Why `trigram`
 
@@ -64,6 +63,6 @@ originally-planned safety pin was never added.
 ## Escape hatches (not built, not needed yet)
 
 A hybrid `unicode61` + `trigram` index (better Latin word-ranking) or
-swapping to Tantivy/Meilisearch behind the same `search_series()`/
-`search_ids()` interface remain options if FTS5 trigram ever proves
-insufficient — neither has been started.
+using an external search service behind the same `search_series()`/
+`search_ids()` interface remain options if FTS5 trigram ever proves insufficient.
+The optional Turso driver already uses its built-in Tantivy index.

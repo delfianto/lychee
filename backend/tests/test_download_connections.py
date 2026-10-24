@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 from src.catalog.models import Chapter
-from src.core.persistence.database import get_db
+from src.core.persistence.database import create_database_engine, get_db
 from src.downloads import downloader, service
 from src.downloads.models import DownloadTask
 from src.downloads.provider import RemoteChapter, register_provider
@@ -58,12 +58,11 @@ def test_waiting_series_release_all_connections_before_admission(
         )
     db_session.commit()
     # The same tiny pool is used by both API and download workers.
-    small = create_engine(
-        db_engine.url,
+    small = create_database_engine(
+        str(db_engine.url),
         pool_size=2,
         max_overflow=0,
         pool_timeout=0.2,
-        connect_args={"check_same_thread": False},
     )
     factory = sessionmaker(bind=small, expire_on_commit=False)
 

@@ -31,6 +31,7 @@ dependencies = [
     # Fast content-hash fingerprints for scan reconcile / restore.
     "xxhash>=3.8.1",
     "pyyaml>=6.0.3",
+    "pyturso==0.8.3",
 ]
 
 [project.optional-dependencies]
