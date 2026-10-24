@@ -423,3 +423,47 @@ def test_completed_favorites_appear_without_a_shelf_filter(
     ] == [series.id]
     assert client.patch(f"/api/series/{series.id}", json={"favorite": False}).status_code == 200
     assert client.get("/api/series", params={"favorite": True}).json()["items"] == []
+
+
+@pytest.mark.parametrize("sort", ["title", "rating", "unread"])
+def test_filtered_cursor_pages_preserve_order_and_counts(
+    client: TestClient, db_session: Session, sort: str
+) -> None:
+    series = [
+        make_series(
+            db_session,
+            title=f"Title {7 - i}",
+            chapter_count=i + 2,
+            unread=i % 3,
+            favorite=bool(i % 2),
+            rating=float(i % 3),
+        )
+        for i in range(8)
+    ]
+    db_session.commit()
+    selected = [(series[i], i) for i in (1, 5, 7)]
+    expected = sorted(
+        selected,
+        key=lambda item: (
+            (item[0].sort_title, item[0].id) if sort == "title" else (item[1] % 3, item[0].id)
+        ),
+        reverse=sort != "title",
+    )
+    cursor = None
+    actual = []
+    for _ in range(8):
+        params = {"sort": sort, "favorite": "true", "readState": "in_progress", "limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        response = client.get("/api/series", params=params)
+        assert response.status_code == 200
+        page = response.json()
+        actual.extend(page["items"])
+        cursor = page["nextCursor"]
+        if cursor is None:
+            break
+    assert cursor is None
+    assert [item["id"] for item in actual] == [work.id for work, _ in expected]
+    for item, (_, index) in zip(actual, expected, strict=True):
+        assert item["chapterCount"] == index + 2
+        assert item["unreadCount"] == index % 3

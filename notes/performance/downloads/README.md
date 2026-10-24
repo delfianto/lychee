@@ -81,3 +81,46 @@ Per-endpoint timings added here identify the series grid as the remaining Turso
 hotspot: its median is about 40ms while the other two endpoints are around 8–9ms.
 Aggregate timings remain directly comparable with previous runs; the workload
 and request pacing are unchanged.
+
+## Final grid query tuning and comparison
+
+The series grid now selects its filtered, ordered candidate page before computing
+display counts and progress. Filters and sort expressions that require aggregates
+still run during candidate selection; display-only aggregates run for the bounded
+page. Both engines use this query. Tests combine favorite/read-state filters,
+keyset pagination, ties, rating/title/unread sorts and per-row chapter counts;
+existing tests cover recently updated publication dates and gallery scoping.
+The native search marker is also cleared after its own projection writes, avoiding
+an unnecessary queue check on the next transaction using that pooled connection.
+Fresh application startup, automatic migration/seeding and HTTP library/grid
+requests were smoke-tested in separate processes with each real DATABASE_URL scheme.
+
+`sqlite-final-*.json` and `turso-final-*.json` alternate engines across three rounds.
+All successful stages complete all 30 chapters and three parent tasks with zero
+API errors. The final code passes 412 tests on each engine; SQLite's full branch
+coverage gate reports 89.91% (85% required). CI now checks native migrations and
+runs the native suite too.
+
+Medians except the worst request; SQL counts include search synchronization.
+
+| Stage | Wall time (s) | Pages/s | API p95 (ms) | Worst request (ms) | Background SQL |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 3.380 | 63.91 | 26.1 | 311.4 | 1091 |
+| sqlite-optimized | 3.679 | 65.24 | 17.6 | 66.6 | 591 |
+| turso-initial | 3.723 | 64.46 | 44.9 | 82.1 | 1149 |
+| turso-optimized | 3.752 | 63.97 | 45.4 | 77.4 | 617 |
+| sqlite-final | 3.627 | 66.17 | 16.4 | 49.5 | 582 |
+| turso-final | 3.766 | 63.73 | 21.2 | 56.5 | 612 |
+
+Baseline wall time/throughput are from failed operations and are **not** a valid
+successful-job speed comparison. Final Turso p95 is about 53% lower than its initial
+integration; its throughput remains similar. Final SQLite is still ahead of Turso
+on this workload, so changing engines is not presented as a performance win.
+The important reliability change is eliminating connections held by waiting workers.
+These short shared-host samples cannot establish small percentage differences in
+media throughput; they do expose errors, pool saturation and large query costs.
+
+Local staged commits: `11e243f` benchmark baseline, `e7fadda` SQLite connection fix,
+`3b69042` native engine/conversion, `b118c0e` progress-write tuning, followed by the
+candidate-page optimization in the commit containing these final samples.
+No production cutover, image rebuild or version change is performed by this work.

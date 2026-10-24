@@ -1,0 +1,66 @@
+{
+  "python": "3.14.8",
+  "cpu_threads": 32,
+  "config": {
+    "series": 3,
+    "chapters": 10,
+    "pages": 8,
+    "catalog": 2000,
+    "width": 640,
+    "height": 960,
+    "conversion": 16,
+    "thumbnails": 8,
+    "engine": "sqlite",
+    "network_ms": 5,
+    "pool_timeout": 0.3,
+    "seconds": 15,
+    "output": "../notes/performance/downloads/sqlite-final-2.json"
+  },
+  "submitted_http": [
+    202,
+    202,
+    202
+  ],
+  "wall_s": 3.627,
+  "chapter_states": {
+    "done": 30
+  },
+  "completed_pages_per_s": 66.17,
+  "api_requests": 393,
+  "api_http": {
+    "200": 393
+  },
+  "api_p50_ms": 6.27,
+  "api_p95_ms": 16.412,
+  "api_max_ms": 47.102,
+  "api_endpoints": {
+    "/api/series?kind=manga&limit=24": {
+      "requests": 124,
+      "p50_ms": 6.994,
+      "p95_ms": 17.793,
+      "max_ms": 47.102
+    },
+    "/api/downloads": {
+      "requests": 126,
+      "p50_ms": 6.973,
+      "p95_ms": 18.288,
+      "max_ms": 43.362
+    },
+    "/api/libraries": {
+      "requests": 143,
+      "p50_ms": 4.108,
+      "p95_ms": 10.716,
+      "max_ms": 42.996
+    }
+  },
+  "sql_statements": 1748,
+  "background_sql_statements": 582,
+  "api_sql_statements": 1166,
+  "db_peak_connections": 5,
+  "db_hold_p95_ms": 10.181,
+  "tasks": [
+    "done",
+    "done",
+    "done"
+  ]
+}

@@ -42,6 +42,8 @@
 - [x] Optional local Turso/MVCC driver, native search, full backend suite on both engines,
       and verified conversion into a new database file. SQLite remains the default;
       existing deployments are not switched automatically. See [ADR 23](decisions/23-local-turso.md).
+- [x] Tune native progress commits and bound grid candidates before display aggregates;
+      three final benchmark runs per engine, 412 backend tests on each, native CI gate.
 
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
