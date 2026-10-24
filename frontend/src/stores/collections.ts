@@ -49,10 +49,19 @@ export const useCollections = defineStore("collections", () => {
 
   async function createList(
     name: string,
-    options?: { provider: "mangadex"; visibility: "public" | "private" },
+    options?: {
+      kind?: "manga" | "comic" | "gallery";
+      provider?: "mangadex";
+      visibility?: "public" | "private";
+    },
   ): Promise<Collection | undefined> {
     const { data, error } = await api.POST("/api/collections", {
-      body: { name: name.trim() || "Untitled list", visibility: "private", ...options },
+      body: {
+        name: name.trim() || "Untitled list",
+        kind: "manga",
+        visibility: "private",
+        ...options,
+      },
     });
     if (error) throw new Error(apiErrorMessage(error, "Couldn't create list"));
     if (!data) return undefined;

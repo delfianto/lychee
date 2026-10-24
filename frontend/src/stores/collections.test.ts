@@ -107,12 +107,12 @@ describe("collection management", () => {
       kind: undefined,
     });
     expect(api.POST).toHaveBeenLastCalledWith("/api/collections", {
-      body: { name: "Weekend", visibility: "private" },
+      body: { name: "Weekend", kind: "manga", visibility: "private" },
     });
     expect(store.getList("new")?.id).toBe("new");
     expect(await store.createList("  ")).toBeUndefined();
     expect(api.POST).toHaveBeenLastCalledWith("/api/collections", {
-      body: { name: "Untitled list", visibility: "private" },
+      body: { name: "Untitled list", kind: "manga", visibility: "private" },
     });
     expect(store.lists).toHaveLength(1);
   });

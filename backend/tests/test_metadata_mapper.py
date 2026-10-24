@@ -109,3 +109,11 @@ def test_apply_metadata_credits_idempotent(db_session: Session) -> None:
     roles = {(c.name, c.role) for c in series.credits}
     assert ("A", "author") in roles
     assert ("A", "artist") in roles
+
+
+def test_missing_provider_statistics_preserve_existing_community_rating(
+    db_session: Session,
+) -> None:
+    series = make_series(db_session, title="Rated", rating=9.3)
+    apply_metadata(db_session, series, SeriesMetadata(provider_series_id="md", title="Rated"))
+    assert series.rating == 9.3

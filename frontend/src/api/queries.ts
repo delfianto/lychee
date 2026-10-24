@@ -459,6 +459,7 @@ export async function fetchCollection(
   return {
     ...data,
     description: data.description ?? undefined,
+    kind: data.kind as import("../types").Collection["kind"],
     seriesIds: data.series.map((s) => s.id),
     series: data.series.map(toSeries),
   };

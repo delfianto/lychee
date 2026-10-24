@@ -64,6 +64,7 @@ const blurb = computed(() => synopsisOnly(props.series.description));
             <div class="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
               <AddToListMenu
                 :series-id="series.id"
+                :series-kind="series.kind"
                 trigger-class="btn btn-ghost btn-xs btn-square"
               />
             </div>

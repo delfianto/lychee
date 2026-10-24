@@ -157,7 +157,7 @@ function thumbSrc(item: GalleryMediaItem): string {
             >
               <Heart class="size-4" :class="{ 'fill-current': favorite }" />
             </button>
-            <AddToListMenu :series-id="gallery.id" />
+            <AddToListMenu :series-id="gallery.id" series-kind="gallery" />
             <button class="btn btn-sm gap-2" @click="editOpen = true">
               <Pencil class="size-4" />Edit
             </button>

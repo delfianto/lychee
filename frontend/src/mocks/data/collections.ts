@@ -108,5 +108,5 @@ export const collectionsDb: CollectionOut[] = SEEDS.map((seed) => ({
   name: seed.name,
   description: seed.description,
   seriesIds: seed.seriesIds,
-  kind: kindFor(seed.seriesIds),
+  kind: kindFor(seed.seriesIds) ?? "manga",
 }));

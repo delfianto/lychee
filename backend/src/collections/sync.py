@@ -22,6 +22,7 @@ def apply_list(session: Session, custom: CustomList, series_by_id: dict[str, Ser
         )
         session.add(collection)
         session.flush()
+    collection.kind = "manga"
     collection.name = custom.name
     collection.provider_owner_id = custom.owner_id
     collection.visibility = custom.visibility

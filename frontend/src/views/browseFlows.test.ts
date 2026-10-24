@@ -412,3 +412,19 @@ it("sorts Lists alphabetically with natural numbers and mixed letter cases", asy
     "zebra",
   ]);
 });
+
+it("creates a typed gallery list that stays visible before it has members", async () => {
+  const { wrapper } = await renderView(ListsView);
+  await click(wrapper, "Gallery");
+  await click(wrapper, "New list");
+  expect(wrapper.get<HTMLSelectElement>('[aria-label="List type"]').element.value).toBe("gallery");
+  await input(wrapper, '[placeholder="List name…"]', "Gallery favorites");
+  await click(wrapper, "Create");
+  expect(api.writes().at(-1)?.body).toMatchObject({ name: "Gallery favorites", kind: "gallery" });
+  expect(wrapper.text()).toContain("Gallery favorites");
+  expect(wrapper.text()).toContain("0 works");
+  await click(wrapper, "New list");
+  await input(wrapper, '[aria-label="List location"]', "mangadex");
+  expect(wrapper.get('[aria-label="List type"]').attributes("disabled")).toBeDefined();
+  expect(wrapper.get<HTMLSelectElement>('[aria-label="List type"]').element.value).toBe("manga");
+});

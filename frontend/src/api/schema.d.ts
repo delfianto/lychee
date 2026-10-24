@@ -1582,6 +1582,12 @@ export interface components {
         CollectionCreate: {
             /** Name */
             name: string;
+            /**
+             * Kind
+             * @default manga
+             * @enum {string}
+             */
+            kind: "manga" | "comic" | "gallery";
             /** Description */
             description?: string | null;
             /** Provider */
@@ -1599,6 +1605,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Kind
+             * @default manga
+             */
+            kind: string;
             /** Description */
             description?: string | null;
             /** Provider */
@@ -1635,6 +1646,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Kind
+             * @default manga
+             */
+            kind: string;
             /** Description */
             description?: string | null;
             /** Provider */
@@ -1664,8 +1680,6 @@ export interface components {
             lastSyncedAt?: string | null;
             /** Seriesids */
             seriesIds: string[];
-            /** Kind */
-            kind?: string | null;
         };
         /** CollectionSeriesAdd */
         CollectionSeriesAdd: {
@@ -2092,6 +2106,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Kind
+             * @default manga
+             */
+            kind: string;
             /** Visibility */
             visibility: string;
             /** Mangacount */

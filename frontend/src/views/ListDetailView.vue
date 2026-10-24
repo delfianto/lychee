@@ -7,6 +7,7 @@ import { fetchCollection } from "../api/queries";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import SeriesCoverCard from "../components/SeriesCoverCard.vue";
 import MangaDexListActions from "../components/MangaDexListActions.vue";
+import { mediaKindLabel } from "../lib/display";
 import { toast } from "../lib/toast";
 import type { Series, Collection } from "../types";
 import { useCollections } from "../stores/collections";
@@ -138,7 +139,12 @@ async function confirmDeleteList(): Promise<void> {
           </div>
           <p class="text-sm text-base-content/60">
             <template v-if="loading">Loading…</template>
-            <template v-else>{{ works.length }} works</template>
+            <template v-else
+              ><span class="badge badge-ghost badge-sm mr-2">{{
+                mediaKindLabel[metadata?.kind ?? "manga"]
+              }}</span
+              >{{ works.length }} works</template
+            >
           </p>
         </div>
         <button v-if="!loading" class="btn btn-ghost btn-sm gap-1.5 text-error" @click="del(false)">

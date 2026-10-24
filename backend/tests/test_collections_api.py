@@ -45,14 +45,18 @@ def test_update_and_missing(client: TestClient) -> None:
     assert client.get("/api/collections/nope").status_code == 404
 
 
-def test_kind_reflects_membership(client: TestClient, db_session: Session) -> None:
+def test_kind_persists_and_rejects_cross_kind_membership(
+    client: TestClient, db_session: Session
+) -> None:
     manga = make_series(db_session, title="M", kind="manga")
     manga2 = make_series(db_session, title="M2", kind="manga")
     gallery = make_series(db_session, title="G", kind="gallery")
     db_session.commit()
 
     cid = client.post("/api/collections", json={"name": "Mixed test"}).json()["id"]
-    assert client.get("/api/collections").json()[0]["kind"] is None  # empty list
+    assert (
+        client.get("/api/collections").json()[0]["kind"] == "manga"
+    )  # type is known even for an empty list
 
     client.post(f"/api/collections/{cid}/series", json={"seriesId": manga.id})
     assert client.get(f"/api/collections/{cid}").json  # detail still works
@@ -63,6 +67,38 @@ def test_kind_reflects_membership(client: TestClient, db_session: Session) -> No
     still_single = client.get("/api/collections").json()[0]
     assert still_single["kind"] == "manga"
 
-    client.post(f"/api/collections/{cid}/series", json={"seriesId": gallery.id})
-    mixed = client.get("/api/collections").json()[0]
-    assert mixed["kind"] == "mixed"
+    rejected = client.post(f"/api/collections/{cid}/series", json={"seriesId": gallery.id})
+    assert rejected.status_code == 400
+    assert client.get(f"/api/collections/{cid}").json()["kind"] == "manga"
+    assert client.get("/api/collections").json()[0]["seriesIds"] == [manga.id, manga2.id]
+    for sid in [manga.id, manga2.id]:
+        assert client.delete(f"/api/collections/{cid}/series/{sid}").status_code == 200
+    assert client.get("/api/collections").json()[0]["kind"] == "manga"
+
+
+def test_gallery_list_retains_type_when_empty_and_mangadex_rejects_other_types(
+    client: TestClient, db_session: Session
+) -> None:
+    gallery = make_series(db_session, title="Gallery", kind="gallery")
+    manga = make_series(db_session, title="Manga", kind="manga")
+    db_session.commit()
+    created = client.post("/api/collections", json={"name": "Gravure", "kind": "gallery"})
+    assert created.status_code == 201
+    cid = created.json()["id"]
+    assert created.json()["kind"] == "gallery"
+    assert (
+        client.post(f"/api/collections/{cid}/series", json={"seriesId": manga.id}).status_code
+        == 400
+    )
+    assert (
+        client.post(f"/api/collections/{cid}/series", json={"seriesId": gallery.id}).status_code
+        == 200
+    )
+    assert client.delete(f"/api/collections/{cid}/series/{gallery.id}").json()["kind"] == "gallery"
+    assert client.get(f"/api/collections/{cid}").json()["kind"] == "gallery"
+    assert (
+        client.post(
+            "/api/collections", json={"name": "Remote", "provider": "mangadex", "kind": "gallery"}
+        ).status_code
+        == 400
+    )

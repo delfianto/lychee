@@ -286,7 +286,11 @@ class MangaDexProvider:
                     "offset": offset,
                 },
             ).json()
-            results.extend(_parse_manga(data, language) for data in body.get("data", []))
+            items = body.get("data", [])
+            ratings = self._community_ratings([item["id"] for item in items])
+            results.extend(
+                _parse_manga(item, language, rating=ratings.get(item["id"])) for item in items
+            )
             offset += 100
             if offset >= min(int(body.get("total", 0)), _MAX_OFFSET):
                 break
@@ -361,6 +365,24 @@ class MangaDexProvider:
             return
         score = max(1, min(10, int(rating)))
         _ = self._api.post(f"/rating/{provider_series_id}", json={"rating": score})
+
+    def _community_ratings(self, manga_ids: list[str]) -> dict[str, float]:
+        """One statistics request per metadata page; missing statistics never erase scores."""
+        if not manga_ids:
+            return {}
+        try:
+            statistics = (
+                self._api.get("/statistics/manga", params={"manga[]": manga_ids})
+                .json()
+                .get("statistics", {})
+            )
+            return {
+                mid: float(data["rating"]["average"])
+                for mid, data in statistics.items()
+                if isinstance(data, dict) and data.get("rating", {}).get("average") is not None
+            }
+        except httpx.HTTPError, KeyError, TypeError, ValueError, AttributeError:
+            return {}
 
     def _rating(self, provider_series_id: str) -> float | None:
         """Community rating via /statistics — best-effort (never blocks metadata)."""

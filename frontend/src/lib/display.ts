@@ -4,6 +4,13 @@
 
 import type { ContentRating, PublicationStatus } from "../types";
 
+export const mediaKindLabel: Record<string, string> = {
+  manga: "Manga",
+  comic: "Comic",
+  gallery: "Gallery",
+  mixed: "Mixed (legacy)",
+};
+
 /** Publication status → a low-noise colored dot (bg-* token) + human label. */
 export const statusColor: Record<PublicationStatus, string> = {
   ongoing: "bg-success",

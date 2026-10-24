@@ -109,7 +109,8 @@
 - [x] **Reader** — modes/direction/fit/background; serves `/api/chapters/{id}/pages/{n}`; chapter
       selector + next; **writes progress** as pages turn.
 - [x] **Lists** — `/lists` + `/lists/:id`, API-backed collections store; list cards sort
-      alphabetically (case-insensitive natural numbers).
+      alphabetically (case-insensitive natural numbers). Persistent Manga/Comic/Gallery types enforce
+      matching membership even when empty; adaptive previews fill the frame for 1–4 covers.
 - [x] **Settings** — General (libraries CRUD/scan, provider, trackers), Content (taxonomy table),
       Downloads (queue + sync), About — all on the API.
 - [x] **Theming**, [x] **Transitions**.

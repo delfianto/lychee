@@ -20,20 +20,11 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.providers.mangadex_lists import LIST_LOCK
 
 
-def _collection_kind(collection: Collection) -> str | None:
-    """The member series' shared kind — "mixed" if they differ, ``None`` if empty."""
-    kinds = {entry.series.kind for entry in collection.entries}
-    if not kinds:
-        return None
-    if len(kinds) == 1:
-        return next(iter(kinds))
-    return "mixed"
-
-
 def _info(collection: Collection) -> dict:
     return {
         "id": collection.id,
         "name": collection.name,
+        "kind": collection.kind,
         "description": collection.description,
         "provider": collection.provider,
         "provider_list_id": collection.provider_list_id,
@@ -52,7 +43,6 @@ def _to_out(collection: Collection) -> CollectionOut:
     return CollectionOut(
         **_info(collection),
         series_ids=[entry.series_id for entry in collection.entries],
-        kind=_collection_kind(collection),
     )
 
 
@@ -64,24 +54,17 @@ def _get(session: Session, collection_id: str) -> Collection:
 
 
 def _reloaded(session: Session, collection_id: str) -> Collection:
-    """Re-fetch with the same eager-load as `list_collections`, for `_to_out` after a write.
-
-    `session.refresh()` alone doesn't apply eager-load options, so `_to_out`'s
-    `_collection_kind` (which walks `entry.series` per member) would otherwise
-    lazy-load once per entry.
-    """
+    """Reload membership after writes so returned IDs match the committed rows."""
     return session.scalars(
         select(Collection)
         .where(Collection.id == collection_id)
-        .options(selectinload(Collection.entries).selectinload(CollectionSeries.series))
+        .options(selectinload(Collection.entries))
     ).one()
 
 
 def list_collections(session: Session) -> list[CollectionOut]:
     collections = session.scalars(
-        select(Collection)
-        .order_by(Collection.created_at)
-        .options(selectinload(Collection.entries).selectinload(CollectionSeries.series))
+        select(Collection).order_by(Collection.created_at).options(selectinload(Collection.entries))
     ).all()
     return [_to_out(c) for c in collections]
 
@@ -98,10 +81,12 @@ def create_collection(session: Session, data: CollectionCreate) -> CollectionOut
     with LIST_LOCK:
         if not data.name.strip():
             raise BadRequestError("List name cannot be blank")
+        if data.provider == "mangadex" and data.kind != "manga":
+            raise BadRequestError("MangaDex lists can only contain manga")
         collection = (
             mangadex.create_remote(session, data)
             if data.provider == "mangadex"
-            else Collection(name=data.name.strip(), description=data.description)
+            else Collection(name=data.name.strip(), description=data.description, kind=data.kind)
         )
         session.add(collection)
         session.commit()
@@ -150,6 +135,8 @@ def add_series(session: Session, collection_id: str, series_id: str) -> Collecti
                 CollectionSeries.series_id == series_id,
             )
         )
+        if exists is None and series.kind != collection.kind:
+            raise BadRequestError(f"This {collection.kind} list cannot contain {series.kind} works")
         if collection.provider == "mangadex":
             mangadex.write_membership(session, collection, series, add=True)
         if exists is None:
@@ -186,6 +173,17 @@ def remove_series(session: Session, collection_id: str, series_id: str) -> Colle
         )
         if entry is not None:
             session.delete(entry)
+            session.flush()
+            if collection.kind == "mixed":
+                kinds = set(
+                    session.scalars(
+                        select(Series.kind)
+                        .join(CollectionSeries)
+                        .where(CollectionSeries.collection_id == collection_id)
+                    )
+                )
+                if len(kinds) <= 1:
+                    collection.kind = next(iter(kinds), "manga")
             session.commit()
         return _to_out(_reloaded(session, collection_id))
 

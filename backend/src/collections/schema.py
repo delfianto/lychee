@@ -11,6 +11,7 @@ from src.core.schema import CamelModel, UtcDatetime
 class CollectionInfo(CamelModel):
     id: str
     name: str
+    kind: str = "manga"
     description: str | None = None
     provider: str | None = None
     provider_list_id: str | None = None
@@ -24,7 +25,6 @@ class CollectionInfo(CamelModel):
 
 class CollectionOut(CollectionInfo):
     series_ids: list[str]
-    kind: str | None = None
 
 
 class CollectionDetailOut(CollectionInfo):
@@ -33,6 +33,7 @@ class CollectionDetailOut(CollectionInfo):
 
 class CollectionCreate(CamelModel):
     name: str = Field(min_length=1, max_length=200)
+    kind: Literal["manga", "comic", "gallery"] = "manga"
     description: str | None = None
     provider: Literal["mangadex"] | None = None
     visibility: Literal["public", "private"] = "private"
@@ -59,6 +60,7 @@ class ListFollow(CamelModel):
 class RemoteListOut(CamelModel):
     id: str
     name: str
+    kind: str = "manga"
     visibility: str
     manga_count: int
     source_url: str

@@ -20,6 +20,10 @@ class Collection(BaseModel):
     __tablename__ = "collection"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Persist the list type even when its last work is removed.
+    kind: Mapped[str] = mapped_column(
+        String(16), default="manga", server_default="manga", nullable=False
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Provider linkage for synced lists (e.g. a MangaDex custom list); null = a local list.
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
