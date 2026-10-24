@@ -3,6 +3,7 @@ import { BookMarked, BookOpen, Heart, Link2, Pencil, RefreshCw, Star, X } from "
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import CreatorCredits from "../components/CreatorCredits.vue";
 import { onTaskDone } from "../api/events";
 import {
   fetchArt,
@@ -14,6 +15,7 @@ import {
   patchSeries,
   deleteChapterLocal,
   queueDownload,
+  markChaptersRead,
   refreshSeries,
   unlinkMatch,
 } from "../api/queries";
@@ -130,6 +132,25 @@ watch(
   (id, prev) => void load(String(id), { soft: prev !== undefined && String(id) === String(prev) }),
   { immediate: true },
 );
+
+async function onMarkRead(
+  ids: string[],
+  completed: boolean,
+  done: (success: boolean) => void,
+): Promise<void> {
+  const id = String(route.params.id);
+  let success = false;
+  try {
+    const updated = await markChaptersRead(id, ids, completed);
+    if (String(route.params.id) === id) await load(id, { soft: true });
+    toast(`Marked ${updated} chapter(s) ${completed ? "read" : "unread"}`);
+    success = true;
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Couldn’t update read status", "error");
+  } finally {
+    done(success);
+  }
+}
 
 async function downloadChapter(providerChapterId: string, done?: () => void): Promise<void> {
   if (!series.value) {
@@ -332,7 +353,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 <CountryFlag v-if="series.originCountry" :cc="series.originCountry" />
                 {{ series.title }}
               </h1>
-              <p class="text-sm text-base-content/70">{{ series.authors.join(", ") }}</p>
+              <div class="text-sm text-base-content/70">
+                <CreatorCredits :names="series.authors" role="author" />
+              </div>
               <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="flex items-center gap-1.5">
                   <span class="size-2 rounded-full" :class="statusColor[series.status]"></span>
@@ -521,6 +544,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
             :order="chapterOrder"
             @download="downloadChapter"
             @download-all="downloadAll"
+            @mark-read="onMarkRead"
             @delete-chapter="onDeleteChapter"
             @update:language="onLanguageChange"
             @update:order="onOrderChange"

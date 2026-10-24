@@ -62,3 +62,40 @@ def test_list_type_migration_preserves_memberships_and_classifies_legacy_lists()
         }
         assert connection.scalar(text("SELECT COUNT(*) FROM collection_series")) == 3
     engine.dispose()
+
+
+def test_provider_progress_migration_backfills_existing_reads(db_session) -> None:
+    import runpy
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import select, text
+    from src.catalog.models import Chapter
+
+    from tests.support import make_series
+
+    series = make_series(db_session, title="Migrated", chapter_count=2, unread=1)
+    series.provider = "mangadex"
+    chapters = list(
+        db_session.scalars(
+            select(Chapter).where(Chapter.series_id == series.id).order_by(Chapter.number_sort)
+        )
+    )
+    chapters[0].provider_chapter_id = "remote-read"
+    db_session.flush()
+    db_session.execute(text("DROP TABLE provider_reading_progress"))
+    migration = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[1]
+            / "alembic/versions/b7e819d4c602_provider_reading_progress.py"
+        )
+    )
+    with Operations.context(MigrationContext.configure(db_session.connection())):
+        migration["upgrade"]()
+    rows = db_session.execute(
+        text(
+            "SELECT series_id,provider,provider_chapter_id,current_page,completed FROM provider_reading_progress"
+        )
+    ).all()
+    assert rows == [(series.id, "mangadex", "remote-read", 1, 1)]
+    assert db_session.scalar(text("SELECT COUNT(*) FROM reading_progress")) == 1

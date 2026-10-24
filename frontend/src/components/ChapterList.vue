@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { ChevronDown, Download, Loader2, MessageSquare, Trash2 } from "@lucide/vue";
-import { ref } from "vue";
+import {
+  Check,
+  ChevronDown,
+  Download,
+  ExternalLink,
+  Loader2,
+  MessageSquare,
+  Trash2,
+} from "@lucide/vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
 import type { ChapterAvailability } from "../api/queries";
@@ -44,6 +52,7 @@ const emit = defineEmits<{
   download: [providerChapterId: string, done: () => void];
   downloadAll: [done: () => void];
   deleteChapter: [chapterId: string, done: () => void];
+  markRead: [chapterIds: string[], completed: boolean, done: (success: boolean) => void];
   retry: [];
   "update:language": [language: string];
   "update:order": [order: "asc" | "desc"];
@@ -51,6 +60,50 @@ const emit = defineEmits<{
 
 function toggleOrder(): void {
   emit("update:order", props.order === "desc" ? "asc" : "desc");
+}
+
+const selected = ref(new Set<string>());
+const marking = ref(false);
+const readableChapters = computed(() =>
+  props.volumes.flatMap((volume) => volume.chapters).filter((chapter) => !!readId(chapter)),
+);
+function readId(chapter: Chapter): string | null {
+  if (chapter.id) return chapter.id;
+  return props.seriesId && chapter.providerChapterId
+    ? `adhoc:${props.seriesId}:${chapter.providerChapterId}`
+    : null;
+}
+watch(
+  () => props.volumes,
+  () => {
+    const available = new Set(readableChapters.value.map((chapter) => readId(chapter)!));
+    selected.value = new Set([...selected.value].filter((id) => available.has(id)));
+  },
+);
+function toggleSelection(id: string): void {
+  const next = new Set(selected.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selected.value = next;
+}
+function selectAll(): void {
+  selected.value =
+    selected.value.size === readableChapters.value.length
+      ? new Set()
+      : new Set(readableChapters.value.map((chapter) => readId(chapter)!));
+}
+function markRead(completed: boolean, chapter?: Chapter): void {
+  const ids = chapter
+    ? [readId(chapter)!]
+    : selected.value.size
+      ? [...selected.value]
+      : readableChapters.value.map((item) => readId(item)!);
+  if (marking.value || !ids.length) return;
+  marking.value = true;
+  emit("markRead", ids, completed, (success) => {
+    marking.value = false;
+    if (success && !chapter) selected.value = new Set();
+  });
 }
 
 const tabs = [
@@ -204,7 +257,7 @@ const statusLabel: Record<string, string> = {
 
     <!-- Chapters -->
     <template v-if="tab === 'chapters'">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <select
           class="select select-bordered select-sm w-40"
           :value="language"
@@ -236,6 +289,28 @@ const statusLabel: Record<string, string> = {
         </button>
       </div>
 
+      <div
+        v-if="seriesId && readableChapters.length"
+        class="flex flex-wrap items-center gap-2 text-xs"
+      >
+        <label class="flex items-center gap-2"
+          ><input
+            type="checkbox"
+            class="checkbox checkbox-xs"
+            :disabled="marking"
+            :checked="selected.size === readableChapters.length"
+            aria-label="Select all chapters"
+            @change="selectAll"
+          />Select all</label
+        >
+        <span v-if="selected.size">{{ selected.size }} selected</span>
+        <button class="btn btn-ghost btn-xs gap-1" :disabled="marking" @click="markRead(true)">
+          <Check class="size-3.5" />{{ selected.size ? "Mark selected read" : "Mark all read" }}
+        </button>
+        <button class="btn btn-ghost btn-xs" :disabled="marking" @click="markRead(false)">
+          {{ selected.size ? "Mark selected unread" : "Mark all unread" }}
+        </button>
+      </div>
       <ChapterAvailabilityNotice
         v-if="availability && (!hasAny() || availability.status === 'error')"
         :availability="availability"
@@ -258,48 +333,82 @@ const statusLabel: Record<string, string> = {
           <div
             v-for="c in vg.chapters"
             :key="rowKey(c)"
-            class="flex items-center gap-3 border-b border-base-300 px-3 py-2 last:border-b-0"
+            class="flex items-center gap-2 border-b border-base-300 px-3 py-2 last:border-b-0 sm:gap-3"
             :class="[chapterReadLink(c) ? 'hover:bg-base-300/40' : '', c.read ? 'opacity-50' : '']"
           >
+            <input
+              v-if="seriesId && readId(c)"
+              type="checkbox"
+              class="checkbox checkbox-xs shrink-0"
+              :disabled="marking"
+              :checked="selected.has(readId(c)!)"
+              :aria-label="`Select chapter ${c.number}`"
+              @change="toggleSelection(readId(c)!)"
+            />
             <component
               :is="chapterReadLink(c) ? RouterLink : 'div'"
               v-bind="chapterReadLink(c) ? { to: chapterReadLink(c)! } : {}"
-              class="flex min-w-0 grow items-center gap-3"
+              class="grid min-w-0 grow grid-cols-1 gap-1 sm:flex sm:items-center sm:gap-3"
             >
-              <span
-                class="h-2 w-2 shrink-0 rounded-full"
-                :class="c.read || c.status !== 'downloaded' ? 'bg-base-300' : 'bg-primary'"
-              />
-              <span class="w-16 shrink-0 text-sm font-medium">{{
-                c.number === "Oneshot" ? "Oneshot" : `Ch. ${c.number}`
-              }}</span>
-              <span class="min-w-0 grow truncate text-sm">{{ c.title }}</span>
-              <span class="hidden text-xs text-base-content/60 sm:inline">{{ c.group }}</span>
-              <span class="badge badge-ghost badge-sm uppercase">{{ c.language }}</span>
-              <span
-                v-if="c.status && c.status !== 'downloaded'"
-                class="badge badge-sm capitalize"
-                :class="{
-                  'badge-primary': c.status === 'downloading' || c.status === 'queued',
-                  'badge-warning': c.status === 'paused',
-                  'badge-error': c.status === 'failed',
-                  'badge-outline': c.status === 'available',
-                }"
-              >
-                <Loader2 v-if="c.status === 'downloading'" class="mr-0.5 size-3 animate-spin" />
-                {{ statusLabel[c.status] }}
-              </span>
-              <span
-                class="hidden w-16 shrink-0 text-right text-xs text-base-content/60 sm:inline"
-                >{{ c.uploadedAt }}</span
-              >
-              <span
-                class="hidden w-12 shrink-0 items-center justify-end gap-1 text-xs text-base-content/50 md:inline-flex"
-              >
-                <MessageSquare class="size-3.5" />{{ c.comments }}
-              </span>
+              <div class="flex min-w-0 items-center gap-2 sm:contents">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :class="c.read || c.status !== 'downloaded' ? 'bg-base-300' : 'bg-primary'"
+                />
+                <span class="w-16 shrink-0 text-sm font-medium">{{
+                  c.number === "Oneshot" ? "Oneshot" : `Ch. ${c.number}`
+                }}</span>
+                <span class="min-w-0 grow truncate text-sm">{{ c.title }}</span>
+              </div>
+              <div class="flex min-w-0 flex-wrap items-center gap-2 sm:contents">
+                <span class="hidden text-xs text-base-content/60 sm:inline">{{ c.group }}</span>
+                <span class="badge badge-ghost badge-sm uppercase">{{ c.language }}</span>
+                <span
+                  v-if="c.status && c.status !== 'downloaded'"
+                  class="badge badge-sm capitalize"
+                  :class="{
+                    'badge-primary': c.status === 'downloading' || c.status === 'queued',
+                    'badge-warning': c.status === 'paused',
+                    'badge-error': c.status === 'failed',
+                    'badge-outline': c.status === 'available',
+                  }"
+                >
+                  <Loader2 v-if="c.status === 'downloading'" class="mr-0.5 size-3 animate-spin" />
+                  {{ statusLabel[c.status] }}
+                </span>
+                <span
+                  class="hidden w-16 shrink-0 text-right text-xs text-base-content/60 sm:inline"
+                  >{{ c.uploadedAt }}</span
+                >
+                <span
+                  class="hidden w-12 shrink-0 items-center justify-end gap-1 text-xs text-base-content/50 md:inline-flex"
+                >
+                  <MessageSquare class="size-3.5" />{{ c.comments }}
+                </span>
+              </div>
             </component>
 
+            <a
+              v-if="c.sourceUrl"
+              :href="c.sourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-square btn-ghost btn-xs"
+              :aria-label="`Open chapter ${c.number} on MangaDex`"
+              @click.stop
+              ><ExternalLink class="size-3.5"
+            /></a>
+            <button
+              v-if="seriesId && readId(c)"
+              class="btn btn-square btn-ghost btn-xs"
+              :class="{ 'text-primary': c.read }"
+              :disabled="marking"
+              :aria-label="`Mark chapter ${c.number} ${c.read ? 'unread' : 'read'}`"
+              :title="c.read ? 'Mark unread' : 'Mark read'"
+              @click.stop="markRead(!c.read, c)"
+            >
+              <Check class="size-4" :class="c.read ? 'opacity-100' : 'opacity-40'" />
+            </button>
             <button
               v-if="canDownload(c) && c.providerChapterId"
               class="btn btn-ghost btn-xs gap-1"

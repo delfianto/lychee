@@ -61,6 +61,7 @@ export interface Series {
   libraryStatus?: LibraryStatus;
   /** Matched metadata provider slug (e.g. "mangadex"), or absent if unmatched. */
   provider?: string | null;
+  sourceUrl?: string | null;
   /** Remote chapters not yet local, from the last sync (drives the "new" badge). */
   availableChapters?: number;
   /** When the provider's chapter feed was last fetched; absent/null if never synced —
@@ -110,6 +111,7 @@ export interface Chapter {
   comments: number;
   status: ChapterStatus;
   providerChapterId?: string | null;
+  sourceUrl?: string | null;
 }
 
 export interface VolumeGroup {
@@ -118,6 +120,8 @@ export interface VolumeGroup {
 }
 
 export interface BrowseFilters {
+  author?: string;
+  artist?: string;
   query: string;
   tags: Record<string, "include" | "exclude">;
   tagMode: "and" | "or";

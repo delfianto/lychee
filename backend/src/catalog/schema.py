@@ -43,6 +43,7 @@ class SeriesOut(CamelModel):
     source: str | None = None
     characters: list[str] | None = None
     library_status: str | None = None
+    source_url: str | None = None
     provider: str | None = None  # matched metadata provider slug, or null if unmatched
     available_chapters: int = 0  # remote chapters not yet local (from the last sync)
     # When the provider's chapter feed was last successfully fetched, or null if never
@@ -116,6 +117,7 @@ class ChapterOut(CamelModel):
     # downloaded | available | queued | downloading | paused | failed
     status: str = "downloaded"
     provider_chapter_id: str | None = None
+    source_url: str | None = None
 
 
 class ChapterDetailOut(CamelModel):
@@ -130,6 +132,7 @@ class ChapterDetailOut(CamelModel):
     comments: int
     read: bool
     uploaded_at: UtcDatetime | None = None
+    source_url: str | None = None
 
 
 class ChapterBufferRequest(CamelModel):

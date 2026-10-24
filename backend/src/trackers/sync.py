@@ -13,11 +13,11 @@ from collections.abc import Callable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.catalog.models import Series
+from src.catalog.models import Chapter, Series
 from src.core.crypto import decrypt
 from src.core.logging import get_logger
 from src.integrations.models import Tracker
-from src.progress.models import ReadingProgress
+from src.progress.models import ProviderReadingProgress, ReadingProgress
 from src.tasks.queue import Work, queue
 from src.trackers.base import get_tracker
 
@@ -47,11 +47,35 @@ def push_series_progress(session: Session, series_id: str) -> int:
     external = series.external_ids_json or {}
     if not external:
         return 0
-    read_count = (
+    remote_read_count = (
+        session.scalar(
+            select(func.count())
+            .select_from(ProviderReadingProgress)
+            .where(
+                ProviderReadingProgress.series_id == series_id,
+                ProviderReadingProgress.completed.is_(True),
+            )
+        )
+        or 0
+    )
+    remote_exists = (
+        select(ProviderReadingProgress.id)
+        .where(
+            ProviderReadingProgress.series_id == series_id,
+            ProviderReadingProgress.provider_chapter_id == Chapter.provider_chapter_id,
+        )
+        .exists()
+    )
+    read_count = remote_read_count + (
         session.scalar(
             select(func.count())
             .select_from(ReadingProgress)
-            .where(ReadingProgress.series_id == series_id, ReadingProgress.completed.is_(True))
+            .join(Chapter, Chapter.id == ReadingProgress.chapter_id)
+            .where(
+                ReadingProgress.series_id == series_id,
+                ReadingProgress.completed.is_(True),
+                ~remote_exists,
+            )
         )
         or 0
     )

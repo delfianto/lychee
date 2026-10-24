@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import partial
+from typing import Literal
 
 from anyio.to_thread import run_sync
 from fastapi import APIRouter, Query, Request, Response, status
@@ -64,6 +65,7 @@ def list_series(
     pub_status: str | None = Query(None, alias="pubStatus"),
     read_state: str | None = Query(None, alias="readState"),
     artist: str | None = None,
+    author: str | None = None,
     source: str | None = None,
     sort: str = "recentlyAdded",
     cursor: str | None = None,
@@ -83,6 +85,7 @@ def list_series(
         pub_status=pub_status,
         read_state=read_state,
         artist=artist,
+        author=author,
         source=source,
         sort=sort,
     )
@@ -203,9 +206,15 @@ def libraries_summary(db: DbSession) -> list[LibrarySummaryOut]:
 
 
 @router.get("/search")
-def search(db: DbSession, q: str = "", limit: int = 20) -> list[SeriesOut]:
+def search(
+    db: DbSession,
+    q: str = "",
+    limit: int = 20,
+    author: str | None = None,
+    artist: str | None = None,
+) -> list[SeriesOut]:
     """Title search powering the navbar."""
-    return service.search(db, q, limit=limit)
+    return service.search(db, q, limit=limit, author=author, artist=artist)
 
 
 @router.get("/series/{series_id}/related")
@@ -315,3 +324,10 @@ async def chapter_page(
             limiter=image_limiter,
         ),
     )
+
+
+@router.get("/creators")
+def creators(
+    db: DbSession, role: Literal["author", "artist"], q: str = "", limit: int = 20
+) -> list[str]:
+    return service.creator_names(db, role, q, limit=limit)

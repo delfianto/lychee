@@ -102,3 +102,36 @@ def test_no_push_when_no_tracker_connected(
     _ = client.put(f"/api/chapters/{chapter.id}/progress", json={"page": 1, "completed": True})
     queue.wait_idle()
     assert fake.pushes == []
+
+
+def test_tracker_count_deduplicates_downloaded_and_provider_reads(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.progress.models import ProviderReadingProgress
+    from src.trackers.sync import push_series_progress
+
+    monkeypatch.setattr(settings, "secret_key", "test-key")
+    fake = _RecordingTracker()
+    register_tracker(fake)
+    series = make_series(db_session, title="Remote tracked", chapter_count=1, unread=0)
+    series.external_ids_json = {"al": "555"}
+    chapter = db_session.scalar(select(Chapter).where(Chapter.series_id == series.id))
+    assert chapter is not None
+    chapter.provider_chapter_id = "remote-1"
+    for remote_id in ["remote-1", "remote-2"]:
+        db_session.add(
+            ProviderReadingProgress(
+                series_id=series.id,
+                provider="mangadex",
+                provider_chapter_id=remote_id,
+                completed=True,
+            )
+        )
+    tracker = db_session.get(Tracker, "anilist")
+    assert tracker is not None
+    tracker.connected = True
+    tracker.sync_on_read = True
+    tracker.access_token_enc = encrypt("tok")
+    db_session.commit()
+    assert push_series_progress(db_session, series.id) == 1
+    assert fake.pushes[0]["progress"] == 2

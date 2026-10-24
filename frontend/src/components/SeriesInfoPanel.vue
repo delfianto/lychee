@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CreatorCredits from "./CreatorCredits.vue";
+import { ExternalLink } from "@lucide/vue";
 import { contentRatingClass } from "../lib/display";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import type { Series } from "../types";
@@ -6,12 +8,6 @@ import type { Series } from "../types";
 defineProps<{ series: Series }>();
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-
-const trackers = [
-  { label: "AniList", href: "#" },
-  { label: "MyAnimeList", href: "#" },
-  { label: "MangaUpdates", href: "#" },
-];
 </script>
 
 <template>
@@ -20,11 +16,11 @@ const trackers = [
       <div class="flex flex-col gap-3 text-sm">
         <div>
           <div class="text-xs text-base-content/60">Author</div>
-          <div>{{ series.authors.join(", ") }}</div>
+          <CreatorCredits :names="series.authors" role="author" />
         </div>
         <div>
           <div class="text-xs text-base-content/60">Artist</div>
-          <div>{{ series.artists.join(", ") }}</div>
+          <CreatorCredits :names="series.artists" role="artist" />
         </div>
         <div>
           <div class="text-xs text-base-content/60">Demographic</div>
@@ -55,18 +51,15 @@ const trackers = [
         </div>
       </div>
 
-      <div class="flex flex-col gap-2">
-        <div class="text-xs text-base-content/60">Tracking</div>
-        <div class="flex flex-wrap gap-1">
-          <a
-            v-for="tr in trackers"
-            :key="tr.label"
-            :href="tr.href"
-            class="badge badge-sm badge-outline"
-          >
-            {{ tr.label }}
-          </a>
-        </div>
+      <div v-if="series.sourceUrl" class="flex flex-col gap-2">
+        <div class="text-xs text-base-content/60">Source</div>
+        <a
+          :href="series.sourceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-hover inline-flex items-center gap-1 text-sm"
+          ><ExternalLink class="size-4" />Open on MangaDex</a
+        >
       </div>
     </div>
   </div>

@@ -322,11 +322,18 @@ class MangaDexProvider:
         """Set the authed user's reading status for a manga (``None`` clears it)."""
         _ = self._api.post(f"/manga/{provider_series_id}/status", json={"status": status})
 
-    def push_read(self, provider_series_id: str, chapter_ids: list[str]) -> None:
+    def push_read(
+        self,
+        provider_series_id: str,
+        chapter_ids: list[str],
+        *,
+        unread_ids: list[str] | None = None,
+    ) -> None:
         """Mark chapters read for the authed user (no-op for an empty list)."""
-        if chapter_ids:
+        if chapter_ids or unread_ids:
             _ = self._api.post(
-                f"/manga/{provider_series_id}/read", json={"chapterIdsRead": chapter_ids}
+                f"/manga/{provider_series_id}/read",
+                json={"chapterIdsRead": chapter_ids, "chapterIdsUnread": unread_ids or []},
             )
 
     def list_ratings(self, manga_ids: list[str]) -> dict[str, int]:

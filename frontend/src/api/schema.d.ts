@@ -475,6 +475,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/creators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Creators */
+        get: operations["creators_api_creators_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries": {
         parameters: {
             query?: never;
@@ -582,6 +599,23 @@ export interface paths {
          * @description Record reading position; completing marks the chapter read.
          */
         put: operations["update_progress_api_chapters__chapter_id__progress_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}/read-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark Chapters */
+        put: operations["mark_chapters_api_series__series_id__read_status_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1543,6 +1577,8 @@ export interface components {
             read: boolean;
             /** Uploadedat */
             uploadedAt?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
         };
         /** ChapterOut */
         ChapterOut: {
@@ -1577,6 +1613,20 @@ export interface components {
             status: string;
             /** Providerchapterid */
             providerChapterId?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
+        };
+        /** ChapterReadOut */
+        ChapterReadOut: {
+            /** Updated */
+            updated: number;
+        };
+        /** ChapterReadUpdate */
+        ChapterReadUpdate: {
+            /** Chapterids */
+            chapterIds: string[];
+            /** Completed */
+            completed: boolean;
         };
         /** CollectionCreate */
         CollectionCreate: {
@@ -2176,6 +2226,8 @@ export interface components {
             characters?: string[] | null;
             /** Librarystatus */
             libraryStatus?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
             /** Provider */
             provider?: string | null;
             /**
@@ -2517,6 +2569,7 @@ export interface operations {
                 pubStatus?: string | null;
                 readState?: string | null;
                 artist?: string | null;
+                author?: string | null;
                 source?: string | null;
                 sort?: string;
                 cursor?: string | null;
@@ -3029,6 +3082,8 @@ export interface operations {
             query?: {
                 q?: string;
                 limit?: number;
+                author?: string | null;
+                artist?: string | null;
             };
             header?: never;
             path?: never;
@@ -3315,6 +3370,39 @@ export interface operations {
             };
         };
     };
+    creators_api_creators_get: {
+        parameters: {
+            query: {
+                role: "author" | "artist";
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_libraries_api_libraries_get: {
         parameters: {
             query?: never;
@@ -3557,6 +3645,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_chapters_api_series__series_id__read_status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChapterReadUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterReadOut"];
+                };
             };
             /** @description Validation Error */
             422: {

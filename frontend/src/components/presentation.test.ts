@@ -146,7 +146,7 @@ it("shows rich and sparse series metadata and limits tags in compact cards", asy
   wrapper.unmount();
   const info = await renderView(SeriesInfoPanel, { props: { series: rich } });
   expect(info.wrapper.text()).toContain("2024");
-  expect(info.wrapper.text()).toContain("AniList");
+  expect(info.wrapper.find('a[href="#"]').exists()).toBe(false);
   await info.wrapper.setProps({ series: makeSeries("s1", { year: undefined }) });
   expect(info.wrapper.text()).not.toContain("2024");
 });

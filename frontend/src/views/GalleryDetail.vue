@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CreatorCredits from "../components/CreatorCredits.vue";
 import { Heart, Images, Pencil, Play } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -114,7 +115,7 @@ function thumbSrc(item: GalleryMediaItem): string {
           <dl class="flex flex-col gap-1.5 text-sm">
             <div v-if="gallery.artists.length" class="flex gap-2">
               <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Artists / Models</dt>
-              <dd>{{ gallery.artists.join(", ") }}</dd>
+              <dd><CreatorCredits :names="gallery.artists" role="artist" /></dd>
             </div>
             <div v-if="gallery.source" class="flex gap-2">
               <dt class="w-32 shrink-0 whitespace-nowrap text-base-content/50">Series</dt>

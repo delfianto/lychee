@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, X } from "@lucide/vue";
 import Plyr from "plyr";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
+import { createStaleGuard } from "../lib/staleGuard";
 import { useReaderSettings } from "../lib/readerSettings";
 import type { GalleryMediaItem } from "../types";
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{ close: []; "update:index": [number] }>();
 const reader = useReaderSettings();
 const videoEl = ref<HTMLVideoElement | null>(null);
 let player: Plyr | null = null;
+const playerGuard = createStaleGuard();
 
 const current = () => props.items[props.index];
 
@@ -38,11 +40,13 @@ function onVideoEnded(): void {
 }
 
 async function mountPlayer(): Promise<void> {
+  const token = playerGuard.next();
   destroyPlayer();
   await nextTick();
+  if (!playerGuard.isCurrent(token)) return;
   const el = videoEl.value;
   if (!el || current()?.kind !== "video") return;
-  player = new Plyr(el, {
+  const activePlayer = new Plyr(el, {
     controls: [
       "play-large",
       "play",
@@ -61,12 +65,14 @@ async function mountPlayer(): Promise<void> {
     keyboard: { focused: true, global: false },
     tooltips: { controls: true, seek: true },
   });
-  player.on("ended", onVideoEnded);
+  player = activePlayer;
+  activePlayer.on("ended", onVideoEnded);
   // Opening the lightbox is a user gesture; reinforce autoplay if the browser
   // ignored the autoplay attribute (common when the media element is recreated).
   if (reader.videoAutoPlay) {
-    player.on("ready", () => {
-      void player?.play()?.catch(() => {
+    activePlayer.on("ready", () => {
+      if (!playerGuard.isCurrent(token)) return;
+      void activePlayer.play()?.catch(() => {
         /* autoplay blocked — user can hit play */
       });
     });
@@ -92,18 +98,16 @@ function onKey(e: KeyboardEvent): void {
   else if (e.key === "ArrowRight") go(1);
 }
 
-watch(
-  () => [props.index, props.items] as const,
-  () => {
-    void mountPlayer();
-  },
-);
+watch([() => props.index, () => current()?.url, () => current()?.kind], () => {
+  void mountPlayer();
+});
 
 onMounted(() => {
   window.addEventListener("keydown", onKey);
   void mountPlayer();
 });
 onBeforeUnmount(() => {
+  playerGuard.next();
   window.removeEventListener("keydown", onKey);
   destroyPlayer();
 });
@@ -135,11 +139,18 @@ onBeforeUnmount(() => {
       :alt="`Item ${index + 1} of ${items.length}`"
       class="max-h-[90vh] max-w-[90vw] rounded object-contain shadow-2xl"
     />
-    <div v-else class="lychee-plyr w-full max-w-[min(90vw,56rem)]" @click.stop>
+    <!-- Plyr replaces its video with a clone on destroy. Recreate the whole host
+         so Vue never patches the video node that Plyr removed. -->
+    <div
+      v-else
+      :key="`${index}-${current()?.url}`"
+      class="lychee-plyr w-full max-w-[min(90vw,56rem)]"
+      @click.stop
+    >
       <video
-        :key="`${index}-${current()?.url}`"
         ref="videoEl"
         playsinline
+        controls
         preload="metadata"
         :autoplay="reader.videoAutoPlay"
         :poster="current()?.posterUrl ?? current()?.thumbUrl ?? undefined"

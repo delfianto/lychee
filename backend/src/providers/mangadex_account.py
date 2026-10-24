@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.catalog.media import materialize_series_cover, warm_series_covers
@@ -32,7 +32,7 @@ from src.integrations.schema import ProviderConnect, ProviderOut
 from src.integrations.sync import SyncCancelled, sync_jobs
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
-from src.progress.models import ReadingProgress
+from src.progress.models import ProviderReadingProgress, ReadingProgress
 from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import password_grant, refresh_grant
 from src.providers.mangadex_client import API_BASE, USER_AGENT
@@ -215,42 +215,29 @@ def _sync_ratings(
 def _sync_read_markers(
     session: Session, provider: MangaDexProvider, series_by_id: dict[str, Series]
 ) -> int:
-    """Pull MangaDex read markers onto local chapters of already-downloaded series (matched by
-    ``provider_chapter_id``). Additive — marks read, never un-reads. Writes progress directly
-    (no tracker push — this is the inbound side). Sync-only series (no local chapters) are a
-    no-op, so only series that have chapters are even requested."""
-    downloaded = {
-        md_id: series
-        for md_id, series in series_by_id.items()
-        if session.scalar(
-            select(func.count()).select_from(Chapter).where(Chapter.series_id == series.id)
-        )
-    }
-    if not downloaded:
+    """Pull read markers for downloaded and provider-only chapters; never un-read on pull."""
+    from src.progress.state import write_state
+
+    if not series_by_id:
         return 0
-    markers = provider.read_markers(list(downloaded))
+    markers = provider.read_markers(list(series_by_id))
     marked = 0
-    for md_id, series in downloaded.items():
-        read_ids = set(markers.get(md_id, []))
-        if not read_ids:
-            continue
-        chapters = session.scalars(
-            select(Chapter).where(
-                Chapter.series_id == series.id, Chapter.provider_chapter_id.in_(read_ids)
+    for md_id, series in series_by_id.items():
+        for remote_id in set(markers.get(md_id, [])):
+            chapter = session.scalar(
+                select(Chapter).where(
+                    Chapter.series_id == series.id, Chapter.provider_chapter_id == remote_id
+                )
             )
-        )
-        for chapter in chapters:
-            row = session.scalar(
-                select(ReadingProgress).where(ReadingProgress.chapter_id == chapter.id)
+            marked += write_state(
+                session,
+                series_id=series.id,
+                chapter=chapter,
+                provider="mangadex",
+                provider_chapter_id=remote_id,
+                page=chapter.page_count if chapter else 0,
+                completed=True,
             )
-            if row is not None and row.completed:
-                continue  # already read — additive, leave it
-            if row is None:
-                row = ReadingProgress(chapter_id=chapter.id, series_id=series.id)
-                session.add(row)
-            row.completed = True
-            row.current_page = chapter.page_count
-            marked += 1
     return marked
 
 
@@ -435,7 +422,23 @@ def push_series(session: Session, series_id: str) -> bool:
             )
             if cid
         ]
-        provider.push_read(series.provider_series_id, read_ids)
+        remote_states = list(
+            session.scalars(
+                select(ProviderReadingProgress).where(
+                    ProviderReadingProgress.series_id == series_id,
+                    ProviderReadingProgress.provider == "mangadex",
+                )
+            )
+        )
+        read_ids = sorted(
+            set(read_ids) | {row.provider_chapter_id for row in remote_states if row.completed}
+        )
+        unread_ids = [
+            row.provider_chapter_id
+            for row in remote_states
+            if not row.completed and row.provider_chapter_id not in read_ids
+        ]
+        provider.push_read(series.provider_series_id, read_ids, unread_ids=unread_ids)
         # Personal score: int 1–10, or None to clear on MangaDex.
         personal = int(round(series.user_rating)) if series.user_rating is not None else None
         if personal is not None:

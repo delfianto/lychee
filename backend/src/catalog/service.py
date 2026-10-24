@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from src.catalog import adhoc
 from src.catalog import matching as catalog_matching
 from src.catalog import repository as repo
+from src.catalog.links import source_url
 from src.catalog.metadata import reconcile_tags
 from src.catalog.models import ProviderChapter, Series, SeriesCredit, TitleVariant
 from src.catalog.remote_chapters import (
@@ -42,6 +43,7 @@ from src.core.schema import Page
 from src.ingest.lychee_info import LycheeInfoFile
 from src.media.thumbnails import PREVIEW_VERSION
 from src.progress.models import ReadingProgress
+from src.progress.state import provider_states
 from src.taxonomy.models import Tag
 from src.trackers.sync import enqueue_push
 
@@ -120,6 +122,7 @@ def to_series_out(row: SeriesRow) -> SeriesOut:
         characters=s.characters_json,
         library_status=s.library_status,
         provider=s.provider,
+        source_url=source_url(s.provider, s.provider_series_id),
         available_chapters=s.available_chapters,
         chapters_synced_at=s.chapter_index_at,
     )
@@ -139,6 +142,7 @@ def build_series_filters(
     pub_status: str | None = None,
     read_state: str | None = None,
     artist: str | None = None,
+    author: str | None = None,
     source: str | None = None,
     sort: str = "recentlyAdded",
 ) -> SeriesFilters:
@@ -157,6 +161,7 @@ def build_series_filters(
         pub_status=_csv(pub_status),
         read_state=read_state,
         artist=artist,
+        author=author,
         source=source,
         sort=sort,
     )
@@ -452,7 +457,7 @@ def apply_lychee_info(session: Session, series: Series, info: LycheeInfoFile) ->
     return warnings
 
 
-def to_chapter_out(row: ChapterRow) -> ChapterOut:
+def to_chapter_out(row: ChapterRow, *, provider: str | None = None) -> ChapterOut:
     c = row.chapter
     return ChapterOut(
         id=c.id,
@@ -466,6 +471,7 @@ def to_chapter_out(row: ChapterRow) -> ChapterOut:
         comments=c.comment_count,
         status="downloaded",
         provider_chapter_id=c.provider_chapter_id,
+        source_url=source_url(c.provider or provider, c.provider_chapter_id, chapter=True),
     )
 
 
@@ -491,6 +497,7 @@ def list_chapters(
     local_pid = local_by_provider_id(session, series_id)
     local_num = local_by_number_lang(session, series_id)
     dl_status = download_status_map(session, series_id)
+    remote_progress = provider_states(session, series_id)
     read_ids = set(
         session.scalars(
             select(ReadingProgress.chapter_id).where(
@@ -537,10 +544,17 @@ def list_chapters(
                         uploaded_at=local.source_uploaded_at
                         or remote.published_at
                         or local.created_at,
-                        read=local.id in read_ids,
+                        read=local.id in read_ids
+                        or bool(
+                            remote_progress.get(remote.provider_chapter_id)
+                            and remote_progress[remote.provider_chapter_id].completed
+                        ),
                         comments=local.comment_count,
                         status=status,
                         provider_chapter_id=remote.provider_chapter_id,
+                        source_url=source_url(
+                            remote.provider, remote.provider_chapter_id, chapter=True
+                        ),
                     )
                 )
             else:
@@ -554,18 +568,24 @@ def list_chapters(
                         group=remote.group_name,
                         language=remote.language,
                         uploaded_at=remote.published_at,
-                        read=False,
+                        read=bool(
+                            remote_progress.get(remote.provider_chapter_id)
+                            and remote_progress[remote.provider_chapter_id].completed
+                        ),
                         comments=0,
                         status=status,
                         provider_chapter_id=remote.provider_chapter_id,
+                        source_url=source_url(
+                            remote.provider, remote.provider_chapter_id, chapter=True
+                        ),
                     )
                 )
         # Local chapters not represented in the remote index (e.g. scan-only extras).
         for row in rows:
             if row.chapter.id not in covered_local_ids:
-                chapters_out.append(to_chapter_out(row))
+                chapters_out.append(to_chapter_out(row, provider=series.provider))
     else:
-        chapters_out = [to_chapter_out(row) for row in rows]
+        chapters_out = [to_chapter_out(row, provider=series.provider) for row in rows]
 
     # Sort merged list by number_sort when we mixed remote + local extras.
     def _sort_key(c: ChapterOut) -> tuple[float, str]:
@@ -619,6 +639,9 @@ def get_chapter(
                     page_count=c.page_count,
                     comments=c.comment_count,
                     read=chosen.read,
+                    source_url=source_url(
+                        c.provider or series.provider, c.provider_chapter_id, chapter=True
+                    ),
                     uploaded_at=c.source_uploaded_at or c.created_at,
                 )
             ensure_chapter_index(session, series.id)
@@ -636,6 +659,7 @@ def get_chapter(
                 )
         raise NotFoundError(f"chapter {chapter_id!r} not found")
     c = row.chapter
+    series = session.get(Series, c.series_id)
     return ChapterDetailOut(
         id=c.id,
         series_id=c.series_id,
@@ -647,6 +671,9 @@ def get_chapter(
         page_count=c.page_count,
         comments=c.comment_count,
         read=row.read,
+        source_url=source_url(
+            c.provider or (series.provider if series else None), c.provider_chapter_id, chapter=True
+        ),
         uploaded_at=c.source_uploaded_at or c.created_at,
     )
 
@@ -696,10 +723,20 @@ def dashboard(session: Session, *, recently_added_kinds: str | None = None) -> D
     )
 
 
-def search(session: Session, q: str, *, limit: int = 20) -> list[SeriesOut]:
-    if not q.strip():
+def search(
+    session: Session,
+    q: str,
+    *,
+    limit: int = 20,
+    author: str | None = None,
+    artist: str | None = None,
+) -> list[SeriesOut]:
+    if not q.strip() and not author and not artist:
         return []
-    return [to_series_out(r) for r in repo.search_series(session, q.strip(), limit=limit)]
+    return [
+        to_series_out(r)
+        for r in repo.search_series(session, q.strip(), limit=limit, author=author, artist=artist)
+    ]
 
 
 def related(session: Session, series_id: str, *, limit: int = 12) -> list[SeriesOut]:
@@ -762,3 +799,7 @@ def chapter_availability(
             "source_url": source,
         }
     )
+
+
+def creator_names(session: Session, role: str, q: str, *, limit: int = 20) -> list[str]:
+    return repo.creator_names(session, role, q, limit=limit)

@@ -101,8 +101,9 @@
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
       cursor-pagination via `/api/series`.
 - [x] **Gallery** — `GalleryView` + `GalleryDetail` + `Lightbox`, from `/api/series?kind=gallery` and
-      `/api/series/{id}/images`. Library selector defaults to the first gallery root;
-      `libraryId` scopes every cursor page and its artist/source facets.
+      `/api/series/{id}/images`. Compact library/artist dropdowns share the toolbar; text search also matches characters and series/franchise names. Library selection defaults to
+      all galleries, followed by alphabetically sorted gallery roots; choosing a root scopes every
+      cursor page and its artist choices through `libraryId`.
 - [x] **Reading / Unread** — reading shelf reuses `LibraryView`; unread feed via `/api/updates/unread`.
 - [x] **Series detail** — hero + info panel + `ChapterList` (Related/Art tabs) from `/api/series/{id}`,
       `/chapters`, `/related`, `/art`. Action row (favorite / shelf / rating) persists via `PATCH`.
@@ -200,6 +201,14 @@
       queries. Shared DDL in `catalog/search_index.py` (migration + test harness). ✅ done.
 
 ## B7. Reading progress + trackers
+- [x] Durable provider-only chapter progress; sticky completion; image-load, one-page,
+      double-spread, and long-strip completion; visible save failures/retry. Chapter controls
+      support read/unread toggles and atomic batches.
+- [x] Vertical author/artist credits link to role-specific search. Free-text creator filters
+      with library-backed autocomplete are available in search and library advanced filters.
+      Library filters use a responsive form grid, compact multi-select dropdowns, and searchable
+      include/exclude tags; selected-filter chips stay visible when the form is collapsed;
+      MangaDex series/chapter source links are exposed in details.
 - [x] Progress writes (`PUT /api/chapters/{id}/progress`) → unread / lastRead / continue-reading.
 - [x] Outbound tracker sync + OAuth ✅ — AniList / MyAnimeList (OAuth2 ± PKCE) + MangaUpdates (login)
       connect + push read status on chapter completion (`src/trackers/`, gated by `sync_on_read`;
@@ -652,7 +661,7 @@ already labelled `volume=null` (just capitalised to "No Volume").
 | Data | Direction | Resolution |
 |---|---|---|
 | Reading status (shelf) | two-way | push on change; **MD-wins** on pull (replace) |
-| Read markers (progress) | two-way | push on chapter-read; pull marks read from MD (additive v1; downloaded series only) |
+| Read markers (progress) | two-way | push on chapter-read; pull marks read from MD (additive; local and provider-only chapters) |
 | Metadata · tags · covers | pull only | **MD-wins** (mirror of a MD-sourced title) |
 | Custom lists → Collections | owned: write-through; followed/imported: read-only | Fetch current version/ownership before writes; failed writes preserve local state; sync reconciles a fresh snapshot |
 | Favorite · personal rating | local only | not synced |
@@ -674,11 +683,10 @@ library, `apply_metadata`, status → `library_status`. No custom lists, no read
       row (no duplicate; sync updates it in place).
 - [x] **Status → shelf (MD-wins):** `_READING_STATUSES` → `library_status`, overwriting local. Paired with
       the I1 push, local edits already reached MD, so a pull only lands genuine website-side changes.
-- [x] **Read markers → progress (downloaded only):** needs `Chapter.provider_chapter_id` (nullable,
-      indexed; migration), set by the downloader from `RemoteChapter.provider_chapter_id`. For each synced
-      series **with local chapters**, mark `ReadingProgress` completed for chapters whose id ∈ the read set
-      (additive v1 — don't unmark). Sync-only series → no-op; only request markers for series that have
-      local chapters (bounds calls).
+- [x] **Read markers → progress (local and provider-only):** every synced series receives additive read
+      markers in `ProviderReadingProgress`. Downloaded chapters also update `ReadingProgress`, matched
+      by `Chapter.provider_chapter_id`; marker pulls never clear completion. Remote progress survives
+      download removal, and outbound pushes deduplicate local/provider identities.
 - [x] **Custom lists → Collections (managed):** add `provider` + `provider_list_id` (+ index) to
       `Collection` (migration). Get-or-create by `(provider, provider_list_id)`, name from the MD list;
       reconcile membership. Surfaces in the Lists UI unchanged.
@@ -688,7 +696,7 @@ library, `apply_metadata`, status → `library_status`. No custom lists, no read
       Optional `last_synced_at` on the Provider row.
 - [x] **Tests:** stub provider → follows + statuses + two overlapping lists + read markers → one Series per
       unique manga, shelves set, two Collections w/ membership, read chapters completed on a downloaded
-      series (no-op on a sync-only one); re-sync idempotent (no dup series/collections/members).
+      series and persisted for a sync-only one; re-sync idempotent (no dup series/collections/members).
 
 ## I1 — Outbound sync (push; per-action, immediate) — ✅ done
 

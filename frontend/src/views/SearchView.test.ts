@@ -4,7 +4,10 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { searchSeries } from "../api/queries";
 import type { Series } from "../types";
 import SearchView from "./SearchView.vue";
-vi.mock("../api/queries", () => ({ searchSeries: vi.fn() }));
+vi.mock("../api/queries", () => ({
+  searchSeries: vi.fn(),
+  fetchCreatorNames: vi.fn().mockResolvedValue([]),
+}));
 beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(searchSeries).mockReset().mockResolvedValue([]);
@@ -33,7 +36,7 @@ it("debounces input, trims a submitted query, and responds to deep links", async
   await vi.advanceTimersByTimeAsync(249);
   expect(searchSeries).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
-  expect(searchSeries).toHaveBeenCalledExactlyOnceWith("latest");
+  expect(searchSeries).toHaveBeenCalledExactlyOnceWith("latest", {});
   await wrapper.get("input").trigger("keyup.enter");
   await flushPromises();
   expect(router.currentRoute.value.query.q).toBe("latest");
@@ -76,4 +79,31 @@ it("cancels a pending debounce on unmount", async () => {
   wrapper.unmount();
   await vi.advanceTimersByTimeAsync(250);
   expect(searchSeries).not.toHaveBeenCalled();
+});
+
+it("opens creator deep links and combines free-text author and artist filters", async () => {
+  const { wrapper, router } = await render("/search?author=Writer%20A");
+  expect(wrapper.get("details").attributes("open")).toBeDefined();
+  expect(wrapper.get<HTMLInputElement>('[aria-label="Author / mangaka"]').element.value).toBe(
+    "Writer A",
+  );
+  await vi.advanceTimersByTimeAsync(250);
+  expect(searchSeries).toHaveBeenLastCalledWith("", { author: "Writer A" });
+  await wrapper.get('[aria-label="Author / mangaka"]').setValue("Writer A");
+  await wrapper.get('[aria-label="Artist"]').setValue("Arbitrary artist");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(searchSeries).toHaveBeenLastCalledWith("", {
+    author: "Writer A",
+    artist: "Arbitrary artist",
+  });
+  await wrapper.get('[aria-label="Search all series"]').trigger("keyup.enter");
+  await flushPromises();
+  expect(router.currentRoute.value.query).toEqual({
+    author: "Writer A",
+    artist: "Arbitrary artist",
+  });
+  await router.replace("/search?artist=Different");
+  await flushPromises();
+  await vi.advanceTimersByTimeAsync(250);
+  expect(searchSeries).toHaveBeenLastCalledWith("", { artist: "Different" });
 });

@@ -151,11 +151,11 @@ export function volumeGroupsFor(
  *  counters) once the reader reports the chapter as completed. */
 export function applyProgress(chapterId: string, completed: boolean | null | undefined): void {
   const chapter = chapterById(chapterId);
-  if (!chapter || !completed || chapter.read) return;
-  chapter.read = true;
+  if (!chapter || completed == null || chapter.read === completed) return;
+  chapter.read = completed;
   const series = seriesCatalog.find((s) => s.id === chapter.seriesId);
   if (!series) return;
-  series.unreadCount = Math.max(0, series.unreadCount - 1);
+  series.unreadCount = Math.max(0, series.unreadCount + (completed ? -1 : 1));
   const num = Number(chapter.number);
   if (!Number.isNaN(num)) series.lastReadChapter = Math.max(series.lastReadChapter ?? 0, num);
 }

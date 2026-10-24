@@ -14,6 +14,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.catalog.links import source_url
 from src.catalog.models import Chapter, Library, ProviderChapter, Series
 from src.catalog.remote_chapters import ensure_chapter_index
 from src.catalog.schema import ChapterBufferOut, ChapterDetailOut
@@ -22,6 +23,7 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.downloads.provider import AdhocPageProvider, RemoteChapter, get_provider
 from src.integrations.models import Provider as ProviderConfig
 from src.library.paths import is_provider_path
+from src.progress.state import provider_states
 
 MIN_PRELOAD_PAGES = 1
 MAX_PRELOAD_PAGES = 20
@@ -244,6 +246,7 @@ def get_adhoc_chapter_detail(
         start_page=1,
         preload_pages=clamp_preload_pages(preload_pages),
     )
+    progress = provider_states(session, series.id).get(remote_row.provider_chapter_id)
     return ChapterDetailOut(
         id=f"adhoc:{series.id}:{remote_row.provider_chapter_id}",
         series_id=series.id,
@@ -254,7 +257,8 @@ def get_adhoc_chapter_detail(
         language=remote_row.language,
         page_count=total,
         comments=0,
-        read=False,
+        source_url=source_url(remote_row.provider, remote_row.provider_chapter_id, chapter=True),
+        read=bool(progress and progress.completed),
         uploaded_at=remote_row.published_at or remote_row.created_at,
     )
 
