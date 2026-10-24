@@ -1,6 +1,6 @@
 # 11 — Reading progress & sync
 
-**Status:** Implemented — single-user, chapter-keyed. Outbound tracker sync
+**Status:** Implemented — single-user, local and provider chapter identities. Outbound tracker sync
 shipped; device/reader-ecosystem sync stays out of scope.
 
 ## Storage
@@ -24,13 +24,19 @@ are no separate `started_at`/`completed_at` fields, no `device_id`/
 `device_name`, no `locator` for reflowable EPUB (there's no EPUB support at
 all — `content_kind` is `cbz|zip|image_dir|avif_dir` only).
 
+Provider-backed chapters also have `provider_reading_progress`, keyed uniquely by
+`(series_id, provider, provider_chapter_id)`. It persists ad-hoc reads without creating
+fake Books or Chapters and survives deleting a download. Migration `b7e819d4c602`
+backfills existing provider-linked progress. Local chapter read predicates consider
+both tables, and tracker counts deduplicate the two identities.
+
 Progress is per **Chapter** (the logical reading unit), not per Book (the
 physical container) — matching the split in [05](05-domain-model.md).
 
 ## No rollup table
 
 There's no `series_read_progress` table. `unreadCount`, `lastReadChapter`,
-and "continue reading" are computed live via correlated SQL subqueries
+and "continue reading" for downloaded chapters are computed live via correlated SQL subqueries
 (`backend/src/catalog/repository.py` — `_aggregates`, `dashboard_counts`,
 `continue_reading`, `recently_added`), not a denormalized row kept in sync
 on write.
@@ -39,10 +45,22 @@ on write.
 
 `PUT /api/chapters/{chapter_id}/progress` (`backend/src/progress/router.py`
 → `progress/service.py:update_progress`), body `{page, completed?}`.
-Completion is **inferred** (`page >= chapter.page_count`) when `completed`
-is omitted from the request, or set explicitly when the caller passes it.
-On completion, `enqueue_push(session, chapter.series_id)`
-(`trackers/sync.py`) fires outbound tracker sync.
+Completion is inferred (`page >= chapter.page_count`) for local chapters when
+`completed` is omitted. Automatic page saves use atomic SQLite upserts that preserve
+completion and the furthest page, so a delayed earlier save cannot clear a read marker.
+The reader saves after image load (including the first/only page), accounts for both
+pages of a double spread, and marks a long strip complete at the last image's bottom.
+Provider-only reads use the `adhoc:<series_id>:<provider_chapter_id>` identity and an
+explicit completion flag from the reader. Saves are coalesced and serialized, navigation
+flushes pending work, tab-close saves use fetch keepalive, and failures offer a retry.
+
+`PUT /api/series/{series_id}/read-status`, body `{chapterIds, completed}`, supports
+local and ad-hoc identities. It validates the complete selection before a single
+transaction; manual unread resets page and completion explicitly. Completion changes
+enqueue one outbound tracker/MangaDex push. MangaDex pushes include both read and
+unread chapter IDs; inbound read markers remain additive for downloaded and remote
+chapters. The chapter UI exposes individual toggles, selected batches, and all currently
+listed chapters (respecting the language filter).
 
 ## Move/restore preserves progress
 

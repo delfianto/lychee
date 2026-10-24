@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "@lucide/vue";
+import { ChevronUp, Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "@lucide/vue";
 import { type Component, computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
@@ -54,6 +54,8 @@ const sort = ref("Recently Added");
 const showFilters = ref(false);
 const filters = reactive<BrowseFilters>({
   query: "",
+  author: "",
+  artist: "",
   tags: {},
   tagMode: "and",
   ratings: new Set(),
@@ -65,6 +67,8 @@ const filters = reactive<BrowseFilters>({
 
 function resetFilters(): void {
   filters.query = "";
+  filters.author = "";
+  filters.artist = "";
   filters.tags = {};
   filters.ratings = new Set();
   filters.demographics = new Set();
@@ -98,6 +102,22 @@ function tagName(id: string): string {
 
 const activeChips = computed(() => {
   const chips: { key: string; label: string; remove: () => void }[] = [];
+  if (filters.author)
+    chips.push({
+      key: "author",
+      label: `Author: ${filters.author}`,
+      remove: () => {
+        filters.author = "";
+      },
+    });
+  if (filters.artist)
+    chips.push({
+      key: "artist",
+      label: `Artist: ${filters.artist}`,
+      remove: () => {
+        filters.artist = "";
+      },
+    });
   if (filters.query)
     chips.push({ key: "q", label: `“${filters.query}”`, remove: () => (filters.query = "") });
   for (const [id, state] of Object.entries(filters.tags))
@@ -127,6 +147,8 @@ interface Preset {
   query: string;
   tags: Record<string, "include" | "exclude">;
   tagMode: "and" | "or";
+  author?: string;
+  artist?: string;
   ratings: ContentRating[];
   demographics: Demographic[];
   statuses: PublicationStatus[];
@@ -151,6 +173,8 @@ function savePreset(): void {
   const p: Preset = {
     name,
     query: filters.query,
+    ...(filters.author ? { author: filters.author } : {}),
+    ...(filters.artist ? { artist: filters.artist } : {}),
     tags: { ...filters.tags },
     tagMode: filters.tagMode,
     ratings: [...filters.ratings],
@@ -167,6 +191,8 @@ function savePreset(): void {
 }
 function applyPreset(p: Preset): void {
   filters.query = p.query;
+  filters.author = p.author ?? "";
+  filters.artist = p.artist ?? "";
   filters.tags = { ...p.tags };
   filters.tagMode = p.tagMode;
   filters.ratings = new Set(p.ratings);
@@ -228,40 +254,84 @@ watch(
 <template>
   <div class="flex flex-col gap-4 p-4 sm:p-6">
     <!-- Title -->
-    <div>
-      <h1 class="text-3xl font-bold">{{ title }}</h1>
-      <p class="text-sm text-base-content/60">{{ results.length }} series</p>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-3xl font-bold">{{ title }}</h1>
+        <p class="text-sm text-base-content/60">{{ results.length }} series</p>
+      </div>
+      <SegmentedToggle v-model="density" :options="densities" aria-label="View density" />
     </div>
 
-    <!-- Toolbar: search + filters · density + sort -->
-    <div class="flex flex-wrap items-center gap-2">
-      <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
-        <Search class="size-4 opacity-60" />
+    <div class="flex flex-wrap items-center gap-3">
+      <label class="relative min-w-0 flex-1 basis-64">
+        <Search
+          class="pointer-events-none absolute top-1/2 left-3 z-10 size-5 -translate-y-1/2 text-base-content/60"
+        />
         <input
           v-model="filters.query"
           type="search"
-          class="grow"
+          class="input h-12 w-full bg-base-100 pl-11"
           placeholder="Search this library…"
           aria-label="Search this library"
         />
       </label>
+      <label v-if="!showFilters" class="flex items-center gap-2 text-sm text-base-content/65">
+        Sort by
+        <select v-model="sort" aria-label="Sort by" class="select h-12 w-44 bg-base-100">
+          <option v-for="s in sorts" :key="s">{{ s }}</option>
+        </select>
+      </label>
       <button
-        class="btn btn-sm gap-1.5"
+        class="btn h-12 gap-2 px-6"
         :class="showFilters || activeChips.length ? 'btn-primary' : 'btn-ghost surface-border'"
+        :aria-expanded="showFilters"
+        aria-controls="library-filters"
         @click="showFilters = !showFilters"
       >
-        <SlidersHorizontal class="size-4" />Filters
+        <ChevronUp v-if="showFilters" class="size-4" /><SlidersHorizontal v-else class="size-4" />{{
+          showFilters ? "Hide filters" : "Filters"
+        }}
         <span v-if="activeChips.length" class="badge badge-xs">{{ activeChips.length }}</span>
       </button>
+    </div>
 
-      <div class="ml-auto flex items-center gap-3">
-        <SegmentedToggle v-model="density" :options="densities" aria-label="View density" />
-        <label class="flex items-center gap-2 whitespace-nowrap text-xs text-base-content/60">
-          Sort by
-          <select v-model="sort" class="select select-bordered select-sm w-44">
-            <option v-for="s in sorts" :key="s">{{ s }}</option>
-          </select>
-        </label>
+    <!-- Foldable advanced filters -->
+    <div
+      v-if="showFilters"
+      id="library-filters"
+      class="flex flex-col gap-5 rounded-box bg-base-100 p-4 surface-border sm:p-5"
+    >
+      <FilterPanel
+        :filters="filters"
+        :sort="sort"
+        :sort-options="sorts"
+        @update:sort="sort = $event"
+        :tag-groups="tagGroups"
+        @set-tag-mode="filters.tagMode = $event"
+        @toggle-tag="cycleTag"
+        @set-author="filters.author = $event"
+        @set-artist="filters.artist = $event"
+        @toggle-rating="toggleInSet(filters.ratings, $event)"
+        @toggle-demographic="toggleInSet(filters.demographics, $event)"
+        @toggle-status="toggleInSet(filters.statuses, $event)"
+        @toggle-read-state="toggleInSet(filters.readStates, $event)"
+      />
+      <div class="divider my-0"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium">Save as preset</span>
+        <input
+          v-model="presetName"
+          type="text"
+          placeholder="e.g. Unread Seinen"
+          class="input input-bordered input-sm max-w-xs"
+          @keyup.enter="savePreset"
+        />
+        <button class="btn btn-primary btn-sm" :disabled="!presetName.trim()" @click="savePreset">
+          Save
+        </button>
+        <button class="btn btn-ghost btn-sm ml-auto" @click="resetFilters">
+          Clear all filters
+        </button>
       </div>
     </div>
 
@@ -305,7 +375,7 @@ watch(
     </div>
 
     <!-- Active-filter chips -->
-    <div v-if="activeChips.length" class="flex flex-wrap items-center gap-1.5">
+    <div v-if="activeChips.length && !showFilters" class="flex flex-wrap items-center gap-1.5">
       <button
         v-for="c in activeChips"
         :key="c.key"
@@ -315,37 +385,6 @@ watch(
         {{ c.label }}<X class="size-3" />
       </button>
       <button class="btn btn-ghost btn-xs" @click="resetFilters">Clear all</button>
-    </div>
-
-    <!-- Foldable advanced filters -->
-    <div v-if="showFilters" class="flex flex-col gap-4 rounded-box surface-border bg-base-100 p-4">
-      <FilterPanel
-        :filters="filters"
-        :tag-groups="tagGroups"
-        @set-tag-mode="filters.tagMode = $event"
-        @toggle-tag="cycleTag"
-        @toggle-rating="toggleInSet(filters.ratings, $event)"
-        @toggle-demographic="toggleInSet(filters.demographics, $event)"
-        @toggle-status="toggleInSet(filters.statuses, $event)"
-        @toggle-read-state="toggleInSet(filters.readStates, $event)"
-      />
-      <div class="divider my-0"></div>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-sm font-medium">Save as preset</span>
-        <input
-          v-model="presetName"
-          type="text"
-          placeholder="e.g. Unread Seinen"
-          class="input input-bordered input-sm max-w-xs"
-          @keyup.enter="savePreset"
-        />
-        <button class="btn btn-primary btn-sm" :disabled="!presetName.trim()" @click="savePreset">
-          Save
-        </button>
-        <button class="btn btn-ghost btn-sm ml-auto" @click="resetFilters">
-          Clear all filters
-        </button>
-      </div>
     </div>
 
     <!-- Results -->

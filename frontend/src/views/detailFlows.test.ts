@@ -448,3 +448,58 @@ it("discards a chapter-check retry response after navigating to another manga", 
   expect(wrapper.get("h1").text()).toBe("Other manga");
   expect(wrapper.text()).not.toContain("Could not check chapters on MangaDex");
 });
+
+it("marks individual and selected remote/local chapters read, retries failures, and clears read status", async () => {
+  api.db.series[0]!.sourceUrl = "https://mangadex.org/title/md-title";
+  api.db.series[0]!.authors = ["First writer", "Second writer"];
+  api.db.chapters[0]!.chapters[0]!.sourceUrl = "https://mangadex.org/chapter/md-chapter";
+  const { wrapper } = await renderView(SeriesDetail, {
+    path: "/series/s1",
+    pattern: "/series/:id",
+  });
+  expect(wrapper.findAll('a[href="/search?author=First+writer"]').length).toBeGreaterThan(0);
+  expect(wrapper.get('a[href="https://mangadex.org/title/md-title"]').text()).toContain("MangaDex");
+  expect(
+    wrapper.get('a[href="https://mangadex.org/chapter/md-chapter"]').attributes("target"),
+  ).toBe("_blank");
+  const mark = wrapper
+    .findAll('button[aria-label^="Mark chapter"]')
+    .find((b) => b.attributes("aria-label")?.endsWith(" read"))!;
+  api.failNext("PUT", "/api/series/s1/read-status");
+  await mark.trigger("click");
+  await flushPromises();
+  expect(messages()).toContain("Rejected by server");
+  expect(mark.attributes("disabled")).toBeUndefined();
+  await mark.trigger("click");
+  await flushPromises();
+  expect(api.writes().at(-1)?.body).toMatchObject({ completed: true });
+  await wrapper.get('[aria-label="Select all chapters"]').setValue(true);
+  await click(wrapper, "Mark selected read");
+  expect(api.db.chapters.flatMap((g) => g.chapters).every((c) => c.read)).toBe(true);
+  expect(api.writes().at(-1)?.body.chapterIds).toContain("adhoc:s1:remote-3");
+  await click(wrapper, "Mark all unread");
+  expect(api.db.chapters.flatMap((g) => g.chapters).every((c) => !c.read)).toBe(true);
+});
+
+it("ignores a delayed read-status response after navigating to another series", async () => {
+  let release!: () => void;
+  api.server.use(
+    http.put("http://localhost/api/series/s1/read-status", async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return HttpResponse.json({ updated: 1 });
+    }),
+  );
+  const { wrapper, router } = await renderView(SeriesDetail, {
+    path: "/series/s1",
+    pattern: "/series/:id",
+  });
+  await wrapper.findAll('button[aria-label^="Mark chapter"]')[0]!.trigger("click");
+  await flushPromises();
+  await router.push("/series/s2");
+  await flushPromises();
+  release();
+  await flushPromises();
+  expect(wrapper.get("h1").text()).toBe("Second story");
+});

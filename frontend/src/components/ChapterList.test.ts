@@ -126,3 +126,35 @@ describe("ChapterList emitted-event contracts", () => {
     expect(wrapper.emitted("update:language")).toEqual([[""]]);
   });
 });
+
+it("marks selected remote chapters without changing local ones and keeps failed selections", async () => {
+  const local = chapter({ number: "1", id: "local", status: "downloaded", read: true });
+  const remote = chapter({ number: "2", providerChapterId: "remote" });
+  const wrapper = mount(ChapterList, {
+    ...mountOpts,
+    props: { seriesId: "series", volumes: volumes(local, remote) },
+  });
+  await wrapper.get('[aria-label="Select chapter 2"]').setValue(true);
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "Mark selected read")!
+    .trigger("click");
+  const event = wrapper.emitted("markRead")![0]!;
+  expect(event.slice(0, 2)).toEqual([["adhoc:series:remote"], true]);
+  (event[2] as (success: boolean) => void)(false);
+  await wrapper.vm.$nextTick();
+  expect((wrapper.get('[aria-label="Select chapter 2"]').element as HTMLInputElement).checked).toBe(
+    true,
+  );
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "Mark selected read")!
+    .trigger("click");
+  (wrapper.emitted("markRead")![1]![2] as (success: boolean) => void)(true);
+  await wrapper.vm.$nextTick();
+  expect((wrapper.get('[aria-label="Select chapter 2"]').element as HTMLInputElement).checked).toBe(
+    false,
+  );
+  await wrapper.get('[aria-label="Mark chapter 1 unread"]').trigger("click");
+  expect(wrapper.emitted("markRead")![2]!.slice(0, 2)).toEqual([["local"], false]);
+});

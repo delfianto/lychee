@@ -14,7 +14,8 @@ import type { Series } from "../types";
 
 defineOptions({ name: "GalleryView" });
 
-// Fetch and derive facets within the selected library, including every cursor page.
+// Fetch every cursor page across all galleries or within the selected library.
+const names = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 const libraries = ref<LibraryRow[]>([]);
 const selectedLibrary = ref("");
 const all = ref<Series[]>([]);
@@ -28,7 +29,7 @@ async function loadGalleries(): Promise<void> {
   loadError.value = "";
   all.value = [];
   try {
-    const data = selectedLibrary.value ? await fetchGalleries(selectedLibrary.value) : [];
+    const data = await fetchGalleries(selectedLibrary.value || undefined);
     if (loadGuard.isCurrent(token)) all.value = data;
   } catch (e) {
     if (loadGuard.isCurrent(token))
@@ -41,10 +42,15 @@ async function load(): Promise<void> {
   loading.value = true;
   loadError.value = "";
   try {
-    libraries.value = (await fetchLibraryRows()).filter((l) => l.kind === "gallery");
-    if (!libraries.value.some((l) => l.id === selectedLibrary.value)) {
-      selectedLibrary.value = libraries.value[0]?.id ?? "";
-      if (selectedLibrary.value) return; // the selection watcher loads it
+    libraries.value = (await fetchLibraryRows())
+      .filter((library) => library.kind === "gallery")
+      .sort((a, b) => names.compare(a.name, b.name) || a.id.localeCompare(b.id));
+    if (
+      selectedLibrary.value &&
+      !libraries.value.some((library) => library.id === selectedLibrary.value)
+    ) {
+      selectedLibrary.value = "";
+      return; // the selection watcher reloads all galleries
     }
     await loadGalleries();
   } catch (e) {
@@ -54,7 +60,6 @@ async function load(): Promise<void> {
 }
 watch(selectedLibrary, () => {
   artist.value = "";
-  source.value = "";
   void loadGalleries();
 });
 onMounted(load);
@@ -66,15 +71,12 @@ onUnmounted(
 
 const query = ref("");
 const artist = ref("");
-const source = ref("");
 const sort = ref("Recently Added");
 const sorts = ["Recently Added", "Title", "Rating"];
 
-const artists = computed(() => [...new Set(all.value.flatMap((g) => g.artists))].sort());
-const sources = computed(() =>
-  [...new Set(all.value.map((g) => g.source).filter((s): s is string => Boolean(s)))].sort(),
+const artists = computed(() =>
+  [...new Set(all.value.flatMap((g) => g.artists))].sort(names.compare),
 );
-
 const filtered = computed(() => {
   let list = all.value;
   const q = query.value.trim().toLowerCase();
@@ -87,7 +89,6 @@ const filtered = computed(() => {
         (g.source ?? "").toLowerCase().includes(q),
     );
   if (artist.value) list = list.filter((g) => g.artists.includes(artist.value));
-  if (source.value) list = list.filter((g) => g.source === source.value);
   return sortSeries(list, sort.value);
 });
 </script>
@@ -99,20 +100,7 @@ const filtered = computed(() => {
       <p class="text-sm text-base-content/60">{{ filtered.length }} galleries</p>
     </div>
 
-    <label v-if="libraries.length" class="flex flex-wrap items-center gap-2 text-sm">
-      Library
-      <select
-        v-model="selectedLibrary"
-        class="select select-bordered select-sm w-full sm:w-72"
-        aria-label="Gallery library"
-      >
-        <option v-for="library in libraries" :key="library.id" :value="library.id">
-          {{ library.name }}
-        </option>
-      </select>
-    </label>
-
-    <!-- Gallery-specific toolbar: search + artist / series filters + sort -->
+    <!-- Search includes series/franchise names; dropdowns stay limited to library and artist. -->
     <div class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex w-full max-w-xs items-center gap-2">
         <Search class="size-4 opacity-60" />
@@ -120,25 +108,28 @@ const filtered = computed(() => {
           v-model="query"
           type="search"
           class="grow"
-          placeholder="Search title, artist, character…"
+          placeholder="Search title, artist, series…"
           aria-label="Search galleries"
         />
       </label>
       <select
+        v-if="libraries.length"
+        v-model="selectedLibrary"
+        class="select select-bordered select-sm w-40 max-w-full"
+        aria-label="Gallery library"
+      >
+        <option value="">All galleries</option>
+        <option v-for="library in libraries" :key="library.id" :value="library.id">
+          {{ library.name }}
+        </option>
+      </select>
+      <select
         v-model="artist"
-        class="select select-bordered select-sm"
+        class="select select-bordered select-sm w-40 max-w-full"
         aria-label="Filter by artist"
       >
         <option value="">All artists</option>
         <option v-for="a in artists" :key="a">{{ a }}</option>
-      </select>
-      <select
-        v-model="source"
-        class="select select-bordered select-sm"
-        aria-label="Filter by series"
-      >
-        <option value="">All series</option>
-        <option v-for="s in sources" :key="s">{{ s }}</option>
       </select>
       <label class="ml-auto flex items-center gap-2 whitespace-nowrap text-xs text-base-content/60">
         Sort by

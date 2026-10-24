@@ -306,10 +306,28 @@ export function useAppApi() {
           { key: "manga", title: "Manga", sizeGb: 1.5 },
           { key: "empty", title: "Empty", sizeGb: 0 },
         ]);
+      if (path === "/api/creators") {
+        const role = url.searchParams.get("role") === "artist" ? "artists" : "authors";
+        const q = (url.searchParams.get("q") ?? "").toLowerCase();
+        return json(
+          [...new Set(db.series.flatMap((s) => s[role]))]
+            .filter((name) => name.toLowerCase().includes(q))
+            .sort(),
+        );
+      }
       if (path === "/api/search")
         return json(
-          db.series.filter((s) =>
-            s.title.toLowerCase().includes((url.searchParams.get("q") ?? "").toLowerCase()),
+          db.series.filter(
+            (s) =>
+              s.title.toLowerCase().includes((url.searchParams.get("q") ?? "").toLowerCase()) &&
+              (!url.searchParams.get("author") ||
+                s.authors.some((name) =>
+                  name.toLowerCase().includes(url.searchParams.get("author")!.toLowerCase()),
+                )) &&
+              (!url.searchParams.get("artist") ||
+                s.artists.some((name) =>
+                  name.toLowerCase().includes(url.searchParams.get("artist")!.toLowerCase()),
+                )),
           ),
         );
       if (path.startsWith("/api/updates"))
@@ -341,6 +359,14 @@ export function useAppApi() {
           return json(item);
         }
         if (action === "chapters") return json(db.chapters);
+        if (action === "read-status" && method === "PUT") {
+          const ids = body.chapterIds as string[];
+          for (const chapter of db.chapters.flatMap((group) => group.chapters)) {
+            if (ids.includes(chapter.id ?? `adhoc:${id}:${chapter.providerChapterId}`))
+              chapter.read = body.completed as boolean;
+          }
+          return json({ updated: ids.length });
+        }
         if (action === "related") return json(db.series.filter((s) => s.id !== id));
         if (action === "art") return json({ images: ["/art1", "/art2"] });
         if (action === "images") return json({ items: db.images, nextCursor: null });

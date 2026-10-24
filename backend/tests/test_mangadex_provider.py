@@ -210,7 +210,10 @@ def test_push_read_posts_chapter_ids() -> None:
         return httpx.Response(200, json={"result": "ok"})
 
     _provider_for(handler).push_read("m1", ["c1", "c2"])
-    assert seen == {"path": "/manga/m1/read", "body": {"chapterIdsRead": ["c1", "c2"]}}
+    assert seen == {
+        "path": "/manga/m1/read",
+        "body": {"chapterIdsRead": ["c1", "c2"], "chapterIdsUnread": []},
+    }
 
 
 def test_push_read_empty_makes_no_call() -> None:
@@ -268,3 +271,11 @@ def test_follow_metadata_survives_unavailable_statistics() -> None:
         return httpx.Response(404)
 
     assert _provider_for(handler).list_follows()[0].community_rating is None
+
+
+def test_push_unread_without_completed_chapters() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content) == {"chapterIdsRead": [], "chapterIdsUnread": ["c1"]}
+        return httpx.Response(200, json={"result": "ok"})
+
+    _provider_for(handler).push_read("m1", [], unread_ids=["c1"])

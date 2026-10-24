@@ -144,6 +144,11 @@ function filterSeries(url: URL): SeriesOut[] {
     if (!matchesCsv(s.status, q.get("pubStatus"))) return false;
     if (!matchesReadState(s, q.get("readState"))) return false;
     if (
+      q.get("author") &&
+      !s.authors.some((name) => name.toLowerCase().includes(q.get("author")!.toLowerCase()))
+    )
+      return false;
+    if (
       q.get("artist") &&
       !s.artists.some((a) => a.toLowerCase().includes(q.get("artist")!.toLowerCase()))
     )
@@ -466,6 +471,15 @@ export const handlers = [
     return HttpResponse.json(result);
   }),
 
+  http.put("/api/series/:series_id/read-status", async ({ params, request }) => {
+    const body = (await request.json()) as components["schemas"]["ChapterReadUpdate"];
+    const chapters = body.chapterIds.map((id) => chapterById(id));
+    if (chapters.some((chapter) => !chapter || chapter.seriesId !== params.series_id))
+      return apiError(400, "invalid_chapters", "All chapters must belong to this series.");
+    for (const id of new Set(body.chapterIds)) applyProgress(id, body.completed);
+    return HttpResponse.json({ updated: new Set(body.chapterIds).size });
+  }),
+
   http.put("/api/chapters/:chapter_id/progress", async ({ params, request }) => {
     const body = (await request.json()) as components["schemas"]["ProgressUpdate"];
     applyProgress(params.chapter_id as string, body.completed);
@@ -526,13 +540,34 @@ export const handlers = [
     return HttpResponse.json({ items: recentUpdates(true, limit), nextCursor: null });
   }),
 
+  http.get("/api/creators", ({ request }) => {
+    const url = new URL(request.url);
+    const role = url.searchParams.get("role") === "artist" ? "artists" : "authors";
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    return HttpResponse.json(
+      [...new Set(seriesCatalog.flatMap((series) => series[role]))]
+        .filter((name) => name.toLowerCase().includes(q))
+        .sort()
+        .slice(0, 20),
+    );
+  }),
+
   http.get("/api/search", async ({ request }) => {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
     const limit = Number(url.searchParams.get("limit") ?? 30);
     await delay(100);
-    if (!q) return HttpResponse.json([]);
-    const results = seriesCatalog.filter((s) => s.title.toLowerCase().includes(q)).slice(0, limit);
+    const author = (url.searchParams.get("author") ?? "").toLowerCase();
+    const artist = (url.searchParams.get("artist") ?? "").toLowerCase();
+    if (!q && !author && !artist) return HttpResponse.json([]);
+    const results = seriesCatalog
+      .filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) &&
+          (!author || s.authors.some((name) => name.toLowerCase().includes(author))) &&
+          (!artist || s.artists.some((name) => name.toLowerCase().includes(artist))),
+      )
+      .slice(0, limit);
     return HttpResponse.json(results);
   }),
 

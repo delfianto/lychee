@@ -44,6 +44,7 @@ function toSeries(s: ApiSeries): Series {
     characters: s.characters ?? undefined,
     libraryStatus: (s.libraryStatus as Series["libraryStatus"]) ?? undefined,
     provider: s.provider,
+    sourceUrl: s.sourceUrl,
     availableChapters: s.availableChapters,
     chaptersSyncedAt: s.chaptersSyncedAt,
   };
@@ -82,6 +83,7 @@ function toChapter(c: ApiChapter): Chapter {
     comments: c.comments ?? 0,
     status: (c.status as Chapter["status"]) ?? "downloaded",
     providerChapterId: c.providerChapterId ?? null,
+    sourceUrl: c.sourceUrl,
   };
 }
 
@@ -170,8 +172,14 @@ export async function fetchUpdates(unread = false, limit = 60): Promise<RecentUp
   return resp.data.items.map(toUpdate);
 }
 
-export async function searchSeries(q: string, limit = 30): Promise<Series[]> {
-  const { data, error } = await api.GET("/api/search", { params: { query: { q, limit } } });
+export async function searchSeries(
+  q: string,
+  creators: { author?: string; artist?: string } = {},
+  limit = 30,
+): Promise<Series[]> {
+  const { data, error } = await api.GET("/api/search", {
+    params: { query: { q, limit, ...creators } },
+  });
   if (error || !data) return [];
   return data.map(toSeries);
 }
@@ -424,10 +432,12 @@ export async function putProgress(
   page: number,
   completed?: boolean,
 ): Promise<void> {
-  await api.PUT("/api/chapters/{chapter_id}/progress", {
+  const { error } = await api.PUT("/api/chapters/{chapter_id}/progress", {
     params: { path: { chapter_id: chapterId } },
     body: { page, completed },
+    keepalive: true,
   });
+  if (error) throw new Error(apiErrorMessage(error, "Couldn’t save reading progress"));
 }
 
 export async function fetchRelated(id: string): Promise<Series[]> {
@@ -527,6 +537,8 @@ export function buildLibraryQuery(
   if (libraryKey !== "reading" && opts.activeTab !== "all") q.shelf = opts.activeTab;
 
   const f = opts.filters;
+  if (f.author?.trim()) q.author = f.author.trim();
+  if (f.artist?.trim()) q.artist = f.artist.trim();
   if (f.query.trim()) q.q = f.query.trim();
   const tags = Object.entries(f.tags).map(([id, state]) => (state === "exclude" ? `-${id}` : id));
   if (tags.length) {
@@ -561,4 +573,25 @@ export async function fetchChapterAvailability(
       message: apiErrorMessage(error, "Could not check chapter availability. Retry the check."),
     };
   return data;
+}
+
+export async function fetchCreatorNames(role: "author" | "artist", q: string): Promise<string[]> {
+  const { data, error } = await api.GET("/api/creators", {
+    params: { query: { role, q, limit: 20 } },
+  });
+  if (error || !data) throw new Error("Couldn’t load creator suggestions");
+  return data;
+}
+
+export async function markChaptersRead(
+  seriesId: string,
+  chapterIds: string[],
+  completed: boolean,
+): Promise<number> {
+  const { data, error } = await api.PUT("/api/series/{series_id}/read-status", {
+    params: { path: { series_id: seriesId } },
+    body: { chapterIds, completed },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn’t update read status"));
+  return data.updated;
 }

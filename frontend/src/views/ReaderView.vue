@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, Settings, X } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 
 import {
   bufferChapterPages,
@@ -21,6 +21,8 @@ import {
   type ReaderMode,
   useReaderSettings,
 } from "../lib/readerSettings";
+import { createProgressWriter } from "../lib/readingProgress";
+import { toast } from "../lib/toast";
 import { createStaleGuard } from "../lib/staleGuard";
 
 const route = useRoute();
@@ -35,6 +37,26 @@ const pages = ref<string[]>([]);
 const chapterOptions = ref<{ id: string; label: string }[]>([]);
 const orderedIds = ref<string[]>([]);
 const buffering = ref(false);
+const loadedChapterId = ref("");
+const loadedPages = new Set<number>();
+const saveError = ref<string | null>(null);
+const writer = createProgressWriter(putProgress, (error) => {
+  saveError.value = error;
+});
+async function flushProgress(): Promise<void> {
+  if (!(await writer.flush())) toast("Reading progress could not be saved.", "error");
+}
+onBeforeRouteLeave(flushProgress);
+onBeforeRouteUpdate(flushProgress);
+function onPageHide(): void {
+  writer.finish();
+}
+function onVisibility(): void {
+  if (document.visibilityState === "hidden") {
+    writer.finish();
+    void writer.flush();
+  }
+}
 
 const currentPage = ref(1);
 const controls = ref(true);
@@ -56,6 +78,9 @@ function readableId(
 const staleGuard = createStaleGuard();
 async function load(id: string): Promise<void> {
   const token = staleGuard.next();
+  loadedChapterId.value = "";
+  loadedPages.clear();
+  pages.value = [];
   const isAdhoc = id.startsWith("adhoc:");
   buffering.value = isAdhoc;
   const preload = clampPreloadPages(settings.preloadPages);
@@ -77,6 +102,7 @@ async function load(id: string): Promise<void> {
     (_, i) => `/api/chapters/${resolvedId}/pages/${i + 1}`,
   );
   currentPage.value = 1;
+  loadedChapterId.value = resolvedId;
   showEnd.value = false;
   const [s, vols] = await Promise.all([
     fetchSeries(detail.seriesId),
@@ -103,15 +129,61 @@ function setPreloadPages(value: number): void {
   settings.preloadPages = clampPreloadPages(value);
 }
 
-// Record reading position as pages turn (the backend marks the chapter read when
-// the last page is reached, which drives unread counts + continue-reading).
-// In ad-hoc mode, also prefetch the next window of loose pages into temp/.
-watch(currentPage, (page) => {
-  if (!pages.value.length) return;
-  if (chapterId.value.startsWith("adhoc:")) {
-    void bufferChapterPages(chapterId.value, page, clampPreloadPages(settings.preloadPages));
+// Save only pages whose images have loaded. Long-strip completion requires the
+// bottom of the last image to be reached; a double spread includes both pages.
+function recordPosition(): void {
+  const id = loadedChapterId.value;
+  if (!id || !pages.value.length) return;
+  if (settings.mode === "longstrip") {
+    onReadingScroll();
+    return;
   }
-  void putProgress(chapterId.value, page);
+  const last = Math.min(pages.value.length, currentPage.value + visibleColumns.value - 1);
+  const visible = [...loadedPages].filter((page) => page >= currentPage.value && page <= last);
+  if (!visible.length) return;
+  const page = Math.max(...visible);
+  writer.record(id, page, page === pages.value.length ? true : undefined);
+}
+function onImageLoad(event: Event): void {
+  const page =
+    pages.value.indexOf((event.target as HTMLImageElement).getAttribute("src") ?? "") + 1;
+  if (page > 0) {
+    loadedPages.add(page);
+    recordPosition();
+  }
+}
+function onReadingScroll(): void {
+  if (settings.mode !== "longstrip" || !loadedChapterId.value) return;
+  const area = readingArea.value;
+  if (!area) return;
+  const bounds = area.getBoundingClientRect();
+  const images = [...area.querySelectorAll<HTMLImageElement>("img")];
+  if (bounds.height <= 0) return;
+  const last = images.at(-1);
+  const reachedEnd =
+    !!last &&
+    loadedPages.size === images.length &&
+    last.getBoundingClientRect().height > 0 &&
+    last.getBoundingClientRect().bottom <= bounds.bottom + 2;
+  const visible = images.findIndex(
+    (image) => image.getBoundingClientRect().bottom > bounds.top + bounds.height / 2,
+  );
+  if (reachedEnd) {
+    currentPage.value = images.length;
+    writer.record(loadedChapterId.value, images.length, true);
+  } else if (visible >= 0 && loadedPages.has(visible + 1)) {
+    currentPage.value = visible + 1;
+    writer.record(loadedChapterId.value, Math.min(visible + 1, images.length - 1));
+  }
+}
+watch([currentPage, () => settings.mode, loadedChapterId], () => {
+  recordPosition();
+  if (loadedChapterId.value.startsWith("adhoc:"))
+    void bufferChapterPages(
+      loadedChapterId.value,
+      currentPage.value,
+      clampPreloadPages(settings.preloadPages),
+    ).catch(() => {});
 });
 function goToChapter(id: string | undefined): void {
   if (id) void router.push(`/read/${id}`);
@@ -152,13 +224,17 @@ const visibleColumns = computed(() =>
   settings.mode === "double" && currentPage.value < pages.value.length ? 2 : 1,
 );
 
-// Every new page starts at its reachable top-left edge.
-watch([chapterId, currentPage, () => settings.mode, () => settings.fit], async () => {
+// Scrolling through a strip updates the page counter without resetting scroll.
+async function resetViewport(): Promise<void> {
   await nextTick();
   if (readingArea.value) {
     readingArea.value.scrollTop = 0;
     readingArea.value.scrollLeft = 0;
   }
+}
+watch([loadedChapterId, () => settings.mode, () => settings.fit], resetViewport);
+watch(currentPage, () => {
+  if (settings.mode !== "longstrip") void resetViewport();
 });
 
 function onReadingClick(event: MouseEvent): void {
@@ -180,15 +256,16 @@ function onReadingClick(event: MouseEvent): void {
 }
 
 function next(): void {
-  if (currentPage.value >= pages.value.length) {
+  if (currentPage.value + visibleColumns.value - 1 >= pages.value.length) {
     showEnd.value = true;
     return;
   }
-  currentPage.value += 1;
+  currentPage.value = Math.min(pages.value.length, currentPage.value + visibleColumns.value);
 }
 function prev(): void {
   showEnd.value = false;
-  if (currentPage.value > 1) currentPage.value -= 1;
+  if (currentPage.value > 1)
+    currentPage.value = Math.max(1, currentPage.value - (settings.mode === "double" ? 2 : 1));
 }
 function nextChapter(): void {
   showEnd.value = false;
@@ -213,8 +290,17 @@ function onKey(e: KeyboardEvent): void {
     else next();
   }
 }
-onMounted(() => window.addEventListener("keydown", onKey));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onMounted(() => {
+  window.addEventListener("keydown", onKey);
+  window.addEventListener("pagehide", onPageHide);
+  document.addEventListener("visibilitychange", onVisibility);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+  window.removeEventListener("pagehide", onPageHide);
+  document.removeEventListener("visibilitychange", onVisibility);
+  writer.finish();
+});
 </script>
 
 <template>
@@ -271,6 +357,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       tabindex="0"
       :style="{ '--reader-columns': visibleColumns }"
       @click="onReadingClick"
+      @scroll.passive="onReadingScroll"
     >
       <div v-if="settings.mode === 'longstrip'" class="reader-strip">
         <img
@@ -279,14 +366,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           :src="p"
           :alt="`Page ${i + 1}`"
           class="reader-page"
+          @load="onImageLoad"
           :class="fitClass"
         />
+        <div class="flex justify-center gap-3 py-8">
+          <button class="btn btn-primary btn-sm" @click.stop="goToChapter(nextChapterId)">
+            {{ nextChapterId ? "Next chapter" : "Back to series" }}
+          </button>
+        </div>
       </div>
       <div v-else class="reader-spread">
         <img
           :src="pages[currentPage - 1]"
           :alt="`Page ${currentPage}`"
           class="reader-page"
+          @load="onImageLoad"
           :class="fitClass"
         />
         <img
@@ -294,11 +388,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           :src="pages[currentPage]"
           :alt="`Page ${currentPage + 1}`"
           class="reader-page"
+          @load="onImageLoad"
           :class="fitClass"
         />
       </div>
     </div>
 
+    <div
+      v-if="saveError"
+      class="flex shrink-0 items-center justify-between gap-2 bg-error/10 px-4 py-2 text-sm"
+      role="alert"
+    >
+      <span>{{ saveError }}</span
+      ><button class="btn btn-ghost btn-xs" @click="writer.flush()">Retry save</button>
+    </div>
     <!-- Scrubber — paged modes only. -->
     <footer
       v-if="settings.mode !== 'longstrip'"

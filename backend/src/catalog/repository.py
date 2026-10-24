@@ -20,6 +20,7 @@ from src.catalog.models import Book, Chapter, ProviderChapter, Series, SeriesCre
 from src.catalog.search_index import search_ids
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
+from src.progress.state import chapter_completed, provider_completed
 from src.taxonomy.models import series_tag
 
 _TIME_SORTS = frozenset({"recentlyAdded", "recentlyUpdated"})
@@ -43,6 +44,7 @@ class SeriesFilters:
     pub_status: list[str] = field(default_factory=list)
     read_state: str | None = None
     artist: str | None = None
+    author: str | None = None
     source: str | None = None
     sort: str = "recentlyAdded"
 
@@ -80,7 +82,11 @@ def _aggregates() -> _Aggregates:
             ReadingProgress,
             and_(ReadingProgress.chapter_id == Chapter.id, ReadingProgress.completed.is_(True)),
         )
-        .where(Chapter.series_id == Series.id, ReadingProgress.chapter_id.is_(None))
+        .where(
+            Chapter.series_id == Series.id,
+            ReadingProgress.chapter_id.is_(None),
+            ~provider_completed(),
+        )
         .correlate(Series)
         .scalar_subquery()
     )
@@ -181,14 +187,15 @@ def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]
         conds.append(Series.status.in_(f.pub_status))
     if f.source:
         conds.append(Series.source == f.source)
-    if f.artist:
-        conds.append(
-            exists().where(
-                SeriesCredit.series_id == Series.id,
-                SeriesCredit.role == "artist",
-                SeriesCredit.name == f.artist,
+    for role, name in [("author", f.author), ("artist", f.artist)]:
+        if name and name.strip():
+            conds.append(
+                exists().where(
+                    SeriesCredit.series_id == Series.id,
+                    SeriesCredit.role == role,
+                    func.lower(SeriesCredit.name).contains(name.strip().lower(), autoescape=True),
+                )
             )
-        )
     if f.tags_include:
         if f.tag_mode == "or":
             conds.append(
@@ -344,9 +351,7 @@ class ChapterRow:
 
 
 def _read_exists() -> ColumnElement[bool]:
-    return exists().where(
-        ReadingProgress.chapter_id == Chapter.id, ReadingProgress.completed.is_(True)
-    )
+    return chapter_completed()
 
 
 def list_chapters(
@@ -504,13 +509,26 @@ def recently_added(
     ]
 
 
-def search_series(session: Session, q: str, *, limit: int = 20) -> list[SeriesRow]:
+def search_series(
+    session: Session,
+    q: str,
+    *,
+    limit: int = 20,
+    author: str | None = None,
+    artist: str | None = None,
+) -> list[SeriesRow]:
     """Full-text search over title / alt-titles / authors (FTS5 trigram, ranked).
 
     Falls back to a title LIKE match when FTS can't serve the query (index absent,
     or a query too short to yield trigrams). FTS gives ranked ids; the grid builder
     hydrates them (counts, tags, credits) and we restore the relevance order.
     """
+    if author or artist:
+        return list_series(
+            session,
+            SeriesFilters(q=q or None, author=author, artist=artist, sort="title"),
+            limit=limit,
+        )[0]
     ranked = search_ids(session, q, limit=limit)
     if ranked is None:
         rows, _ = list_series(session, SeriesFilters(q=q, sort="title"), limit=limit)
@@ -548,3 +566,18 @@ def related_series(session: Session, series_id: str, *, limit: int = 12) -> list
     )
     rows = get_series_rows(session, ids)
     return [rows[i] for i in ids if i in rows]
+
+
+def creator_names(session: Session, role: str, q: str, *, limit: int = 20) -> list[str]:
+    statement = select(SeriesCredit.name).where(SeriesCredit.role == role)
+    if q.strip():
+        statement = statement.where(
+            func.lower(SeriesCredit.name).contains(q.strip().lower(), autoescape=True)
+        )
+    return list(
+        session.scalars(
+            statement.distinct()
+            .order_by(func.lower(SeriesCredit.name), SeriesCredit.name)
+            .limit(max(1, min(limit, 50)))
+        )
+    )

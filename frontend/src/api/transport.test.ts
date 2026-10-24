@@ -601,3 +601,38 @@ describe("HTTP request contracts", () => {
     expect(requested).toEqual(["/api/updates", "/api/updates/unread"]);
   });
 });
+
+it("sends creator roles and names, persists manual batches, and reports progress failures", async () => {
+  server.use(
+    http.get(`${root}/api/creators`, ({ request }) => {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("role")).toBe("author");
+      expect(url.searchParams.get("q")).toBe("A & B");
+      return HttpResponse.json(["A & B"]);
+    }),
+    http.get(`${root}/api/search`, ({ request }) => {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("author")).toBe("A & B");
+      expect(url.searchParams.get("artist")).toBe("Artist");
+      return HttpResponse.json([series("creator-match")]);
+    }),
+    http.put(`${root}/api/series/s1/read-status`, async ({ request }) => {
+      expect(await request.json()).toEqual({
+        chapterIds: ["c1", "adhoc:s1:remote"],
+        completed: true,
+      });
+      return HttpResponse.json({ updated: 2 });
+    }),
+    http.put(`${root}/api/chapters/c1/progress`, denied),
+  );
+  expect(await queries.fetchCreatorNames("author", "A & B")).toEqual(["A & B"]);
+  expect((await queries.searchSeries("", { author: "A & B", artist: "Artist" }))[0]?.id).toBe(
+    "creator-match",
+  );
+  expect(await queries.markChaptersRead("s1", ["c1", "adhoc:s1:remote"], true)).toBe(2);
+  await expect(queries.putProgress("c1", 4, true)).rejects.toThrow();
+  server.use(http.get(`${root}/api/creators`, denied));
+  await expect(queries.fetchCreatorNames("author", "Unavailable")).rejects.toThrow(
+    "creator suggestions",
+  );
+});

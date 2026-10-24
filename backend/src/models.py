@@ -19,7 +19,7 @@ from src.collections.models import Collection, CollectionSeries
 from src.downloads.models import DownloadTask
 from src.integrations.models import ImportConfig, Provider, SyncState, Tracker
 from src.media.models import ThumbnailConfig
-from src.progress.models import ReadingProgress
+from src.progress.models import ProviderReadingProgress, ReadingProgress
 from src.taxonomy.models import Tag, series_tag
 
 __all__ = [
@@ -33,6 +33,7 @@ __all__ = [
     "Provider",
     "ProviderChapter",
     "ReadingProgress",
+    "ProviderReadingProgress",
     "Series",
     "SeriesCredit",
     "SyncState",

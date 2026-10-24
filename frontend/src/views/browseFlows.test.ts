@@ -96,13 +96,13 @@ it("persists library filters and presets, restores them, and cycles include/excl
   expect(useDensity().density.value).toBe("compact");
   await click(wrapper, "Filters");
   const panel = wrapper.getComponent(FilterPanel);
-  await click(panel, "Action");
-  await click(panel, "Action");
-  await click(panel, "Action");
-  await click(panel, "Action");
+  await panel.get('[aria-label^="Action:"]').trigger("click");
+  await panel.get('[aria-label^="Action:"]').trigger("click");
+  await panel.get('[aria-label^="Action:"]').trigger("click");
+  await panel.get('[aria-label^="Action:"]').trigger("click");
   await click(panel, "OR");
   await click(panel, "AND");
-  for (const text of ["Safe", "Shonen", "ongoing", "Unread"]) {
+  for (const text of ["Safe", "Shonen", "Ongoing", "Unread"]) {
     await click(panel, text);
     await click(panel, text);
     await click(panel, text);
@@ -120,13 +120,15 @@ it("persists library filters and presets, restores them, and cycles include/excl
     statuses: ["ongoing"],
     readStates: ["unread"],
   });
-  await click(wrapper, "Clear all");
+  await click(wrapper, "Clear all filters");
   const preset = wrapper.findAll("span.badge").find((s) => s.text() === "Weekend")!;
   await preset.trigger("click");
   await flushPromises();
+  await wrapper.get('[aria-controls="library-filters"]').trigger("click");
   const chips = wrapper.findAll("button.badge-primary");
   expect(chips).toHaveLength(6);
   for (const chip of chips) await chip.trigger("click");
+  await wrapper.get('[aria-controls="library-filters"]').trigger("click");
   await input(wrapper, '[placeholder="e.g. Unread Seinen"]', "Weekend");
   await wrapper.get('[placeholder="e.g. Unread Seinen"]').trigger("keyup.enter");
   await flushPromises();
@@ -200,11 +202,12 @@ it("filters galleries by artist, characters and franchise and sorts their titles
   await flushPromises();
   expect(wrapper.text()).not.toContain("Alternate");
   await selects[0]!.setValue("");
-  await selects[1]!.setValue("Elsewhere");
+  await search.setValue("Elsewhere");
   await flushPromises();
   expect(wrapper.text()).toContain("Alternate");
-  await selects[1]!.setValue("");
-  await selects[2]!.setValue("Title");
+  expect(wrapper.text()).not.toContain("Gallery g1");
+  await search.setValue("");
+  await selects[1]!.setValue("Title");
 });
 
 it("sorts the added feed, filters by recently added kinds, and switches its shared density", async () => {
@@ -344,45 +347,66 @@ it("ignores an older gallery response after navigating to another gallery", asyn
   expect(wrapper.get("h1").text()).toBe("Second story");
 });
 
-it("defaults to the first gallery library, follows all pages, and isolates selection facets", async () => {
+it("defaults to all galleries, sorts libraries, follows all pages, and isolates selection facets", async () => {
   api.db.libraries = [
     { ...api.db.libraries[0]!, id: "provider", name: "MangaDex", kind: "mixed" },
-    { ...api.db.libraries[0]!, id: "first", name: "Artwork", kind: "gallery" },
     { ...api.db.libraries[0]!, id: "second", name: "Photos", kind: "gallery" },
+    { ...api.db.libraries[0]!, id: "first", name: "artwork", kind: "gallery" },
   ];
   const requests: string[] = [];
   api.server.use(
     http.get("http://localhost/api/series", ({ request }) => {
       const params = new URL(request.url).searchParams;
-      const id = params.get("libraryId")!;
+      const id = params.get("libraryId") ?? "all";
       requests.push(id);
+      const drawing = makeSeries(params.get("cursor") ?? "drawing", {
+        kind: "gallery",
+        title: "Drawing",
+        artists: ["Illustrator"],
+      });
+      const photo = makeSeries("photo", {
+        kind: "gallery",
+        title: "Photography",
+        artists: ["Photographer"],
+      });
       return HttpResponse.json({
-        items: [
-          makeSeries(params.get("cursor") ?? id, {
-            kind: "gallery",
-            title: id === "first" ? "Drawing" : "Photography",
-            artists: [id === "first" ? "Illustrator" : "Photographer"],
-          }),
-        ],
-        nextCursor: id === "first" && !params.has("cursor") ? "page-two" : null,
+        items:
+          id === "second"
+            ? [photo]
+            : id === "all" && !params.has("cursor")
+              ? [drawing, photo]
+              : [drawing],
+        nextCursor: id !== "second" && !params.has("cursor") ? "page-two" : null,
       });
     }),
   );
   const { wrapper } = await renderView(GalleryView);
-  expect(wrapper.get<HTMLSelectElement>('[aria-label="Gallery library"]').element.value).toBe(
-    "first",
-  );
-  expect(requests).toEqual(["first", "first"]);
-  expect(wrapper.findAll('[aria-label="Gallery library"] option')).toHaveLength(2);
-  expect(wrapper.findAll('a[href^="/gallery/"]')).toHaveLength(2);
+  const selector = wrapper.get<HTMLSelectElement>('[aria-label="Gallery library"]');
+  expect(selector.element.value).toBe("");
+  expect(requests).toEqual(["all", "all"]);
+  expect(selector.findAll("option").map((option) => option.text())).toEqual([
+    "All galleries",
+    "artwork",
+    "Photos",
+  ]);
+  expect(wrapper.findAll('a[href^="/gallery/"]')).toHaveLength(3);
+  await selector.setValue("first");
+  await flushPromises();
+  expect(wrapper.text()).toContain("Drawing");
+  expect(wrapper.text()).not.toContain("Photography");
   await wrapper.get('[aria-label="Filter by artist"]').setValue("Illustrator");
-  await wrapper.get('[aria-label="Gallery library"]').setValue("second");
+  await selector.setValue("second");
   await flushPromises();
   expect(wrapper.text()).toContain("Photography");
   expect(wrapper.text()).not.toContain("Drawing");
   expect(wrapper.text()).not.toContain("Illustrator");
   expect(wrapper.get<HTMLSelectElement>('[aria-label="Filter by artist"]').element.value).toBe("");
   expect(requests.at(-1)).toBe("second");
+  api.db.libraries = api.db.libraries.filter((library) => library.id !== "second");
+  taskEvent("scan");
+  await vi.waitFor(() => expect(selector.element.value).toBe(""));
+  await vi.waitFor(() => expect(requests.at(-1)).toBe("all"));
+  expect(wrapper.text()).toContain("Drawing");
 });
 
 it("shows galleries load failures and retries, and handles no gallery libraries", async () => {
@@ -395,6 +419,7 @@ it("shows galleries load failures and retries, and handles no gallery libraries"
   expect(wrapper.text()).not.toContain("Rejected by server");
   wrapper.unmount();
   api.db.libraries = [];
+  api.db.series = [];
   const empty = await renderView(GalleryView);
   expect(empty.wrapper.text()).toContain("No gallery libraries yet");
 });
@@ -429,4 +454,47 @@ it("creates a typed gallery list that stays visible before it has members", asyn
   await input(wrapper, '[aria-label="List location"]', "mangadex");
   expect(wrapper.get('[aria-label="List type"]').attributes("disabled")).toBeDefined();
   expect(wrapper.get<HTMLSelectElement>('[aria-label="List type"]').element.value).toBe("manga");
+});
+
+it("searches tags, clears include/exclude selections, and keeps multi-select summaries and creator filters", async () => {
+  const { wrapper } = await renderView(LibraryView, { props: { libraryKey: "manga" } });
+  await click(wrapper, "Filters");
+  const panel = wrapper.getComponent(FilterPanel);
+  await panel.get('[aria-label="Find tags"]').setValue("unknown-tag");
+  expect(panel.text()).toContain("No matching tags.");
+  await panel.get('[aria-label="Find tags"]').setValue("dra");
+  expect(panel.find('[aria-label^="Action:"]').exists()).toBe(false);
+  await panel.get('[aria-label="Drama: any"]').trigger("click");
+  await panel.get('[aria-label="Drama: include"]').trigger("click");
+  expect(panel.get('summary[aria-label="Filter tags"]').text()).toBe("Exclude Drama");
+  await panel.get('[aria-label="Find tags"]').setValue("");
+  await panel.get('[aria-label="Action: any"]').trigger("click");
+  expect(panel.get('summary[aria-label="Filter tags"]').text()).toBe("1 included · 1 excluded");
+  await click(panel, "Clear tags");
+  expect(panel.get('summary[aria-label="Filter tags"]').text()).toBe("Any");
+  await click(panel, "Safe");
+  await click(panel, "Suggestive");
+  expect(panel.get('summary[aria-label="Content rating"]').text()).toBe("Safe +1");
+  const ratings = panel
+    .findAllComponents({ name: "FilterSelect" })
+    .find((component) => component.props("label") === "Content rating")!;
+  await click(ratings, "Any");
+  expect(panel.get('summary[aria-label="Content rating"]').text()).toBe("Any");
+  await input(panel, '[aria-label="Author / mangaka"]', "Writer");
+  await input(panel, '[aria-label="Artist"]', "Artist");
+  await panel.get('[aria-label="Sort by"]').setValue("Rating");
+  await vi.waitFor(() => {
+    const request = api.requests.filter((request) => request.path === "/api/series").at(-1)!;
+    expect(request.query.get("author")).toBe("Writer");
+    expect(request.query.get("artist")).toBe("Artist");
+    expect(request.query.get("sort")).toBe("rating");
+    expect(request.query.has("tags")).toBe(false);
+    expect(request.query.has("ratings")).toBe(false);
+  });
+  await wrapper.get('[aria-controls="library-filters"]').trigger("click");
+  expect(wrapper.findComponent(FilterPanel).exists()).toBe(false);
+  await wrapper.get('[aria-controls="library-filters"]').trigger("click");
+  expect(wrapper.get<HTMLInputElement>('[aria-label="Author / mangaka"]').element.value).toBe(
+    "Writer",
+  );
 });

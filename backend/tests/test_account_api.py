@@ -2,6 +2,7 @@
 
 import threading
 import time
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,8 +13,9 @@ from src.core.config import settings
 from src.core.crypto import decrypt, encrypt
 from src.downloads.provider import CustomList, SeriesMetadata
 from src.integrations.models import Provider
-from src.progress.models import ReadingProgress
+from src.progress.models import ProviderReadingProgress, ReadingProgress
 from src.providers import mangadex_account
+from src.providers.mangadex import MangaDexProvider
 from src.providers.mangadex_auth import TokenPair
 from src.tasks.queue import queue
 
@@ -49,7 +51,13 @@ class _FakeAuthedProvider:
     def push_status(self, provider_series_id: str, status: str | None) -> None:
         return None
 
-    def push_read(self, provider_series_id: str, chapter_ids: list[str]) -> None:
+    def push_read(
+        self,
+        provider_series_id: str,
+        chapter_ids: list[str],
+        *,
+        unread_ids: list[str] | None = None,
+    ) -> None:
         return None
 
     def push_rating(self, provider_series_id: str, rating: int | None) -> None:
@@ -251,14 +259,31 @@ def test_push_series_sends_status_and_read_markers(
     db_session.add(ReadingProgress(chapter_id=chapter.id, series_id=series.id, completed=True))
     db_session.commit()
 
+    db_session.add_all(
+        [
+            ProviderReadingProgress(
+                series_id=series.id, provider="mangadex", provider_chapter_id="ch-9", completed=True
+            ),
+            ProviderReadingProgress(
+                series_id=series.id,
+                provider="mangadex",
+                provider_chapter_id="ch-10",
+                completed=False,
+            ),
+        ]
+    )
+    db_session.commit()
     calls: dict[str, object] = {}
 
     class _Recorder:
         def push_status(self, mid: str, status: str | None) -> None:
             calls["status"] = (mid, status)
 
-        def push_read(self, mid: str, ids: list[str]) -> None:
+        def push_read(
+            self, mid: str, ids: list[str], *, unread_ids: list[str] | None = None
+        ) -> None:
             calls["read"] = (mid, ids)
+            calls["unread"] = unread_ids
 
         def push_rating(self, mid: str, rating: int | None) -> None:
             calls["rating"] = (mid, rating)
@@ -272,6 +297,7 @@ def test_push_series_sends_status_and_read_markers(
     assert mangadex_account.push_series(db_session, series.id) is True
     assert calls["status"] == ("md-9", "completed")  # shelf → MangaDex status
     assert calls["read"] == ("md-9", ["ch-9"])  # completed chapter → read marker
+    assert calls["unread"] == ["ch-10"]
     assert calls["rating"] == ("md-9", 8)  # personal score → /rating
 
 
@@ -374,3 +400,24 @@ def test_rating_change_enqueues_mangadex_push(
 
 def test_sync_requires_connection(client: TestClient) -> None:
     assert client.post("/api/providers/mangadex/sync").status_code == 400
+
+
+def test_inbound_read_markers_persist_without_downloads(db_session: Session) -> None:
+    series = _dex_series(db_session, "md-1")
+    assert (
+        mangadex_account._sync_read_markers(
+            db_session, cast(MangaDexProvider, _FakeAuthedProvider()), {"md-1": series}
+        )
+        == 1
+    )
+    db_session.commit()
+    row = db_session.scalar(
+        select(ProviderReadingProgress).where(ProviderReadingProgress.series_id == series.id)
+    )
+    assert row and row.completed and row.provider_chapter_id == "c1"
+    assert (
+        mangadex_account._sync_read_markers(
+            db_session, cast(MangaDexProvider, _FakeAuthedProvider()), {"md-1": series}
+        )
+        == 0
+    )

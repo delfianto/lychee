@@ -134,6 +134,14 @@ All three are rebuildable — safe to clear at any time.
 thumbnails for gallery video items (MP4/M4V/WEBM), entirely outside the
 original scope of this ADR, gallery-specific.
 
+Gallery lightbox playback uses Plyr in `frontend/src/components/Lightbox.vue`.
+Each video has its own keyed host container: Plyr's destroy operation restores a
+clone of the media element, so reusing a Vue-managed video node across items
+leaves the next player detached. Player initialization is guarded against stale
+mounts and unmounts. The media element retains native controls as a fallback.
+Original video files are streamed unchanged through `FileResponse` with HTTP
+Range support; codec decoding depends on the browser.
+
 ## Errors
 
 A corrupt CBZ raises `BadRequestError` (caught `zipfile.BadZipFile`); an
