@@ -8,8 +8,14 @@ from src.core.persistence.database import DbSession
 from src.downloads.deps import StorageRootDep
 from src.library import service
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.media import processing
 from src.media import storage as thumbnail_storage
-from src.media.schema import ThumbnailStorageOut, ThumbnailStorageUpdate
+from src.media.schema import (
+    ImageProcessingOut,
+    ImageProcessingUpdate,
+    ThumbnailStorageOut,
+    ThumbnailStorageUpdate,
+)
 from src.tasks.schema import TaskOut
 
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
@@ -39,6 +45,16 @@ def get_thumbnail_storage(db: DbSession) -> ThumbnailStorageOut:
 @router.put("/thumbnail-storage")
 def update_thumbnail_storage(db: DbSession, data: ThumbnailStorageUpdate) -> ThumbnailStorageOut:
     return thumbnail_storage.update_thumbnail_storage(db, data)
+
+
+@router.get("/image-processing")
+def get_image_processing(db: DbSession) -> ImageProcessingOut:
+    return processing.get_processing(db)
+
+
+@router.put("/image-processing")
+def update_image_processing(db: DbSession, data: ImageProcessingUpdate) -> ImageProcessingOut:
+    return processing.update_processing(db, data)
 
 
 @router.patch("/{library_id}")

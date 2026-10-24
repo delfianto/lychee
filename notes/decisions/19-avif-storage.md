@@ -5,8 +5,8 @@ choice.
 
 ## Why AVIF
 
-The target deployment is a many-core machine where CPU is not a constraint,
-and the operator wants the smallest possible on-disk footprint for
+The target deployment is a many-core machine, and the operator wants a compact
+on-disk footprint with practical import and download throughput for
 **downloaded** content. AVIF beats WebP/JPEG/PNG on compression ratio at
 equal quality, and Pillow ≥11.3 ships native AVIF in its wheels (bundled
 libavif) — no system dependency to install. The webapp is the only client
@@ -15,12 +15,22 @@ no fallback format is served.
 
 ## Encoding
 
-Pillow's native AVIF encoder, `speed=2` (slow, best ratio — CPU being free).
-A pure function, fanned out on a `ProcessPoolExecutor`
-(`media/encode_pool.py`). Page conversion, covers, and gallery thumbnails share
-that pool, sized by `LYCHEE_ENCODE_WORKERS` (default 1, serialized in-process).
-Bounded I/O workers feed it; cancellation joins active encodes before declaring
-the owning operation stopped. See [ADR 08](08-task-runner.md).
+Pillow's native AVIF encoder uses balanced `speed=6` effort and `max_threads=1`.
+The original effort 2 was disproportionately slow for full-size pages; allowing
+native threads in every process also oversubscribed many-core hosts. Quality
+values and chroma presets stay unchanged; encoder effort can change output bytes,
+size, and fidelity. Existing images are not rewritten by this change.
+
+A local synthetic 1600×2400 RGB noise benchmark at quality 63, one native thread,
+took 33.8 seconds at speed 2 versus 1.36 seconds at speed 6. This measures one
+input, not an expected speedup for every chapter. Pillow documents the speed and
+thread controls in its [AVIF saving options](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#avif).
+
+Pure image functions run in separate conversion and thumbnail process pools
+(`media/encode_pool.py`), with independent persisted limits in Library settings.
+Downloads spool source files while conversion runs, retaining ordered pages.
+Cancellation joins active encodes before declaring the owning operation stopped.
+See [ADR 08](08-task-runner.md).
 
 ## Content-aware presets
 

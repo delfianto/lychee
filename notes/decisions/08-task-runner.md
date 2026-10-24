@@ -1,4 +1,4 @@
-# 08 — In-process operations with bounded I/O and shared image workers
+# 08 — In-process operations with bounded I/O and independent image workers
 
 **Status:** Implemented; updated for the coordinated pipeline refactor.
 
@@ -7,8 +7,12 @@
 `backend/src/tasks/queue.py` runs operations on separate download and sync/scan
 thread pools. The executors have a fixed capacity of 10; cancellation-aware live
 limiters enforce each configured 1–10 operation limit without replacing executors
-or leaving old pools draining outside the new limit. These settings remain
-in-memory and default to 1 after restart.
+or leaving old pools draining outside the new limit. The independent download
+and sync limits persist in the singleton `task_queue_config` row. Both default
+to 1 only when no preference has been saved. `tasks/config.py` serializes settings
+saves, commits before applying live limits, and restores them before startup
+recovers queued downloads. Changing one limit preserves the other. The existing
+settings endpoints keep their response shapes.
 
 Every operation owns a `tasks/context.py` context: task ID, cancellation
 checkpoint, phase reporter, pause checks, and finalizers. `tasks/concurrency.py`
@@ -52,17 +56,30 @@ poster extraction polls the operation state and kills/reaps ffmpeg on cancellati
 
 - Download operation and chapter limits use `parallelDownloads`. A separate global
   file-request limiter of the same size bounds actual MangaDex file requests
-  across chapter workers. Pages are fetched concurrently and fed to conversion
-  in source order, with bounded buffering. Chapter and file dispatchers recheck
+  across chapter workers. A chapter-owned producer stages downloaded source files
+  to disk independently of conversion; the queue holds paths, not image bytes.
+  HTTP response buffering remains bounded by file concurrency. Progress crosses
+  an owner-thread mailbox, keeping ORM sessions on their original thread. The
+  producer and CPU jobs are joined before staging cleanup. Chapter and file dispatchers recheck
   the live limit while waiting, so increasing it expands an active download.
   Reducing it stops new chapter claims until active chapters drain below the
   new limit; running chapters are not interrupted.
 - Sync operation and provider-item limits use `parallelSyncs`; filesystem/container
   inspection uses bounded workers too. Database reconciliation stays on its owner
   thread, with short commits before CPU work.
-- Page encodes, canonical covers, and thumbnails share `media/encode_pool.py`'s
-  process pool, sized by `LYCHEE_ENCODE_WORKERS`. At 1, a shared limiter serializes
-  image work in-process. Gallery item and cover jobs fan out across this budget.
+- `media/encode_pool.py` owns separate conversion and thumbnail process pools.
+  Settings → Libraries → Image processing persists independent 1–64 worker
+  limits in `image_processing_config`, restored before startup download recovery.
+  The legacy `LYCHEE_ENCODE_WORKERS` supplies initial defaults until saved.
+  GET/PUT `/api/libraries/image-processing` exposes these budgets and CPU-based
+  recommendations (32 CPU threads suggests 16 conversion / 4 thumbnail workers).
+  Live resizing retains one limiter per stage across old and new executors;
+  running jobs count until completion and reductions drain before admitting more.
+  At 1, that stage runs in-process under its own limiter. Gallery items and covers
+  use the thumbnail budget independently of download and sync concurrency.
+- Every AVIF job uses one native encoder thread, with balanced `speed=6` effort.
+  The old effort 2 and unrestricted codec threading made each image expensive
+  and could oversubscribe the host when several worker processes ran together.
 - Image artifact locks deduplicate concurrent generators. Unique temporary image
   files and atomic replacement protect publication; chapter CBZ staging remains
   under the library's reserved `temp/` directory.

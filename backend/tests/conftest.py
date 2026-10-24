@@ -131,3 +131,13 @@ def client(db_engine: Engine, tmp_path: Path) -> Iterator[TestClient]:
     _ = queue.set_sync_workers(1)
     app.dependency_overrides.clear()
     queue.configure(SessionLocal)
+
+
+@pytest.fixture(autouse=True)
+def isolated_image_workers():
+    from src.media.encode_pool import configure_workers, shutdown
+
+    configure_workers(None, None)
+    yield
+    shutdown()
+    configure_workers(None, None)

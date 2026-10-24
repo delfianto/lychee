@@ -88,10 +88,11 @@ thumbnail store / render cache), overridden in tests via
 `app.dependency_overrides`.
 
 **Background work** (`src/tasks/queue.py`) runs on a small `ThreadPoolExecutor`
-(separate download and sync pools with live concurrency limits, default 1), each
+(separate download and sync pools with persisted live concurrency limits,
+initially 1 until saved), each
 job getting its own DB session via a `sessionmaker`
 handed to `queue.configure()`. Child workers own separate sessions; image work
-shares a bounded process pool. Operations retain ownership through thumbnail
+uses independent bounded conversion and thumbnail process pools. Operations retain ownership through thumbnail
 generation and propagate cancellation via `tasks/context.py`. A route validates,
 calls `queue.submit(...)`,
 and returns `202` with a task id; the browser follows progress over SSE
@@ -173,7 +174,8 @@ basedpyright errors — but pytest is not hooked, so run it explicitly.
 
 Env vars (see `backend/.env.example`, loaded via `.env` + `pydantic-settings`):
 `ENVIRONMENT`, `DATABASE_URL`, `STORAGE_PATH`, `LYCHEE_SECRET_KEY`,
-`LYCHEE_ENCODE_WORKERS` (AVIF encode pool size — 1 = serial in-process),
+`LYCHEE_ENCODE_WORKERS` (initial default for both image worker limits; saved
+Settings → Libraries preferences override it — 1 = serial in-process),
 `API_HOST`/`API_PORT`, `CORS_ORIGINS`, `LOG_LEVEL`/`LOG_FORMAT`. All settings
 live in `src/core/config.py` (`Settings`); don't read `os.environ` directly
 elsewhere.

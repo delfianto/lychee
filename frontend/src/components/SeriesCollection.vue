@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { LoaderCircle } from "@lucide/vue";
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 
 import type { Series } from "../types";
 import SeriesCoverCard from "./SeriesCoverCard.vue";
@@ -47,11 +47,18 @@ onMounted(() => {
   );
   if (sentinel.value) observer.observe(sentinel.value);
 });
+onDeactivated(() => {
+  sentinelVisible.value = false;
+  observer?.disconnect();
+});
+onActivated(() => {
+  if (sentinel.value) observer?.observe(sentinel.value);
+});
 onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-4" :data-browse-loading="loading || undefined">
     <div v-if="!series.length && !loading" class="py-16 text-center text-base-content/60">
       {{ emptyText }}
     </div>

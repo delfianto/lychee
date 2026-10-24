@@ -164,6 +164,13 @@ function seed() {
       makeTax("shonen", { category: "demographic", system: true }),
     ],
     downloads: [] as DownloadTask[],
+    imageProcessing: {
+      conversionWorkers: 1,
+      thumbnailWorkers: 1,
+      cpuThreads: 32,
+      recommendedConversionWorkers: 16,
+      recommendedThumbnailWorkers: 4,
+    },
     downloadConfig: { parallelDownloads: 1 },
     importConfig: {
       enabled: true,
@@ -340,6 +347,10 @@ export function useAppApi() {
           })),
           nextCursor: null,
         });
+      if (path === "/api/libraries/image-processing") {
+        if (method === "PUT") Object.assign(db.imageProcessing, body);
+        return json(db.imageProcessing);
+      }
       if (path === "/api/series" && method === "GET") {
         const kindParam = url.searchParams.get("kind");
         const kinds = kindParam ? kindParam.split(",").filter(Boolean) : null;

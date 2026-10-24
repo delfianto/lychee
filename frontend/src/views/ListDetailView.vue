@@ -101,7 +101,7 @@ async function confirmDeleteList(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 p-4 sm:p-6">
+  <div class="flex flex-col gap-4 p-4 sm:p-6" :data-browse-loading="loading || undefined">
     <div v-if="notFound" class="py-16 text-center text-base-content/60">
       List not found. <RouterLink to="/lists" class="link">Back to lists</RouterLink>
     </div>

@@ -403,3 +403,19 @@ export async function saveThumbnailStorage(path: string | null) {
   if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't save thumbnail storage"));
   return data;
 }
+
+export async function fetchImageProcessing() {
+  const { data, error } = await api.GET("/api/libraries/image-processing");
+  if (error || !data)
+    throw new Error(apiErrorMessage(error, "Couldn't load image processing settings"));
+  return data;
+}
+
+export async function saveImageProcessing(conversionWorkers: number, thumbnailWorkers: number) {
+  const { data, error } = await api.PUT("/api/libraries/image-processing", {
+    body: { conversionWorkers, thumbnailWorkers },
+  });
+  if (error || !data)
+    throw new Error(apiErrorMessage(error, "Couldn't save image processing settings"));
+  return data;
+}

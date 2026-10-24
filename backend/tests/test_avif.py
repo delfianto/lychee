@@ -3,6 +3,7 @@
 import io
 import os
 
+import pytest
 from PIL import Image
 from src.media.avif import ContentClass, classify, encode, encode_bytes
 
@@ -84,3 +85,21 @@ def test_quality_none_matches_preset() -> None:
     assert encode(art, content_class=ContentClass.COLOR_ART, quality=None) == encode(
         art, content_class=ContentClass.COLOR_ART
     )
+
+
+@pytest.mark.parametrize("content_class", list(ContentClass))
+def test_native_encoder_uses_balanced_effort_with_one_thread(
+    content_class: ContentClass, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = Image.Image.save
+    calls = []
+
+    def save(image, fp, format=None, **params):
+        calls.append(params)
+        return original(image, fp, format=format, **params)
+
+    monkeypatch.setattr(Image.Image, "save", save)
+    encoded = encode(_flat_color(), content_class=content_class)
+    assert Image.open(io.BytesIO(encoded)).size == (128, 128)
+    assert calls[0]["max_threads"] == 1
+    assert calls[0]["speed"] == 6

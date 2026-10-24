@@ -10,7 +10,7 @@ line art, color art with text, and photographs each compress best differently:
 - ``PHOTO``     → 4:2:0, quality 60 — cosplay / photo galleries: subsampling is
   invisible on natural images and ~30–40% smaller.
 
-CPU is a non-constraint (16-core), so we encode at a slow ``speed`` for best ratio.
+Encode effort is balanced for interactive imports and downloads.
 ``encode`` is a pure function of its input, so it is safe to fan out across a
 ``ProcessPoolExecutor`` (wired in the ingest/download task runner).
 """
@@ -23,8 +23,8 @@ from enum import StrEnum
 
 from PIL import Image, ImageOps
 
-# 0 = slowest / best ratio … 10 = fastest. CPU is free here, so favor ratio.
-ENCODE_SPEED = 2
+# Pillow/libavif default effort; effort 2 makes full-size pages disproportionately slow.
+ENCODE_SPEED = 6
 
 # Below this mean per-pixel RGB spread (0–255) an image is treated as grayscale.
 _GRAY_SPREAD_THRESHOLD = 8.0
@@ -105,13 +105,14 @@ def encode(
     q = preset.quality if quality is None else min(100, max(1, quality))
     buffer = io.BytesIO()
     if cls is ContentClass.LINE_ART:
-        image.convert("L").save(buffer, format="AVIF", quality=q, speed=ENCODE_SPEED)
+        image.convert("L").save(buffer, format="AVIF", quality=q, speed=ENCODE_SPEED, max_threads=1)
     else:
         image.convert("RGB").save(
             buffer,
             format="AVIF",
             quality=q,
             speed=ENCODE_SPEED,
+            max_threads=1,
             subsampling=preset.subsampling,
         )
     return buffer.getvalue()

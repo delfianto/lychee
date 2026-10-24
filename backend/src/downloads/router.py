@@ -57,8 +57,8 @@ def get_download_config() -> DownloadConfigOut:
 
 
 @router.patch("/config")
-def update_download_config(data: DownloadConfigUpdate) -> DownloadConfigOut:
-    return service.update_download_config(data)
+def update_download_config(db: DbSession, data: DownloadConfigUpdate) -> DownloadConfigOut:
+    return service.update_download_config(db, data)
 
 
 @router.post("/clear-completed", status_code=status.HTTP_204_NO_CONTENT)

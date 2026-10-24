@@ -19,6 +19,7 @@ from src.downloads.provider import get_provider
 from src.downloads.schema import DownloadConfigOut, DownloadConfigUpdate, DownloadTaskOut
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.concurrency import parallel_map
+from src.tasks.config import save_queue_workers
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
@@ -29,9 +30,9 @@ def get_download_config() -> DownloadConfigOut:
     return DownloadConfigOut(parallel_downloads=queue.download_workers)
 
 
-def update_download_config(data: DownloadConfigUpdate) -> DownloadConfigOut:
-    workers = queue.set_download_workers(data.parallel_downloads)
-    return DownloadConfigOut(parallel_downloads=workers)
+def update_download_config(session: Session, data: DownloadConfigUpdate) -> DownloadConfigOut:
+    save_queue_workers(session, "download", data.parallel_downloads)
+    return get_download_config()
 
 
 def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskOut]:

@@ -28,7 +28,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 p-4 sm:p-6">
+  <div class="flex flex-col gap-4 p-4 sm:p-6" :data-browse-loading="loading || undefined">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 class="text-3xl font-bold">

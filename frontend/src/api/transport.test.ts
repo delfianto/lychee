@@ -711,3 +711,47 @@ it("ignores an older grid load while both loads wait for a save", async () => {
   expect(reads).toEqual(["comic"]);
   expect(list.items.value.map((item) => item.id)).toEqual(["comic"]);
 });
+
+it("refreshes the loaded depth atomically after a detail edit", async () => {
+  const rows = Array.from({ length: 100 }, (_, i) => series(`s${i}`));
+  let refreshing = false;
+  let release!: () => void;
+  server.use(
+    http.get(`${root}/api/series`, async ({ request }) => {
+      const offset = Number(new URL(request.url).searchParams.get("cursor") ?? 0);
+      if (refreshing && offset === 24)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      return HttpResponse.json({
+        items: rows.slice(offset, offset + 24),
+        nextCursor: offset + 24 < 100 ? String(offset + 24) : null,
+      });
+    }),
+    http.patch(`${root}/api/series/s60`, () => {
+      rows[60]!.favorite = true;
+      return HttpResponse.json(rows[60]);
+    }),
+  );
+  const list = queries.useSeriesList();
+  await list.reload({ kind: "manga" });
+  list.loadMore();
+  await flushPromises();
+  list.loadMore();
+  await flushPromises();
+  expect(list.items.value).toHaveLength(72);
+  await queries.patchSeries("s60", { favorite: true });
+  refreshing = true;
+  list.refreshIfChanged();
+  await flushPromises();
+  expect(list.items.value).toHaveLength(72);
+  expect(list.loading.value).toBe(true);
+  release();
+  await flushPromises();
+  expect(list.items.value).toHaveLength(72);
+  expect(list.items.value[60]?.favorite).toBe(true);
+  expect(list.loading.value).toBe(false);
+  list.loadMore();
+  await flushPromises();
+  expect(list.items.value).toHaveLength(96);
+});

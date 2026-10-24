@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from src.catalog import adhoc
 from src.catalog.models import Book, Chapter, Library, Series
 from src.catalog.schema import GalleryMediaItem
-from src.core.config import settings
 from src.core.exceptions import BadRequestError, LycheeError, NotFoundError
 from src.core.logging import get_logger
 from src.core.schema import Page, decode_cursor, encode_cursor
@@ -30,7 +29,7 @@ from src.core.version import USER_AGENT
 from src.media.artifacts import artifact_lock
 from src.media.avif import ContentClass
 from src.media.containers import ImageDirContainer, is_cover_file, media_kind, open_container
-from src.media.encode_pool import encode_thumbnail
+from src.media.encode_pool import MAX_IMAGE_WORKERS, encode_thumbnail, thumbnail_limit
 from src.media.render_cache import RenderCache, render_width
 from src.media.thumbnails import (
     PREVIEW_VERSION,
@@ -339,7 +338,7 @@ def warm_series_covers(session: Session, store: ThumbnailStore, series_ids: list
     report_phase("covers", 0, total, "Generating covers")
     warmed = 0
     for completed, generated in enumerate(
-        parallel_map(warm, series_ids, workers=settings.encode_workers), 1
+        parallel_map(warm, series_ids, workers=MAX_IMAGE_WORKERS, limit=thumbnail_limit()), 1
     ):
         warmed += int(generated)
         report_phase("covers", completed, total, f"Covers {completed}/{total}")
@@ -551,7 +550,7 @@ def warm_gallery_item_thumbs(
     report_phase("thumbnails", 0, total, "Generating gallery thumbnails")
     warmed = 0
     for completed, generated in enumerate(
-        parallel_map(warm, jobs, workers=settings.encode_workers), 1
+        parallel_map(warm, jobs, workers=MAX_IMAGE_WORKERS, limit=thumbnail_limit()), 1
     ):
         warmed += int(generated)
         detail = f"Thumbnails {completed}/{total} · {warmed} new"

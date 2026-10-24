@@ -21,6 +21,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import { connectTaskStream } from "../api/events";
 import { randomSeriesId } from "../api/queries";
+import BackToTop from "../components/BackToTop.vue";
 import ActivityIndicator from "../components/ActivityIndicator.vue";
 import Toaster from "../components/Toaster.vue";
 // Side-effect only: applies the persisted font size before first paint (like theme below).
@@ -178,12 +179,19 @@ const nav = computed<NavItem[]>(() => [
       <main class="grow overflow-x-clip">
         <RouterView v-slot="{ Component, route: r }">
           <Transition name="page" mode="out-in">
-            <!-- KeepAlive on main library tabs so revisiting doesn't remount + refetch.
-                 Series detail / settings / list detail stay outside so they stay fresh. -->
+            <!-- Preserve loaded cursor pages and filters while opening a work.
+                 Detail/settings views stay fresh; edited grids refresh on return. -->
             <KeepAlive
-              :include="['LibraryHome', 'LibraryView', 'GalleryView', 'ListsView', 'SearchView']"
+              :include="[
+                'LibraryHome',
+                'LibraryView',
+                'GalleryView',
+                'ListsView',
+                'SearchView',
+                'AddedView',
+              ]"
             >
-              <component :is="Component" :key="r.path" />
+              <component :is="Component" :key="r.path" :data-browse-route="r.fullPath" />
             </KeepAlive>
           </Transition>
         </RouterView>
@@ -212,6 +220,7 @@ const nav = computed<NavItem[]>(() => [
       </aside>
     </div>
 
+    <BackToTop />
     <Toaster />
   </div>
 </template>

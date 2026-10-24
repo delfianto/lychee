@@ -1,11 +1,12 @@
 <script setup lang="ts"></script>
 
 <template>
-  <!-- Top-level view only swaps between the app shell and the full-screen
-       reader, so a plain fade covers entering/leaving the reader. -->
+  <!-- Keep browsing pages and loaded cursor batches alive during full-screen reading. -->
   <RouterView v-slot="{ Component }">
     <Transition name="page" mode="out-in">
-      <component :is="Component" />
+      <KeepAlive include="AppShell">
+        <component :is="Component" />
+      </KeepAlive>
     </Transition>
   </RouterView>
 </template>

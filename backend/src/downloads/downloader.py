@@ -33,6 +33,7 @@ from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
 from src.downloads.cancel import DownloadCancelled, check_cancelled, is_cancelled
 from src.downloads.models import DownloadTask
+from src.downloads.pipeline import FetchProgress, prefetch_pages
 from src.downloads.provider import (
     DiskDownloadProvider,
     Provider,
@@ -231,6 +232,7 @@ def _download_chapter(
         if on_progress is not None:
             on_progress(task.progress, f"Fetching {label} ({done}/{total})")
 
+    fetch_progress = FetchProgress(_on_fetch)
     task.phases_json = {
         "fetching": {"completed": 0, "total": 0},
         "encoding": {"completed": 0, "total": 0},
@@ -243,14 +245,21 @@ def _download_chapter(
     with workspace(Path(library.path), prefix="download") as work:
         pages = []
         if isinstance(provider, StreamingDownloadProvider):
-            sources = provider.iter_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+            sources = prefetch_pages(
+                provider.iter_pages_to(
+                    remote, work, data_saver=data_saver, on_page=fetch_progress.post
+                ),
+                fetch_progress.drain,
+            )
         elif isinstance(provider, DiskDownloadProvider):
             sources = iter(
-                provider.fetch_pages_to(remote, work, data_saver=data_saver, on_page=_on_fetch)
+                provider.fetch_pages_to(
+                    remote, work, data_saver=data_saver, on_page=fetch_progress.post
+                )
             )
         else:
             for index, data in enumerate(
-                provider.fetch_pages(remote, data_saver=data_saver, on_page=_on_fetch)
+                provider.fetch_pages(remote, data_saver=data_saver, on_page=fetch_progress.post)
             ):
                 path = work / f"{index:04d}.source"
                 path.write_bytes(data)
@@ -264,10 +273,12 @@ def _download_chapter(
 
         def raw_pages():
             for path in sources:
+                fetch_progress.drain()
                 check_cancelled(series.id)
                 yield path.read_bytes()
 
         def _on_encode(done: int) -> None:
+            fetch_progress.drain()
             _phase(session, task, "encoding", done, total_pages)
             if on_progress is not None:
                 on_progress(task.progress, f"Encoding {label} ({done}/{total_pages})")

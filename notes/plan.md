@@ -174,8 +174,8 @@
 - [x] Browser support (AVIF, webapp-only, no fallback).
 - [x] Caches: thumbnail FS store ✅; image-dir page-list LRU ✅; render/resize disk cache ✅.
 - [x] Encode on a ProcessPoolExecutor — `media/encode_pool.py` fans a chapter's page encodes across a
-      spawn pool (`encode` is a pure function). Opt-in via `LYCHEE_ENCODE_WORKERS` (default 1 = serial);
-      wired into the downloader + importer. ✅
+      spawn pool (`encode` is a pure function). Conversion and thumbnails have separate persisted
+      worker limits in Library settings; `LYCHEE_ENCODE_WORKERS` supplies initial defaults. ✅
 
 ## B4. Ingest
 - [x] Filename / volume-chapter parser (ADR 06) — decimals, ranges, specials, series-name subtraction.
@@ -448,7 +448,7 @@ Three related pieces of catalog-building polish:
   `_read_page(book, 0)`). Store built as `ThumbnailStore(Path(settings.storage_path)/"thumbnails")`.
 - **AVIF** (`media/avif.py`): `encode(image, *, content_class)` / `encode_bytes(bytes, *, content_class)` —
   **quality is not overridable** (hardcoded per-class in `_PRESETS`: line_art q63 mono, color_art q80 4:4:4,
-  photo q60 4:2:0; `ENCODE_SPEED=2`). Sole `encode_bytes` caller is `downloader.py:100`.
+  photo q60 4:2:0; `ENCODE_SPEED=6`, one native thread per job). Sole `encode_bytes` caller is `downloader.py:100`.
 - **Download transcode** (`downloads/downloader.py`): `_download_chapter` fetches pages → `encode_bytes` →
   writes `NNN.avif` under `storage/downloads/<series>/<chapter>` → `Book(content_kind="avif_dir")` + `Chapter`
   (flush at `:132`). Runs on the queue; `storage_root` in scope.
@@ -1001,14 +1001,19 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
 ### Coordinated download and scan pipelines
 
 - [x] Bounded concurrent MangaDex file fetching, feeding conversion in page order.
-- [x] One CPU pool for page conversion, covers, and gallery thumbnails.
+- [x] Independent conversion and thumbnail CPU pools with persisted, live 1–64 worker limits
+      under Library settings, below the thumbnail folder; CPU-based recommendations.
+- [x] Download source files spool independently of conversion, with bounded network requests,
+      owner-thread progress updates, ordered encoding, and joined cancellation.
 - [x] Parallel file/container inspection; ORM reconciliation stays on its owner thread.
 - [x] Scans own their thumbnail work; cancellation stops post-index stages too.
 - [x] Download phase counters survive reconnect/restart in the chapter queue rows.
 - [x] Phase sub-bars in downloads, sync, and the global activity list; whole-operation
       cancellation and reconnect snapshots. Completion waits for child workers.
-- Worker concurrency preferences and generic task history remain in-memory;
-  restarting resets operation limits to 1. Running native encodes finish before
+- [x] Download/sync concurrency preferences persist in `task_queue_config` and restore
+      before queued downloads resume. Conversion/thumbnail limits persist separately
+      in `image_processing_config`. Only unsaved download/sync preferences default to 1.
+- Generic task history remains in-memory. Running native encodes finish before
   cancellation completes; active HTTP requests retain their timeout boundary.
 
 ### Gallery preview quality
@@ -1020,3 +1025,9 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
       never upscaled.
 - [x] Cache version 2 in filenames and URLs, with old derivatives removed after
       successful replacement. Scans and lazy access upgrade existing previews.
+
+### Long-list navigation
+
+- [x] Browse grids retain cursor depth and restore their scroll offset after opening
+      a work or reader and returning, including refreshes after edits.
+- [x] Floating back-to-top button on shell pages, respecting reduced motion.

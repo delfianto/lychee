@@ -13,7 +13,7 @@ const SERVER_STARTED = Date.now() - 3 * 86_400_000 - 4 * 3_600_000;
 
 export function buildAbout(): AboutOut {
   return {
-    version: "0.1.0-beta.7",
+    version: "0.1.0-beta.8",
     platform: "linux-x86_64 · Python 3.14.0",
     database: "SQLite 3.46 · 214.7 MB",
     started: new Date(SERVER_STARTED).toISOString(),

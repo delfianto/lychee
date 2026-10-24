@@ -2,6 +2,7 @@
 import { ChevronDown, Clock, Folder, GalleryThumbnails, HardDrive, Images } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { fetchThumbnailStorage, saveThumbnailStorage } from "../../api/settingsQueries";
+import ImageProcessingSettings from "./ImageProcessingSettings.vue";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { RECENTLY_ADDED_OPTIONS, useMainBarIcons, useRecentlyAddedKinds } from "../../lib/density";
 import { toast } from "../../lib/toast";
@@ -157,73 +158,75 @@ onMounted(load);
           </div>
         </div>
 
-        <form
-          class="flex flex-col gap-3 border-t border-base-content/10 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-          @submit.prevent="save"
+        <div
+          class="flex flex-col gap-4 border-t border-base-content/10 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
         >
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-start gap-3">
-              <HardDrive class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <h4 class="text-sm font-medium">Thumbnail storage</h4>
-                <p class="text-xs text-base-content/50">
-                  Cover and gallery thumbnails for all libraries
-                </p>
-              </div>
-            </div>
-            <select
-              v-if="ready"
-              v-model="mode"
-              aria-label="Thumbnail storage location"
-              class="select select-bordered select-sm w-32 shrink-0"
-              :disabled="saving"
-            >
-              <option value="default">Default folder</option>
-              <option value="custom">Custom folder</option>
-            </select>
-          </div>
-          <p v-if="loading" class="text-xs text-base-content/60" role="status">
-            Loading storage settings…
-          </p>
-          <template v-if="ready">
-            <div class="mt-2 flex flex-col gap-2 border-t border-base-content/10 pt-3">
+          <form class="flex flex-col gap-3" @submit.prevent="save">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="flex items-start gap-3">
-                <Folder class="mt-0.5 size-5 shrink-0 text-primary" />
+                <HardDrive class="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
-                  <div class="text-sm font-medium">Thumbnail folder</div>
-                  <div class="text-xs text-base-content/50">Absolute path on the server</div>
+                  <h4 class="text-sm font-medium">Thumbnail storage</h4>
+                  <p class="text-xs text-base-content/50">
+                    Cover and gallery thumbnails for all libraries
+                  </p>
                 </div>
               </div>
-              <ServerPathField
-                :model-value="displayedPath"
-                label=""
-                placeholder="/data/thumbnails"
-                browser-title="Choose thumbnail folder"
-                :disabled="saving || mode === 'default'"
-                @update:model-value="onPathUpdate"
-              />
-              <p v-if="dirty" class="text-xs text-base-content/50">
-                Existing thumbnails stay in place; missing ones regenerate here.
-              </p>
+              <select
+                v-if="ready"
+                v-model="mode"
+                aria-label="Thumbnail storage location"
+                class="select select-bordered select-sm w-32 shrink-0"
+                :disabled="saving"
+              >
+                <option value="default">Default folder</option>
+                <option value="custom">Custom folder</option>
+              </select>
             </div>
-          </template>
-          <p v-if="error" class="text-xs text-error" role="alert">{{ error }}</p>
-          <button
-            v-if="!ready && !loading"
-            type="button"
-            class="btn btn-ghost btn-xs self-start"
-            @click="load"
-          >
-            Retry
-          </button>
-          <button
-            v-if="ready && dirty"
-            class="btn btn-primary btn-xs self-end"
-            :disabled="saving || (mode === 'custom' && !path.trim())"
-          >
-            {{ saving ? "Saving…" : "Save thumbnail storage" }}
-          </button>
-        </form>
+            <p v-if="loading" class="text-xs text-base-content/60" role="status">
+              Loading storage settings…
+            </p>
+            <template v-if="ready">
+              <div class="mt-2 flex flex-col gap-2 border-t border-base-content/10 pt-3">
+                <div class="flex items-start gap-3">
+                  <Folder class="mt-0.5 size-5 shrink-0 text-primary" />
+                  <div>
+                    <div class="text-sm font-medium">Thumbnail folder</div>
+                    <div class="text-xs text-base-content/50">Absolute path on the server</div>
+                  </div>
+                </div>
+                <ServerPathField
+                  :model-value="displayedPath"
+                  label=""
+                  placeholder="/data/thumbnails"
+                  browser-title="Choose thumbnail folder"
+                  :disabled="saving || mode === 'default'"
+                  @update:model-value="onPathUpdate"
+                />
+                <p v-if="dirty" class="text-xs text-base-content/50">
+                  Existing thumbnails stay in place; missing ones regenerate here.
+                </p>
+              </div>
+            </template>
+            <p v-if="error" class="text-xs text-error" role="alert">{{ error }}</p>
+            <button
+              v-if="!ready && !loading"
+              type="button"
+              class="btn btn-ghost btn-xs self-start"
+              @click="load"
+            >
+              Retry
+            </button>
+            <button
+              v-if="ready && dirty"
+              class="btn btn-primary btn-xs self-end"
+              :disabled="saving || (mode === 'custom' && !path.trim())"
+            >
+              {{ saving ? "Saving…" : "Save thumbnail storage" }}
+            </button>
+          </form>
+          <ImageProcessingSettings />
+        </div>
       </div>
     </div>
   </section>

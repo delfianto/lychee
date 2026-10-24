@@ -11,6 +11,14 @@ const thumbnailStorage = {
   effectivePath: "/storage/thumbnails",
 };
 
+const imageProcessing = {
+  conversionWorkers: 4,
+  thumbnailWorkers: 4,
+  cpuThreads: 32,
+  recommendedConversionWorkers: 16,
+  recommendedThumbnailWorkers: 4,
+};
+
 const downloadConfig = {
   parallelDownloads: 2,
 };
@@ -538,6 +546,12 @@ export const handlers = [
     const limit = Number(url.searchParams.get("limit") ?? 60);
     await delay(150);
     return HttpResponse.json({ items: recentUpdates(true, limit), nextCursor: null });
+  }),
+
+  http.get("/api/libraries/image-processing", () => HttpResponse.json(imageProcessing)),
+  http.put("/api/libraries/image-processing", async ({ request }) => {
+    Object.assign(imageProcessing, await request.json());
+    return HttpResponse.json(imageProcessing);
   }),
 
   http.get("/api/creators", ({ request }) => {
