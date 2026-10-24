@@ -27,7 +27,11 @@ need not be numerically identical across engines.
 
 Native FTS cannot delete and insert the same index row from a single trigger.
 Triggers instead queue affected series IDs; a SQLAlchemy pre-commit hook refreshes
-the projection with top-level SQL within the same transaction. Searching also
+the projection with top-level SQL within the same transaction. A connection-local
+marker skips this check for compiled ORM/Core writes outside series, variants,
+credits and libraries. Unknown raw writes/DDL conservatively retain it, and
+rollback clears the marker. This prevents progress-only commits from querying
+search tables. Searching also
 flushes that queue so explicit ORM flushes are visible before commit. Reparented
 credits/variants refresh both old and new owners; deletes remove stale rows.
 

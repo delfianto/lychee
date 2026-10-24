@@ -124,3 +124,61 @@ def test_about_reports_native_backend(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(settings, "database_url", "sqlite+turso:///./unused.db")
     assert info().database == "Turso (local MVCC)"
+
+
+def test_progress_commits_skip_native_search_queries(tmp_path: Path) -> None:
+    from sqlalchemy import event, update
+    from src.downloads.models import DownloadTask
+
+    url = f"sqlite+turso:///{tmp_path / 'progress.db'}"
+    run_migrations(url)
+    engine = create_database_engine(url)
+    try:
+        with Session(engine) as session:
+            series = make_series(session, title="Progress Test")
+            task = DownloadTask(series_id=series.id, chapter_label="Ch. 1")
+            session.add(task)
+            session.commit()
+            task_id = task.id
+            session.commit()
+        statements: list[str] = []
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def capture(_c, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        with Session(engine) as session:
+            for progress in (10, 20, 30):
+                session.execute(
+                    update(DownloadTask).where(DownloadTask.id == task_id).values(progress=progress)
+                )
+                session.commit()
+        assert not any("series_fts" in sql or "sqlite_master" in sql for sql in statements)
+        assert len(statements) == 3
+    finally:
+        engine.dispose()
+
+
+def test_native_raw_sql_and_library_cascades_refresh_search(tmp_path: Path) -> None:
+    from sqlalchemy import delete
+    from src.catalog.models import Library
+
+    url = f"sqlite+turso:///{tmp_path / 'cascade.db'}"
+    run_migrations(url)
+    engine = create_database_engine(url)
+    try:
+        with Session(engine) as session:
+            series = make_series(session, title="Original")
+            session.commit()
+            sid, library_id = series.id, series.library_id
+            session.execute(
+                text("UPDATE series SET title='Replacement' WHERE id=:sid"), {"sid": sid}
+            )
+            session.commit()
+            assert search_ids(session, "Replacement") == [sid]
+            assert search_ids(session, "Original") == []
+            session.execute(delete(Library).where(Library.id == library_id))
+            session.commit()
+            assert search_ids(session, "Replacement") == []
+    finally:
+        engine.dispose()

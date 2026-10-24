@@ -185,6 +185,7 @@ def run(args):
         queue.set_download_workers(10)
         queue.set_sync_workers(1)
         samples = []
+        endpoint_samples = [[], [], []]
         codes = Counter()
         stopped = threading.Event()
         paths = ["/api/series?kind=manga&limit=24", "/api/downloads", "/api/libraries"]
@@ -196,7 +197,9 @@ def run(args):
                     start = time.monotonic()
                     response = client.get(paths[index])
                     with lock:
-                        samples.append((time.monotonic() - start) * 1000)
+                        duration = (time.monotonic() - start) * 1000
+                        samples.append(duration)
+                        endpoint_samples[index].append(duration)
                         codes[response.status_code] += 1
                     stopped.wait(0.02)
 
@@ -239,6 +242,15 @@ def run(args):
                 "api_p50_ms": percentile(samples, 0.5),
                 "api_p95_ms": percentile(samples, 0.95),
                 "api_max_ms": round(max(samples, default=0), 3),
+                "api_endpoints": {
+                    path: {
+                        "requests": len(values),
+                        "p50_ms": percentile(values, 0.5),
+                        "p95_ms": percentile(values, 0.95),
+                        "max_ms": round(max(values, default=0), 3),
+                    }
+                    for path, values in zip(paths, endpoint_samples, strict=True)
+                },
                 "sql_statements": sum(statements.values()),
                 "background_sql_statements": statements["background"],
                 "api_sql_statements": statements["api"],
