@@ -160,12 +160,7 @@ it("renders download phases and sizes and performs individual queue actions", as
   expect(api.db.downloads.some((d) => d.id === "q")).toBe(false);
   await click(wrapper, "Clear completed");
   expect(api.db.downloads.some((d) => d.status === "done")).toBe(false);
-  await input(wrapper, '[aria-label="Parallel downloads"]', "5");
-  expect(api.db.downloadConfig.parallelDownloads).toBe(5);
-  expect(messages()).toContain("Parallel downloads set to 5");
-  api.failNext("PATCH", "/api/downloads/config");
-  await input(wrapper, '[aria-label="Parallel downloads"]', "99");
-  expect(messages()).toContain("Rejected by server");
+  expect(wrapper.find('[aria-label="Parallel downloads"]').exists()).toBe(false);
   await click(wrapper, "Sync now");
   expect(button(wrapper, "Syncing…").attributes("disabled")).toBeDefined();
   taskEvent("sync", "done", { result: { newChapters: 3 } });
@@ -337,13 +332,7 @@ it("manages background sync jobs, displays file/manga progress and errors, and e
   expect(wrapper.text()).toContain("Corrupt.cbz");
   expect(wrapper.text()).toContain("Bad zip header");
 
-  await input(wrapper, '[aria-label="Parallel sync jobs"]', "6");
-  expect(api.db.sync.parallelSyncs).toBe(6);
-  expect(messages()).toContain("Parallel sync jobs set to 6");
-  api.failNext("PATCH", "/api/sync/config");
-  await input(wrapper, '[aria-label="Parallel sync jobs"]', "15");
-  expect(messages()).toContain("Rejected by server");
-
+  expect(wrapper.find('[aria-label="Parallel sync jobs"]').exists()).toBe(false);
   await wrapper.get('[aria-label="Pause job"]').trigger("click");
   await flushPromises();
   expect(api.db.sync.jobs[0]!.status).toBe("paused");

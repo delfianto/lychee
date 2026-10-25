@@ -3,6 +3,7 @@
 // with its own domain: providers, trackers, libraries, taxonomy, downloads/sync,
 // import config, and the server path browser.
 
+import type { components } from "./schema";
 import { rememberTask } from "./events";
 import { apiErrorMessage } from "./queries";
 import {
@@ -258,34 +259,9 @@ export async function fetchDownloadTasks(): Promise<DownloadTask[]> {
   return data ?? [];
 }
 
-export async function fetchDownloadConfig(): Promise<{ parallelDownloads: number }> {
-  const { data } = await api.GET("/api/downloads/config");
-  return data ?? { parallelDownloads: 1 };
-}
-
-export async function updateDownloadConfig(
-  parallelDownloads: number,
-): Promise<{ parallelDownloads: number }> {
-  const clamped = Math.max(1, Math.min(10, Math.round(parallelDownloads)));
-  const { data, error } = await api.PATCH("/api/downloads/config", {
-    body: { parallelDownloads: clamped },
-  });
-  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't update download settings"));
-  return data;
-}
-
 export async function fetchSyncState(): Promise<SyncState | null> {
   const { data } = await api.GET("/api/sync");
   return data ?? null;
-}
-
-export async function updateSyncConfig(parallelSyncs: number): Promise<SyncState> {
-  const clamped = Math.max(1, Math.min(10, Math.round(parallelSyncs)));
-  const { data, error } = await api.PATCH("/api/sync/config", {
-    body: { parallelSyncs: clamped },
-  });
-  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't update sync settings"));
-  return data;
 }
 
 export async function controlSync(action: string, jobId?: string): Promise<SyncState> {
@@ -404,18 +380,14 @@ export async function saveThumbnailStorage(path: string | null) {
   return data;
 }
 
-export async function fetchImageProcessing() {
-  const { data, error } = await api.GET("/api/libraries/image-processing");
-  if (error || !data)
-    throw new Error(apiErrorMessage(error, "Couldn't load image processing settings"));
+export async function fetchWorkerSettings() {
+  const { data, error } = await api.GET("/api/libraries/workers");
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't load worker settings"));
   return data;
 }
 
-export async function saveImageProcessing(conversionWorkers: number, thumbnailWorkers: number) {
-  const { data, error } = await api.PUT("/api/libraries/image-processing", {
-    body: { conversionWorkers, thumbnailWorkers },
-  });
-  if (error || !data)
-    throw new Error(apiErrorMessage(error, "Couldn't save image processing settings"));
+export async function saveWorkerSettings(body: components["schemas"]["WorkerSettingsUpdate"]) {
+  const { data, error } = await api.PUT("/api/libraries/workers", { body });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't save worker settings"));
   return data;
 }

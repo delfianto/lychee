@@ -6,7 +6,7 @@ from collections.abc import Callable, Generator, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from contextvars import copy_context
-from threading import Condition
+from threading import Condition, local
 
 from src.tasks.context import checkpoint
 
@@ -14,10 +14,12 @@ from src.tasks.context import checkpoint
 class Limiter:
     """A live concurrency limit; reducing it lets existing work drain."""
 
-    def __init__(self, count: int) -> None:
+    def __init__(self, count: int, *, reentrant: bool = False) -> None:
+        self._reentrant = reentrant
         self.count = count
         self.active = 0
         self._condition = Condition()
+        self._local = local()
 
     def resize(self, count: int) -> None:
         with self._condition:
@@ -26,6 +28,12 @@ class Limiter:
 
     @contextmanager
     def slot(self) -> Iterator[None]:
+        # Nested metadata calls in the same thread reuse the permit. Thread-local
+        # state deliberately does not propagate with copy_context to child workers.
+        if self._reentrant and getattr(self._local, "held", False):
+            checkpoint()
+            yield
+            return
         while True:
             checkpoint()
             with self._condition:
@@ -33,10 +41,14 @@ class Limiter:
                     self.active += 1
                     break
                 self._condition.wait(timeout=0.1)
+        if self._reentrant:
+            self._local.held = True
         try:
             checkpoint()
             yield
         finally:
+            if self._reentrant:
+                self._local.held = False
             with self._condition:
                 self.active -= 1
                 self._condition.notify_all()

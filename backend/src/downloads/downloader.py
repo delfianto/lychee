@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -223,6 +224,7 @@ def _download_chapter(
     remote: RemoteChapter,
     provider: Provider,
     task: DownloadTask,
+    on_fetch_done: Callable[[], None],
     data_saver: bool = False,
     on_progress: Callable[[int, str], None] | None = None,
 ) -> Chapter:
@@ -259,33 +261,36 @@ def _download_chapter(
     rel = chapter_path_rel(series, remote)
     dest = Path(library.path) / rel
     with workspace(Path(library.path), prefix="download") as work:
-        pages = []
-        if isinstance(provider, StreamingDownloadProvider):
-            sources = prefetch_pages(
-                provider.iter_pages_to(
-                    remote, work, data_saver=data_saver, on_page=fetch_progress.post
-                ),
-                fetch_progress.drain,
-            )
-        elif isinstance(provider, DiskDownloadProvider):
-            sources = iter(
-                provider.fetch_pages_to(
-                    remote, work, data_saver=data_saver, on_page=fetch_progress.post
-                )
-            )
-        else:
-            for index, data in enumerate(
-                provider.fetch_pages(remote, data_saver=data_saver, on_page=fetch_progress.post)
-            ):
-                path = work / f"{index:04d}.source"
-                path.write_bytes(data)
-                pages.append(path)
-            sources = iter(pages)
-        if not isinstance(provider, StreamingDownloadProvider):
-            pages = list(sources)
-            total_pages = len(pages)
-            sources = iter(pages)
-            phase("fetching", total_pages, total_pages)
+
+        def fetch_sources():
+            try:
+                fetch_progress.post(0, 0)
+                if isinstance(provider, StreamingDownloadProvider):
+                    yield from provider.iter_pages_to(
+                        remote, work, data_saver=data_saver, on_page=fetch_progress.post
+                    )
+                elif isinstance(provider, DiskDownloadProvider):
+                    disk_pages = provider.fetch_pages_to(
+                        remote, work, data_saver=data_saver, on_page=fetch_progress.post
+                    )
+                    fetch_progress.post(len(disk_pages), len(disk_pages))
+                    yield from disk_pages
+                else:
+                    data_pages = provider.fetch_pages(
+                        remote, data_saver=data_saver, on_page=fetch_progress.post
+                    )
+                    fetch_progress.post(len(data_pages), len(data_pages))
+                    for index, data in enumerate(data_pages):
+                        path = work / f"{index:04d}.source"
+                        path.write_bytes(data)
+                        yield path
+
+            finally:
+                # The producer releases admission; prefetch joins it before the
+                # owning thread closes the same ExitStack on error/cancellation.
+                on_fetch_done()
+
+        sources = prefetch_pages(fetch_sources(), fetch_progress.drain)
 
         def raw_pages():
             for path in sources:
@@ -363,7 +368,8 @@ def plan_downloads(
 
     When ``provider_chapter_ids`` is set, only those remote chapters are considered.
     """
-    remotes = provider.list_chapters(series.provider_series_id or "", language=language)
+    with queue.io_limit.slot():
+        remotes = provider.list_chapters(series.provider_series_id or "", language=language)
     # Keep the remote index warm whenever we plan downloads.
     try:
         from src.catalog.remote_chapters import upsert_provider_chapters
@@ -489,7 +495,10 @@ def run_download_queue(
     context: _ChapterContext | None = None
     try:
         while not is_cancelled(series_id):
-            with queue.chapter_limit.slot():
+            with queue.chapter_limit.slot(), ExitStack() as fetching:
+                # Claim only when this chapter can actually fetch. Other chapters
+                # stay queued/pausable while prior ones run CPU stages.
+                fetching.enter_context(queue.fetch_limit.slot())
                 with _CLAIM_LOCK:
                     if context is None:
                         context = _chapter_context(session, series_id, storage_root, data_saver)
@@ -528,7 +537,9 @@ def run_download_queue(
                             task=row,
                             data_saver=context.data_saver,
                             on_progress=chapter_progress,
+                            on_fetch_done=fetching.close,
                         )
+                    fetching.close()  # retrying only thumbnails needs no fetch permit
                     _phase(session, row, "thumbnails", 0, 1)
                     _ = write_series_cover(session, series_id, context.directory)
                     check_cancelled(series_id)

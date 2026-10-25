@@ -347,6 +347,19 @@ export function useAppApi() {
           })),
           nextCursor: null,
         });
+      if (path === "/api/libraries/workers") {
+        if (method === "PUT") {
+          db.downloadConfig.parallelDownloads = Number(body.downloadWorkers);
+          db.sync.parallelSyncs = Number(body.scanMetadataWorkers);
+          db.imageProcessing.conversionWorkers = Number(body.conversionWorkers);
+          db.imageProcessing.thumbnailWorkers = Number(body.thumbnailWorkers);
+        }
+        return json({
+          downloadWorkers: db.downloadConfig.parallelDownloads,
+          scanMetadataWorkers: db.sync.parallelSyncs,
+          ...db.imageProcessing,
+        });
+      }
       if (path === "/api/libraries/image-processing") {
         if (method === "PUT") Object.assign(db.imageProcessing, body);
         return json(db.imageProcessing);

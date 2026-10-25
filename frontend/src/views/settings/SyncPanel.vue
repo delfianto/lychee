@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Settings → Sync: background sync/index job log with detailed progress (what file is
 // being indexed or which manga is being pulled from where + any error), pause/resume/cancel
-// controls, and the parallel sync worker limiter (1–10).
-import { AlertCircle, Gauge, Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
+// controls. Resource settings live in Libraries.
+import { AlertCircle, Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import PhaseProgress from "../../components/PhaseProgress.vue";
@@ -11,7 +11,7 @@ import OverallProgress from "../../components/OverallProgress.vue";
 import type { SyncState } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
-import { controlSync, fetchSyncState, runSync, updateSyncConfig } from "../../api/settingsQueries";
+import { controlSync, fetchSyncState, runSync } from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 
 interface SyncJobRow {
@@ -31,7 +31,6 @@ const sync = reactive({
   newChapters: 0,
   syncing: false,
   paused: false,
-  parallelSyncs: 1,
 });
 const jobs = ref<SyncJobRow[]>([]);
 
@@ -82,7 +81,6 @@ function applySyncState(data: SyncState | null): void {
   sync.newChapters = data.newChapters;
   sync.syncing = data.syncing;
   sync.paused = data.paused ?? false;
-  sync.parallelSyncs = data.parallelSyncs ?? 1;
   jobs.value = (data.jobs ?? []).map((j) => ({
     id: j.id,
     kind: j.kind,
@@ -109,18 +107,6 @@ async function syncNow(): Promise<void> {
   } catch (e) {
     sync.syncing = false;
     toast(e instanceof Error ? e.message : "Couldn’t start sync", "error");
-  }
-}
-
-async function setParallelSyncs(raw: number): Promise<void> {
-  const clamped = Math.max(1, Math.min(10, Math.round(Number.isFinite(raw) ? raw : 1)));
-  sync.parallelSyncs = clamped;
-  try {
-    const updated = await updateSyncConfig(clamped);
-    applySyncState(updated);
-    toast(`Parallel sync jobs set to ${sync.parallelSyncs}`);
-  } catch (e) {
-    toast(e instanceof Error ? e.message : "Couldn't update sync settings", "error");
   }
 }
 
@@ -168,11 +154,9 @@ onMounted(() => {
 <template>
   <div class="flex flex-col gap-6">
     <section class="flex flex-col gap-3">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
-        Sync configuration
-      </h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sync</h3>
       <div class="card bg-base-100">
-        <div class="card-body grid gap-3 p-4 xl:grid-cols-2 xl:gap-6">
+        <div class="card-body p-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-start gap-3">
               <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -190,29 +174,6 @@ onMounted(() => {
               <RefreshCw class="size-4" :class="{ 'animate-spin': sync.syncing }" />
               {{ sync.syncing ? "Syncing…" : "Sync now" }}
             </button>
-          </div>
-
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-base-content/10 pt-3 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6"
-          >
-            <div class="flex items-start gap-3">
-              <Gauge class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Parallel sync jobs</div>
-                <div class="text-xs text-base-content/50">
-                  Concurrent sync &amp; indexing workers (min 1, max 10)
-                </div>
-              </div>
-            </div>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              :value="sync.parallelSyncs"
-              aria-label="Parallel sync jobs"
-              class="input input-bordered input-sm w-20 text-right tabular-nums"
-              @change="setParallelSyncs(Number(($event.target as HTMLInputElement).value))"
-            />
           </div>
         </div>
       </div>

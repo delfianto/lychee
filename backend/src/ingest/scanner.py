@@ -39,7 +39,7 @@ from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
 from src.tasks.concurrency import parallel_map
 from src.tasks.context import checkpoint, report_phase
-from src.tasks.queue import queue
+from src.tasks.queue import MAX_WORKERS, io_slot, queue
 
 logger = get_logger(__name__)
 
@@ -79,6 +79,7 @@ def _archive_kind(name: str) -> str | None:
     return _ARCHIVE_KINDS.get(Path(name).suffix.lower())
 
 
+@io_slot()
 def _signature(path: Path) -> tuple[int, float, str]:
     """Return (size_bytes, mtime, partial_hash) for a file or a media directory."""
     digest = xxhash.xxh3_128()  # fast, low-collision content fingerprint
@@ -113,6 +114,7 @@ def _candidate(item: Path, root: Path, series_dir: Path, kind: str) -> Candidate
     return Candidate(path=item, rel=str(item.relative_to(root)), kind=kind, segments=parts)
 
 
+@io_slot()
 def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
     """Walk a series folder (hybrid rule): image-only dir → book; archive →
     book; a folder holding archives/sub-folders is a grouping level (recurse)."""
@@ -142,6 +144,7 @@ def _series_kind(library: Library) -> str:
     return library.kind if library.kind in {"manga", "comic", "gallery"} else "manga"
 
 
+@io_slot()
 def _page_count(candidate: Candidate) -> int | None:
     """Open the container to count pages; None if it can't be read (skip it)."""
     try:
@@ -190,8 +193,9 @@ def _scan_library(
     folder; manga progress is by top-level entry.
     """
     root = Path(library.path)
-    if not root.is_dir():
-        raise BadRequestError(f"library path not found: {root}")
+    with io_slot():
+        if not root.is_dir():
+            raise BadRequestError(f"library path not found: {root}")
 
     summary = ScanSummary()
     existing = {
@@ -203,7 +207,10 @@ def _scan_library(
     seen: set[str] = set()
 
     gallery = _series_kind(library) == "gallery"
-    entries = [p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"]
+    with io_slot():
+        entries = [
+            p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"
+        ]
     total_entries = max(len(entries), 1)
     scan_job = sync_jobs.create(
         kind="scan",
@@ -223,18 +230,20 @@ def _scan_library(
             elif _archive_kind(entry.name):
                 yield _candidate(entry, root, root, _archive_kind(entry.name) or "cbz")
 
-    planned = []
-    for candidate in candidates():
-        prior = existing.get(candidate.rel)
-        planned.append(
-            (
-                candidate,
-                prior.file_size if prior else None,
-                prior.file_last_modified if prior else None,
-                prior.page_count if prior else None,
+    with io_slot():
+        planned = []
+        for candidate in candidates():
+            prior = existing.get(candidate.rel)
+            planned.append(
+                (
+                    candidate,
+                    prior.file_size if prior else None,
+                    prior.file_last_modified if prior else None,
+                    prior.page_count if prior else None,
+                )
             )
-        )
 
+    @io_slot()
     def inspect(item):
         candidate, prior_size, prior_mtime, prior_pages = item
         checkpoint()
@@ -254,7 +263,7 @@ def _scan_library(
     cache = _inspections.get()
     report_phase("inspect", 0, len(planned), "Inspecting files")
     for completed, (path, result) in enumerate(
-        parallel_map(inspect, planned, workers=queue.sync_workers), 1
+        parallel_map(inspect, planned, workers=MAX_WORKERS, limit=queue.io_limit), 1
     ):
         if cache is not None:
             cache[path] = result
@@ -270,7 +279,9 @@ def _scan_library(
             progress=round(pct * 0.5),
             detail=f"Indexing {entry.name} in {root}",
         )
-        if gallery and entry.is_dir():
+        with io_slot():
+            is_artist = gallery and entry.is_dir()
+        if is_artist:
             _ingest_artist(session, library, entry, root, existing, seen, summary)
         else:
             _ingest_entry(session, library, entry, root, existing, seen, summary, artist=None)
@@ -312,36 +323,38 @@ def _ingest_entry(
 ) -> None:
     """One series from a top-level (or per-artist) entry: a folder of books, or a loose
     archive. ``artist`` credits a gallery to its artist/model folder (+ Collection)."""
-    works_name: str
-    if entry.is_dir():
-        candidates = resolve_books(entry, root)
-        if not candidates:
-            # Surface why a set folder was skipped (e.g. only .rar / empty).
-            try:
-                suffixes = sorted(
-                    {
-                        p.suffix.lower()
-                        for p in entry.iterdir()
-                        if p.is_file() and not p.name.startswith(".")
-                    }
+    with io_slot():
+        works_name: str
+        is_directory = entry.is_dir()
+        if is_directory:
+            candidates = resolve_books(entry, root)
+            if not candidates:
+                # Surface why a set folder was skipped (e.g. only .rar / empty).
+                try:
+                    suffixes = sorted(
+                        {
+                            p.suffix.lower()
+                            for p in entry.iterdir()
+                            if p.is_file() and not p.name.startswith(".")
+                        }
+                    )
+                except OSError:
+                    suffixes = []
+                logger.info(
+                    "scan_skip_empty_or_unknown",
+                    path=str(entry.relative_to(root)),
+                    suffixes=suffixes,
                 )
-            except OSError:
-                suffixes = []
-            logger.info(
-                "scan_skip_empty_or_unknown",
-                path=str(entry.relative_to(root)),
-                suffixes=suffixes,
-            )
+                return
+            path_rel = str(entry.relative_to(root))
+            works_name = entry.name
+        elif entry.is_file() and (kind := _archive_kind(entry.name)):
+            candidates = [_candidate(entry, root, entry.parent, kind)]
+            path_rel = str(entry.relative_to(root).with_suffix(""))
+            works_name = entry.stem
+        else:
             return
-        path_rel = str(entry.relative_to(root))
-        works_name = entry.name
-    elif entry.is_file() and (kind := _archive_kind(entry.name)):
-        candidates = [_candidate(entry, root, entry.parent, kind)]
-        path_rel = str(entry.relative_to(root).with_suffix(""))
-        works_name = entry.stem
-    else:
-        return
-    title = _gallery_display_title(works_name, artist)
+        title = _gallery_display_title(works_name, artist)
     _ingest_series(
         session,
         library,
@@ -353,7 +366,7 @@ def _ingest_entry(
         seen=seen,
         summary=summary,
         artist=artist,
-        series_dir=entry if entry.is_dir() else None,
+        series_dir=entry if is_directory else None,
     )
 
 
@@ -371,13 +384,16 @@ def _ingest_artist(
     Each child work folder (or archive) is one series titled ``Artist — Works``.
     """
     artist_name = artist_dir.name
-    for child in sorted(artist_dir.iterdir()):
-        if child.name.startswith(".") or child.name == "temp":
-            continue
-        if child.is_dir() or (child.is_file() and _archive_kind(child.name)):
-            _ingest_entry(
-                session, library, child, root, existing, seen, summary, artist=artist_name
-            )
+    with io_slot():
+        children = [
+            child
+            for child in sorted(artist_dir.iterdir())
+            if not child.name.startswith(".")
+            and child.name != "temp"
+            and (child.is_dir() or (child.is_file() and _archive_kind(child.name)))
+        ]
+    for child in children:
+        _ingest_entry(session, library, child, root, existing, seen, summary, artist=artist_name)
 
 
 def _ingest_series(
@@ -426,7 +442,9 @@ def _ingest_series(
 
     if series_dir is not None:
         info_path = series_dir / LYCHEE_INFO_FILENAME
-        if info_path.is_file():
+        with io_slot():
+            has_info = info_path.is_file()
+        if has_info:
             _apply_lychee_info_file(session, series, info_path, summary)
 
     chapters: list[Chapter] = []
@@ -452,7 +470,8 @@ def _apply_lychee_info_file(
 ) -> None:
     """Read a ``lychee.info`` sidecar and apply it, gated on a content hash so an
     unchanged file costs nothing on repeat scans (notes/decisions/20-lychee-info-metadata.md)."""
-    raw = path.read_bytes()
+    with io_slot():
+        raw = path.read_bytes()
     content_hash = xxhash.xxh3_128(raw).hexdigest()
     if series.metadata_file_hash == content_hash:
         return

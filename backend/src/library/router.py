@@ -7,7 +7,11 @@ from fastapi import APIRouter, Response, status
 from src.core.persistence.database import DbSession
 from src.downloads.deps import StorageRootDep
 from src.library import service
-from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.library.schema import (
+    LibraryCreate,
+    LibraryOut,
+    LibraryUpdate,
+)
 from src.media import processing
 from src.media import storage as thumbnail_storage
 from src.media.schema import (
@@ -16,7 +20,8 @@ from src.media.schema import (
     ThumbnailStorageOut,
     ThumbnailStorageUpdate,
 )
-from src.tasks.schema import TaskOut
+from src.tasks import config as task_config
+from src.tasks.schema import TaskOut, WorkerSettingsOut, WorkerSettingsUpdate
 
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
 
@@ -55,6 +60,16 @@ def get_image_processing(db: DbSession) -> ImageProcessingOut:
 @router.put("/image-processing")
 def update_image_processing(db: DbSession, data: ImageProcessingUpdate) -> ImageProcessingOut:
     return processing.update_processing(db, data)
+
+
+@router.get("/workers")
+def get_worker_settings(db: DbSession) -> WorkerSettingsOut:
+    return task_config.get_worker_settings(db)
+
+
+@router.put("/workers")
+def update_worker_settings(db: DbSession, data: WorkerSettingsUpdate) -> WorkerSettingsOut:
+    return task_config.save_worker_settings(db, data)
 
 
 @router.patch("/{library_id}")

@@ -71,6 +71,7 @@ def test_waiting_series_release_all_connections_before_admission(
             yield session
 
     app.dependency_overrides[get_db] = database
+    queue.chapter_limit.resize(1)
     real_slot = queue.chapter_limit.slot
     held = real_slot()
     held.__enter__()
@@ -108,6 +109,7 @@ def test_waiting_series_release_all_connections_before_admission(
                 held.__exit__(None, None, None)
             assert [job.result(timeout=5) for job in pending] == [1, 1, 1]
     finally:
+        queue.chapter_limit.resize(10)
         small.dispose()
 
 

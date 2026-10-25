@@ -24,7 +24,7 @@ from src.integrations.models import Provider as ProviderConfig
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.context import OperationCancelled, checkpoint
-from src.tasks.queue import Work, queue
+from src.tasks.queue import Work, io_slot, queue
 from src.tasks.schema import TaskOut
 
 logger = get_logger(__name__)
@@ -44,7 +44,8 @@ def _refresh_work(series_id: str, provider_id: str, language: str, fetch_covers:
         if provider is None:
             raise BadRequestError(f"provider {provider_id!r} has no metadata support")
         on_progress(20, series.title)
-        meta = provider.get_metadata(series.provider_series_id, language=language)
+        with io_slot():
+            meta = provider.get_metadata(series.provider_series_id, language=language)
         on_progress(70, "Applying metadata")
         apply_metadata(session, series, meta, fetch_covers=fetch_covers)
         if fetch_covers:
@@ -139,15 +140,18 @@ def _auto_match_one(
     fetch_covers: bool,
 ) -> bool:
     target = _normalize_title(series.title)
+    with io_slot():
+        matches = provider.search(series.title, limit=5)
     match = next(
-        (c for c in provider.search(series.title, limit=5) if _normalize_title(c.title) == target),
+        (c for c in matches if _normalize_title(c.title) == target),
         None,
     )
     if match is None:
         return False  # only adopt a confident (exact-title) match; else leave for manual
     series.provider = provider.id
     series.provider_series_id = match.provider_series_id
-    meta = provider.get_metadata(match.provider_series_id, language=language)
+    with io_slot():
+        meta = provider.get_metadata(match.provider_series_id, language=language)
     apply_metadata(session, series, meta, fetch_covers=fetch_covers)
     # The scan warms covers after committing metadata, outside the write transaction.
     return True

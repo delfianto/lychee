@@ -28,7 +28,7 @@ from src.integrations.seed import SYNC_STATE_ID
 from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
-from src.tasks.queue import Work, queue
+from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 from src.tasks.tracker import tracker
 
@@ -342,7 +342,7 @@ def _fetch_series_remote_chapters(
         detail=f"Pulling chapters for {title} from {provider_id}",
     )
     try:
-        with queue.sync_item_limit.slot():
+        with queue.io_limit.slot():
             remotes = provider.list_chapters(provider_series_id, language=language)
         checkpoint()
         sync_jobs.check_state(job_id)
@@ -389,7 +389,7 @@ def _sync_work() -> Work:
             )
             planned.append((series, job, source))
 
-        workers = max(1, min(queue.sync_workers, len(planned) or 1))
+        workers = MAX_WORKERS
         total_new = 0
         completed = 0
         total = len(planned) or 1
@@ -419,7 +419,9 @@ def _sync_work() -> Work:
                 ),
             )
 
-        for series_id, job_id, source, outcome in parallel_map(fetch, requests, workers=workers):
+        for series_id, job_id, source, outcome in parallel_map(
+            fetch, requests, workers=workers, limit=queue.io_limit
+        ):
             series = by_id[series_id]
             job = next(job for _, job, _ in planned if job.id == job_id)
             completed += 1

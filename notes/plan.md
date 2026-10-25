@@ -1021,7 +1021,13 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
 
 ### Coordinated download and scan pipelines
 
-- [x] Bounded concurrent MangaDex file fetching, feeding conversion in page order.
+- [x] Download workers controls files within a fetching chapter, with immediate staging
+      and completion counters; reading order is restored for conversion/archive entries.
+      Fetch admission is released before CPU completion so the next chapter overlaps.
+- [x] One global scan/metadata I/O budget across jobs, independent of operation lifetimes;
+      both I/O settings live in Libraries immediately before Image processing.
+- [x] One worker-settings save persists all four budgets atomically. Auto detect
+      refreshes image-worker recommendations beside Save without changing I/O edits.
 - [x] Independent conversion and thumbnail CPU pools with persisted, live 1–64 worker limits
       under Library settings, below the thumbnail folder; CPU-based recommendations.
 - [x] Download source files spool independently of conversion, with bounded network requests,

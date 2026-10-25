@@ -566,6 +566,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/libraries/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Worker Settings */
+        get: operations["get_worker_settings_api_libraries_workers_get"];
+        /** Update Worker Settings */
+        put: operations["update_worker_settings_api_libraries_workers_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/{library_id}": {
         parameters: {
             query?: never;
@@ -2561,6 +2579,34 @@ export interface components {
             /** Chapters */
             chapters: components["schemas"]["ChapterOut"][];
         };
+        /** WorkerSettingsOut */
+        WorkerSettingsOut: {
+            /** Conversionworkers */
+            conversionWorkers: number;
+            /** Thumbnailworkers */
+            thumbnailWorkers: number;
+            /** Downloadworkers */
+            downloadWorkers: number;
+            /** Scanmetadataworkers */
+            scanMetadataWorkers: number;
+            /** Cputhreads */
+            cpuThreads: number;
+            /** Recommendedconversionworkers */
+            recommendedConversionWorkers: number;
+            /** Recommendedthumbnailworkers */
+            recommendedThumbnailWorkers: number;
+        };
+        /** WorkerSettingsUpdate */
+        WorkerSettingsUpdate: {
+            /** Conversionworkers */
+            conversionWorkers: number;
+            /** Thumbnailworkers */
+            thumbnailWorkers: number;
+            /** Downloadworkers */
+            downloadWorkers: number;
+            /** Scanmetadataworkers */
+            scanMetadataWorkers: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -3607,6 +3653,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageProcessingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_worker_settings_api_libraries_workers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerSettingsOut"];
+                };
+            };
+        };
+    };
+    update_worker_settings_api_libraries_workers_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkerSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerSettingsOut"];
                 };
             };
             /** @description Validation Error */
