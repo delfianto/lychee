@@ -59,7 +59,10 @@ download→DB ingest path" that was the original design's rejected
 alternative is exactly what shipped). No ComicInfo.xml is written into the
 CBZ — only numbered `NNN.avif` pages; scanlation group is stored as
 `Chapter.group_name`, not embedded XML. Output path is hardcoded:
-`{Series}/{Vol.XX or "No Volume"}/{Ch.YY - Title}.cbz` — not a configurable
+`{Series}/[Vol.XX/]{Ch.YY - Title}.cbz` — chapters without a provider volume
+live directly in the series folder. Volume reconciliation moves existing managed
+archives without replacing Book/Chapter identities; see [22](22-mdlists-chapters-staging.md).
+This is not a configurable
 template (the only configurable filename template in the codebase is for
 *parsing* on local import, [06](06-filename-parser.md), unrelated to
 download output).

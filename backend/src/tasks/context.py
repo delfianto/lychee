@@ -19,6 +19,7 @@ class Operation:
     phase: Callable[[str, int, int, str | None], None]
     checks: list[Callable[[], None]] = field(default_factory=list)
     finalizers: list[Callable[[str], None]] = field(default_factory=list)
+    units: Callable[[int | None, str | None], None] | None = None
 
 
 current_operation: ContextVar[Operation | None] = ContextVar("operation", default=None)
@@ -37,6 +38,14 @@ def report_phase(name: str, completed: int, total: int, detail: str | None = Non
     operation = current_operation.get()
     if operation is not None:
         operation.phase(name, completed, total, detail)
+
+
+def report_work_units(remaining: int | None, kind: str | None = None) -> None:
+    """Remaining concrete work, independent of the parent operation's lifetime."""
+    checkpoint()
+    operation = current_operation.get()
+    if operation is not None and operation.units is not None:
+        operation.units(remaining, kind)
 
 
 def cooperative_wait(seconds: float) -> None:

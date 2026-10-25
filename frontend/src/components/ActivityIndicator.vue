@@ -5,11 +5,24 @@
 import { Loader2, Square } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 
-import { activeTasks } from "../api/events";
+import { computed } from "vue";
+import { activeTasks, activity, refreshActivity, refreshTasks } from "../api/events";
 import { api } from "../api/client";
 import { toast } from "../lib/toast";
 import PhaseProgress from "./PhaseProgress.vue";
 import OverallProgress from "./OverallProgress.vue";
+
+const count = computed(() => activity.value?.total ?? 0);
+const summary = computed(() => {
+  const counts = activity.value;
+  if (!counts) return "Preparing background work";
+  return `${counts.downloadChapters} chapter downloads · ${counts.syncJobs} sync/folder jobs${counts.otherJobs ? ` · ${counts.otherJobs} preparing/other jobs` : ""}`;
+});
+
+function refresh(): void {
+  void refreshTasks();
+  void refreshActivity();
+}
 
 async function cancelTask(id: string): Promise<void> {
   const { error } = await api.POST("/api/tasks/{task_id}/cancel", {
@@ -32,15 +45,17 @@ function kindLabel(kind: string): string {
 </script>
 
 <template>
-  <div v-if="activeTasks.length" class="dropdown dropdown-end">
+  <div v-if="activeTasks.length || count" class="dropdown dropdown-end">
     <div
       tabindex="0"
       role="button"
       class="btn btn-circle btn-ghost btn-sm"
-      :aria-label="`${activeTasks.length} background task(s) running`"
+      :aria-label="`${count} active background work items`"
+      :title="`${summary}. Includes queued work; paused work is excluded.`"
+      @click="refresh"
     >
       <span class="indicator">
-        <span class="indicator-item badge badge-primary badge-xs">{{ activeTasks.length }}</span>
+        <span v-if="count" class="indicator-item badge badge-primary badge-xs">{{ count }}</span>
         <Loader2 class="size-5 animate-spin text-primary" />
       </span>
     </div>
@@ -49,6 +64,7 @@ function kindLabel(kind: string): string {
       class="dropdown-content z-30 mt-2 max-h-96 w-72 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-3 shadow-lg max-sm:fixed max-sm:inset-x-2 max-sm:top-16 max-sm:w-auto"
     >
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Background tasks</p>
+      <p class="mb-3 text-xs text-base-content/60">{{ summary }}</p>
       <ul class="space-y-3">
         <li v-for="task in activeTasks" :key="task.id">
           <div class="flex justify-between gap-2 text-sm">
@@ -83,6 +99,9 @@ function kindLabel(kind: string): string {
             </div>
           </div>
           <PhaseProgress :phases="task.phases ?? {}" />
+          <p v-if="task.workUnits != null" class="mt-1 text-xs text-base-content/60">
+            {{ task.workUnits }} {{ task.workUnitKind ?? "work item" }}(s) remaining
+          </p>
           <p
             v-if="task.detail"
             class="mt-1 truncate text-xs text-base-content/60"

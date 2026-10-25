@@ -1,6 +1,6 @@
 """Persisted worker preferences; operation/task history remains in memory."""
 
-from sqlalchemy import CheckConstraint, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.persistence.base_model import Base, TimestampMixin
@@ -16,3 +16,9 @@ class TaskQueueConfig(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default="default")
     download_workers: Mapped[int] = mapped_column(Integer, nullable=False)
     sync_workers: Mapped[int] = mapped_column(Integer, nullable=False)
+    download_auto_clear_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    sync_auto_clear_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )

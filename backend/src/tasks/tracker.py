@@ -28,6 +28,8 @@ class TaskInfo:
     detail: str | None = None
     result: dict[str, Any] | None = None
     phases: dict[str, dict[str, int]] = field(default_factory=dict)
+    work_units: int | None = None
+    work_unit_kind: str | None = None
 
 
 class TaskTracker:
@@ -88,6 +90,13 @@ class TaskTracker:
         if detail is not None:
             info.detail = detail
         self._publish(info, f"{info.kind}.progress")
+
+    def units(self, info: TaskInfo, remaining: int | None, kind: str | None) -> None:
+        with self._lock:
+            info.work_units = max(0, remaining) if remaining is not None else None
+            info.work_unit_kind = kind
+        self._publish(info, f"{info.kind}.progress")
+        broker.publish({"event": "activity.changed"})
 
     def finish(
         self,

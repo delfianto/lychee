@@ -28,6 +28,7 @@ from src.integrations.seed import SYNC_STATE_ID
 from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
+from src.tasks.events import broker
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 from src.tasks.tracker import tracker
@@ -57,6 +58,7 @@ class SyncJob:
     paused_requested: bool = False
     cancel_requested: bool = False
     task_id: str | None = None
+    operation_finished: bool = False
 
 
 class SyncJobManager:
@@ -70,6 +72,33 @@ class SyncJobManager:
         self._max_keep = max_keep
 
     @property
+    def auto_clear_completed(self) -> bool:
+        with self._cond:
+            return queue.auto_clear_syncs
+
+    def _clear_successful(self) -> None:
+        if queue.auto_clear_syncs:
+            self._order = [
+                jid
+                for jid in self._order
+                if self._jobs[jid].status != "done"
+                or (
+                    self._jobs[jid].kind in {"scan", "import"}
+                    and self._jobs[jid].task_id
+                    and not self._jobs[jid].operation_finished
+                )
+            ]
+            self._jobs = {jid: self._jobs[jid] for jid in self._order}
+        # The history cap must not evict queued/running folder or chapter checks.
+        # Otherwise large syncs silently undercount and lose cancellation controls.
+        finished = [jid for jid in self._order if self._jobs[jid].status in _FINISHED_STATUSES]
+        expired = set(finished[: max(0, len(finished) - self._max_keep)])
+        if expired:
+            self._order = [jid for jid in self._order if jid not in expired]
+            for jid in expired:
+                del self._jobs[jid]
+
+    @property
     def paused(self) -> bool:
         with self._cond:
             return self._paused
@@ -79,6 +108,7 @@ class SyncJobManager:
             self._jobs.clear()
             self._order.clear()
             self._paused = False
+            queue.auto_clear_syncs = False
             self._cond.notify_all()
 
     def create(
@@ -113,20 +143,26 @@ class SyncJobManager:
                 operation.finalizers.append(lambda status: self.finish_operation(job.id, status))
             self._jobs[job.id] = job
             self._order.append(job.id)
-            while len(self._order) > self._max_keep:
-                old_id = self._order.pop(0)
-                self._jobs.pop(old_id, None)
+            self._clear_successful()
+            broker.publish({"event": "activity.changed"})
             return job
 
     def finish_operation(self, job_id: str, status: str) -> None:
         with self._cond:
             job = self._jobs.get(job_id)
-            if job is not None and job.status not in {"done", "failed", "cancelled"}:
+            if job is not None:
+                job.operation_finished = True
+            if job is not None and (
+                job.status not in {"done", "failed", "cancelled"}
+                or (job.kind in {"scan", "import"} and status != "done")
+            ):
                 job.status = status
                 if status == "done":
                     job.progress = 100
                 elif status == "cancelled":
                     job.detail = "Cancelled"
+            self._clear_successful()
+            broker.publish({"event": "activity.changed"})
 
     def update(
         self,
@@ -149,6 +185,9 @@ class SyncJobManager:
                 job.detail = detail
             if error is not None:
                 job.error = error
+            self._clear_successful()
+            if status is not None:
+                broker.publish({"event": "activity.changed"})
             return job
 
     def check_state(self, job_id: str) -> None:
@@ -173,6 +212,7 @@ class SyncJobManager:
         if action not in _VALID_ACTIONS:
             raise BadRequestError(f"unknown sync action {action!r}")
         with self._cond:
+            broker.publish({"event": "activity.changed"})
             if action == "clear-completed":
                 keep_ids = [
                     jid
@@ -232,6 +272,7 @@ class SyncJobManager:
 
     def list_jobs(self) -> list[SyncJobOut]:
         with self._cond:
+            self._clear_successful()
             return [
                 SyncJobOut(
                     id=self._jobs[jid].id,
@@ -255,6 +296,11 @@ class SyncJobManager:
                 for jid in reversed(self._order)
                 if jid in self._jobs
             ]
+
+    def activity_snapshot(self) -> list[tuple[str | None, str]]:
+        """Avoid joining task phases / materializing the settings log just to count."""
+        with self._cond:
+            return [(job.task_id, job.status) for job in self._jobs.values()]
 
     def has_active(self) -> bool:
         with self._cond:
@@ -287,6 +333,7 @@ def _sync_out(state: SyncState) -> SyncOut:
         ),
         paused=sync_jobs.paused,
         parallel_syncs=queue.sync_workers,
+        auto_clear_completed=sync_jobs.auto_clear_completed,
         jobs=jobs,
     )
 
@@ -296,7 +343,9 @@ def get_sync(session: Session) -> SyncOut:
 
 
 def update_sync_config(session: Session, data: SyncConfigUpdate) -> SyncOut:
-    save_queue_workers(session, "sync", data.parallel_syncs)
+    save_queue_workers(
+        session, "sync", data.parallel_syncs, auto_clear_completed=data.auto_clear_completed
+    )
     return get_sync(session)
 
 

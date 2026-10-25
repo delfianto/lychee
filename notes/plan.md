@@ -1018,6 +1018,11 @@ numbered volumes, and the FE has no label for `volume: null`.
 - MangaDex downloads use stable MangaDex UUID folders rather than titles. Existing
   title folders are not migrated. Scanned local media
   is never moved; converted imports retain their internal Lychee series/book keys.
+- Chapters without a provider volume download directly into the manga UUID folder.
+  Feed refreshes reconcile managed CBZ volume changes, flatten legacy `No Volume/`
+  folders, and preserve Book/Chapter IDs and reading progress. Transactional hard
+  links plus a recovery journal protect interrupted moves; scans and publication
+  share the index lock. In-flight downloads publish using the latest indexed volume.
 
 See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync details.
 
@@ -1037,8 +1042,14 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
 - [x] Parallel file/container inspection; ORM reconciliation stays on its owner thread.
 - [x] Scans own their thumbnail work; cancellation stops post-index stages too.
 - [x] Download phase counters survive reconnect/restart in the chapter queue rows.
+- [x] Independent, persisted Auto-clear completed toggles in Downloads and Sync;
+      successful history clears after all stages, with failures/cancellations retained.
+      Enabling also clears existing successes; cleanup works without an open browser.
 - [x] Phase sub-bars in downloads, sync, and the global activity list; whole-operation
       cancellation and reconnect snapshots. Completion waits for child workers.
+- [x] Activity badge counts pending/processing chapters and per-folder gallery work,
+      with a visible breakdown and SSE invalidation. Folder completion waits for the
+      final thumbnail; stale snapshots/progress cannot leave completed work active.
 - [x] Download/sync concurrency preferences persist in `task_queue_config` and restore
       before queued downloads resume. Conversion/thumbnail limits persist separately
       in `image_processing_config`. Only unsaved download/sync preferences default to 1.

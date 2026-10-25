@@ -3,16 +3,22 @@ import { beforeEach, expect, it, vi } from "vite-plus/test";
 import type { Ref } from "vue";
 
 import type { Task } from "../api/events";
-import { activeTasks } from "../api/events";
+import { activeTasks, activity } from "../api/events";
 import { useToasts } from "../lib/toast";
 import ActivityIndicator from "./ActivityIndicator.vue";
 import { renderComponent } from "../test/views";
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock("../api/client", () => ({ api: { POST: post } }));
-vi.mock("../api/events", async () => ({ activeTasks: (await import("vue")).ref([]) }));
+vi.mock("../api/events", async () => ({
+  activeTasks: (await import("vue")).ref([]),
+  activity: (await import("vue")).ref({ downloadChapters: 3, syncJobs: 2, otherJobs: 0, total: 5 }),
+  refreshTasks: vi.fn(),
+  refreshActivity: vi.fn(),
+}));
 
 beforeEach(() => {
+  activity.value = { downloadChapters: 3, syncJobs: 2, otherJobs: 0, total: 5 };
   (activeTasks as Ref<Task[]>).value = [
     {
       id: "scan-1",
@@ -24,6 +30,23 @@ beforeEach(() => {
     },
   ];
   post.mockResolvedValue({});
+});
+
+it("counts chapters plus folder jobs rather than parent operations, and decreases on completion", async () => {
+  const { wrapper } = await renderComponent(ActivityIndicator);
+  expect(wrapper.get('[role="button"]').attributes("aria-label")).toBe(
+    "5 active background work items",
+  );
+  expect(wrapper.text()).toContain("3 chapter downloads · 2 sync/folder jobs");
+  activity.value = { downloadChapters: 2, syncJobs: 1, otherJobs: 0, total: 3 };
+  await flushPromises();
+  expect(wrapper.get('[role="button"]').attributes("aria-label")).toBe(
+    "3 active background work items",
+  );
+  activity.value = { downloadChapters: 0, syncJobs: 0, otherJobs: 0, total: 0 };
+  (activeTasks as Ref<Task[]>).value = [];
+  await flushPromises();
+  expect(wrapper.find('[role="button"]').exists()).toBe(false);
 });
 
 it("shows thumbnail progress and cancels the complete operation", async () => {

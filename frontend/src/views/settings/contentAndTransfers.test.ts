@@ -172,6 +172,88 @@ it("renders download phases and sizes and performs individual queue actions", as
   await flushPromises();
 });
 
+it("persists download auto-clear, retains failures, restores on navigation, and rolls back rejected saves", async () => {
+  api.db.downloadConfig.parallelDownloads = 8;
+  api.db.downloads = [
+    makeDownload("done", "done"),
+    makeDownload("failed", "failed"),
+    makeDownload("queued"),
+  ];
+  const { wrapper } = await renderView(DownloadsPanel);
+  const selector = '[aria-label="Auto-clear completed downloads"]';
+  expect((wrapper.get(selector).element as HTMLInputElement).checked).toBe(false);
+  await input(wrapper, selector, true);
+  expect(api.db.downloadConfig).toEqual({ parallelDownloads: 8, autoClearCompleted: true });
+  expect(api.db.downloads.map((row) => row.id)).toEqual(["failed", "queued"]);
+  expect(wrapper.text()).toContain("Failed");
+  wrapper.unmount();
+  const restored = await renderView(DownloadsPanel);
+  expect((restored.wrapper.get(selector).element as HTMLInputElement).checked).toBe(true);
+  api.failNext("PATCH", "/api/downloads/config");
+  await input(restored.wrapper, selector, false);
+  expect((restored.wrapper.get(selector).element as HTMLInputElement).checked).toBe(true);
+  expect(messages()).toContain("Rejected by server");
+  await input(restored.wrapper, selector, false);
+  expect(api.db.downloadConfig.autoClearCompleted).toBe(false);
+});
+
+it("keeps download auto-clear disabled when settings cannot load", async () => {
+  api.failNext("GET", "/api/downloads/config");
+  const { wrapper } = await renderView(DownloadsPanel);
+  expect(
+    wrapper.get('[aria-label="Auto-clear completed downloads"]').attributes("disabled"),
+  ).toBeDefined();
+  expect(messages()).toContain("Rejected by server");
+});
+
+it("persists sync auto-clear independently, retains errors, and rolls back rejected saves", async () => {
+  api.db.sync.parallelSyncs = 5;
+  api.db.sync.jobs = [
+    {
+      id: "done",
+      kind: "sync",
+      title: "Done manga",
+      source: "MangaDex",
+      status: "done",
+      progress: 100,
+    },
+    {
+      id: "failed",
+      kind: "scan",
+      title: "Failed archive",
+      source: "Library",
+      status: "failed",
+      progress: 0,
+    },
+    {
+      id: "active",
+      kind: "scan",
+      title: "Active library",
+      source: "Library",
+      status: "running",
+      progress: 50,
+    },
+  ];
+  const { wrapper } = await renderView(SyncPanel);
+  const selector = '[aria-label="Auto-clear completed sync jobs"]';
+  await input(wrapper, selector, true);
+  expect(api.db.sync.autoClearCompleted).toBe(true);
+  expect(api.db.sync.parallelSyncs).toBe(5);
+  expect(api.db.downloadConfig.autoClearCompleted).toBe(false);
+  expect(wrapper.text()).not.toContain("Done manga");
+  expect(wrapper.text()).toContain("Failed archive");
+  expect(wrapper.text()).toContain("Active library");
+  wrapper.unmount();
+  const restored = await renderView(SyncPanel);
+  expect((restored.wrapper.get(selector).element as HTMLInputElement).checked).toBe(true);
+  api.failNext("PATCH", "/api/sync/config");
+  await input(restored.wrapper, selector, false);
+  expect((restored.wrapper.get(selector).element as HTMLInputElement).checked).toBe(true);
+  expect(messages()).toContain("Rejected by server");
+  await input(restored.wrapper, selector, false);
+  expect(api.db.sync.autoClearCompleted).toBe(false);
+});
+
 it("requires confirmation to cancel, handles bulk rejection, and throttles progress reloads", async () => {
   api.db.downloads = [makeDownload("q"), makeDownload("p", "paused")];
   const { wrapper } = await renderView(DownloadsPanel);

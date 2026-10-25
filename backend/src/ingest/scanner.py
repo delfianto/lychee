@@ -38,7 +38,7 @@ from src.integrations.sync import sync_jobs
 from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
 from src.tasks.concurrency import parallel_map
-from src.tasks.context import checkpoint, report_phase
+from src.tasks.context import checkpoint, report_phase, report_work_units
 from src.tasks.queue import MAX_WORKERS, io_slot, queue
 
 logger = get_logger(__name__)
@@ -54,6 +54,7 @@ _inspections: ContextVar[dict[Path, tuple[int, float, str, int | None]] | None] 
 
 @dataclass
 class ScanSummary:
+    job_id: str | None = None
     """Counts from one scan pass."""
 
     series_added: int = 0
@@ -207,6 +208,7 @@ def _scan_library(
     seen: set[str] = set()
 
     gallery = _series_kind(library) == "gallery"
+    report_work_units(None)
     with io_slot():
         entries = [
             p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"
@@ -219,6 +221,7 @@ def _scan_library(
         status="running",
         detail=f"Scanning {root}",
     )
+    summary.job_id = scan_job.id
 
     # Inspect files/containers concurrently; reconcile ORM rows only on this thread.
     # Immutable prior values cross the worker boundary, never sessions or ORM objects.
@@ -259,6 +262,10 @@ def _scan_library(
         )
         pages = prior_pages if unchanged else _page_count(candidate)
         return candidate.path, (size, mtime, partial_hash, pages)
+
+    if gallery:
+        folders = {tuple(Path(candidate.rel).parts[:2]) for candidate, *_ in planned}
+        report_work_units(len(folders), "folder")
 
     cache = _inspections.get()
     report_phase("inspect", 0, len(planned), "Inspecting files")
@@ -642,10 +649,13 @@ def sync_chapter(
         chapter = Chapter(series_id=series.id, book_id=book.id)
         session.add(chapter)
     chapter.series_id = series.id
-    chapter.volume = parsed.volume
-    chapter.number = parsed.number
-    chapter.number_sort = parsed.number_sort
-    chapter.title = parsed.label if parsed.special else None
+    # Provider chapter UUIDs own their logical metadata. In particular, parsing
+    # the ID suffix of an Oneshot filename must not turn it into a chapter number.
+    if not chapter.provider_chapter_id:
+        chapter.volume = parsed.volume
+        chapter.number = parsed.number
+        chapter.number_sort = parsed.number_sort
+        chapter.title = parsed.label if parsed.special else None
     chapter.page_start = 0
     chapter.page_count = book.page_count
     session.flush()

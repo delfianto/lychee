@@ -12,11 +12,13 @@ import {
   clearCompletedDownloads,
   deleteDownloadTask,
   fetchDownloadTasks,
+  fetchDownloadConfig,
   fetchSyncState,
   pauseDownload as pauseDownloadRemote,
   resumeDownload as resumeDownloadRemote,
   retryDownload as retryDownloadRemote,
   runSync,
+  setDownloadAutoClearCompleted,
 } from "../../api/settingsQueries";
 import PhaseProgress from "../../components/PhaseProgress.vue";
 import OverallProgress from "../../components/OverallProgress.vue";
@@ -36,6 +38,34 @@ interface DlRow {
   size: string;
 }
 const dl = ref<DlRow[]>([]);
+const autoClear = ref(false);
+const autoClearLoaded = ref(false);
+const savingAutoClear = ref(false);
+
+async function loadConfig(): Promise<void> {
+  try {
+    autoClear.value = (await fetchDownloadConfig()).autoClearCompleted;
+    autoClearLoaded.value = true;
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Couldn't load download settings", "error");
+  }
+}
+
+async function toggleAutoClear(event: Event): Promise<void> {
+  const previous = autoClear.value;
+  autoClear.value = (event.target as HTMLInputElement).checked;
+  savingAutoClear.value = true;
+  try {
+    autoClear.value = (await setDownloadAutoClearCompleted(autoClear.value)).autoClearCompleted;
+  } catch (e) {
+    autoClear.value = previous;
+    toast(e instanceof Error ? e.message : "Couldn't save download settings", "error");
+    return;
+  } finally {
+    savingAutoClear.value = false;
+  }
+  await loadDownloads();
+}
 const sync = reactive({ lastSync: "never", newChapters: 0, syncing: false });
 const dlLabel: Record<string, string> = {
   downloading: "Downloading",
@@ -203,6 +233,7 @@ onUnmounted(() => {
   if (dlReloadTimer !== null) clearTimeout(dlReloadTimer);
 });
 onMounted(() => {
+  void loadConfig();
   void loadDownloads();
   void loadSync();
 });
@@ -242,6 +273,21 @@ onMounted(() => {
           Downloads
         </h3>
         <div class="flex flex-wrap items-center gap-1">
+          <label
+            class="mr-2 flex cursor-pointer items-center gap-2 text-xs"
+            title="Remove successful entries automatically. Failed and cancelled entries stay visible."
+          >
+            <input
+              type="checkbox"
+              role="switch"
+              class="toggle toggle-sm toggle-primary"
+              aria-label="Auto-clear completed downloads"
+              :checked="autoClear"
+              :disabled="!autoClearLoaded || savingAutoClear"
+              @change="toggleAutoClear"
+            />
+            Auto-clear completed
+          </label>
           <button
             class="btn btn-ghost btn-sm gap-1"
             :disabled="!hasQueued"

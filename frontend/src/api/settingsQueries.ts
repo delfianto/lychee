@@ -254,6 +254,28 @@ export async function deleteTaxonomyAlias(tagId: string, aliasId: string): Promi
 
 // --- downloads + sync --------------------------------------------------------------
 
+export async function fetchDownloadConfig() {
+  const { data, error } = await api.GET("/api/downloads/config");
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't load download settings"));
+  return data;
+}
+
+export async function setDownloadAutoClearCompleted(enabled: boolean) {
+  const { data, error } = await api.PATCH("/api/downloads/config", {
+    body: { autoClearCompleted: enabled },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't save download settings"));
+  return data;
+}
+
+export async function setSyncAutoClearCompleted(enabled: boolean): Promise<SyncState> {
+  const { data, error } = await api.PATCH("/api/sync/config", {
+    body: { autoClearCompleted: enabled },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't save sync settings"));
+  return data;
+}
+
 export async function fetchDownloadTasks(): Promise<DownloadTask[]> {
   const { data } = await api.GET("/api/downloads");
   return data ?? [];

@@ -62,9 +62,13 @@ class _SyncAndDownloadProvider:
 
 
 def test_parallel_limiter_configs_and_validation(client: TestClient) -> None:
-    assert client.get("/api/downloads/config").json() == {"parallelDownloads": 1}
+    assert client.get("/api/downloads/config").json() == {
+        "parallelDownloads": 1,
+        "autoClearCompleted": False,
+    }
     assert client.patch("/api/downloads/config", json={"parallelDownloads": 4}).json() == {
-        "parallelDownloads": 4
+        "parallelDownloads": 4,
+        "autoClearCompleted": False,
     }
     assert client.patch("/api/downloads/config", json={"parallelDownloads": 0}).status_code == 422
     assert client.patch("/api/downloads/config", json={"parallelDownloads": 11}).status_code == 422

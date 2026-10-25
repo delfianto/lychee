@@ -22,6 +22,7 @@ from src.integrations.models import Provider as ProviderConfig
 from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled
+from src.tasks.events import activity_changed
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
@@ -29,11 +30,15 @@ _BULK_ACTIONS = frozenset({"pause-all", "cancel-all", "resume-all"})
 
 
 def get_download_config() -> DownloadConfigOut:
-    return DownloadConfigOut(parallel_downloads=queue.download_workers)
+    return DownloadConfigOut(
+        parallel_downloads=queue.download_workers, auto_clear_completed=queue.auto_clear_downloads
+    )
 
 
 def update_download_config(session: Session, data: DownloadConfigUpdate) -> DownloadConfigOut:
-    save_queue_workers(session, "download", data.parallel_downloads)
+    save_queue_workers(
+        session, "download", data.parallel_downloads, auto_clear_completed=data.auto_clear_completed
+    )
     return get_download_config()
 
 
@@ -79,6 +84,7 @@ def _drain_parallel(
         ).all()
     )
     session.commit()
+    activity_changed()
     if not values:
         return 0
     progress_lock = Lock()
@@ -111,6 +117,7 @@ def _drain_parallel(
             .values(status="cancelled", error="cancelled", phase=None, detail=None)
         )
         session.commit()
+        activity_changed()
         raise
 
 
@@ -191,6 +198,7 @@ def bulk_action(session: Session, action: str, storage_root: Path) -> list[Downl
         for row in session.scalars(select(DownloadTask).where(DownloadTask.status == "queued")):
             row.status = "paused"
         session.commit()
+        activity_changed()
         return list_downloads(session)
 
     if action == "cancel-all":
@@ -215,6 +223,7 @@ def bulk_action(session: Session, action: str, storage_root: Path) -> list[Downl
         ):
             row.error = "cancelled"
         session.commit()
+        activity_changed()
         return list_downloads(session)
 
     # resume-all
@@ -224,6 +233,7 @@ def bulk_action(session: Session, action: str, storage_root: Path) -> list[Downl
         if row.series_id:
             series_ids.add(row.series_id)
     session.commit()
+    activity_changed()
     for sid in series_ids:
         clear_cancel(sid)
         series = session.get(Series, sid)
@@ -244,6 +254,7 @@ def pause_download(session: Session, task_id: str) -> list[DownloadTaskOut]:
         raise BadRequestError("only a queued download can be paused")
     task.status = "paused"
     session.commit()
+    activity_changed()
     return list_downloads(session)
 
 
@@ -259,6 +270,7 @@ def resume_download(session: Session, task_id: str, storage_root: Path) -> list[
     clear_cancel(task.series_id)
     task.status = "queued"
     session.commit()
+    activity_changed()
     _ = queue.submit(
         "download", f"Resuming {task.chapter_label}", _resume_work(task.series_id, storage_root)
     )
@@ -280,6 +292,7 @@ def retry_download(session: Session, task_id: str, storage_root: Path) -> TaskOu
     task.error = None
     task.progress = 0
     session.commit()
+    activity_changed()
     return queue.submit_task(
         "download", f"Retrying {task.chapter_label}", _resume_work(task.series_id, storage_root)
     )
@@ -294,8 +307,10 @@ def delete_download(session: Session, task_id: str) -> None:
         request_cancel(task.series_id)
     session.delete(task)
     session.commit()
+    activity_changed()
 
 
 def clear_completed(session: Session) -> None:
     _ = session.execute(delete(DownloadTask).where(DownloadTask.status == "done"))
     session.commit()
+    activity_changed()
