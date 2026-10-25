@@ -1,0 +1,979 @@
+{
+  "reference": "9e35c2f",
+  "config": {
+    "catalog": 2000,
+    "iterations": 30,
+    "reference": "9e35c2f",
+    "temp_root": "/srv/project/github/lychee",
+    "reverse": false,
+    "output": "../notes/performance/catalog/optimized-nvme-3.json"
+  },
+  "engines": {
+    "sqlite": {
+      "recentlyAdded": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 1.834361,
+          "p50_ms": 1.780017,
+          "p95_ms": 1.806467,
+          "cpu_ms_per_call": 1.828006
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.647785,
+          "p50_ms": 1.633085,
+          "p95_ms": 1.671145,
+          "cpu_ms_per_call": 1.640806
+        },
+        "rows": 24,
+        "equivalence_sha256": "123f54d37934105b6cb1451e71bf7a768302a5bdcb5da4ae51959d3407b55ff1"
+      },
+      "recentlyUpdated": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 6.500106,
+          "p50_ms": 5.99321,
+          "p95_ms": 7.90934,
+          "cpu_ms_per_call": 6.472838
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.005876,
+          "p50_ms": 2.948115,
+          "p95_ms": 3.154577,
+          "cpu_ms_per_call": 2.99638
+        },
+        "rows": 24,
+        "equivalence_sha256": "41bb4fb5dc2ee13ecf68fcc2b5774fbda64bd89da5fca42aa73d22f9779c3e5b"
+      },
+      "unread": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "unread"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 3.547634,
+          "p50_ms": 3.486543,
+          "p95_ms": 4.042501,
+          "cpu_ms_per_call": 3.536624
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.001898,
+          "p50_ms": 2.974415,
+          "p95_ms": 3.189738,
+          "cpu_ms_per_call": 2.991521
+        },
+        "rows": 24,
+        "equivalence_sha256": "c1726782a83a3bb9badd66a7e489d99484be0f36cec7c641d718786a9d957f4e"
+      },
+      "title": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "title"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 1.766559,
+          "p50_ms": 1.749607,
+          "p95_ms": 1.778017,
+          "cpu_ms_per_call": 1.76122
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.610923,
+          "p50_ms": 1.595284,
+          "p95_ms": 1.625085,
+          "cpu_ms_per_call": 1.605451
+        },
+        "rows": 24,
+        "equivalence_sha256": "ec26e195956875ddd7f8333fe43376f3a6e59a52f9e96c7db001213aeae5573a"
+      },
+      "rating": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "rating"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 1.810082,
+          "p50_ms": 1.796047,
+          "p95_ms": 1.808297,
+          "cpu_ms_per_call": 1.80409
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.863747,
+          "p50_ms": 1.820258,
+          "p95_ms": 1.873448,
+          "cpu_ms_per_call": 1.857544
+        },
+        "rows": 24,
+        "equivalence_sha256": "93a13cc15a4a64800caf7de35b7250a00edbaf1cf3400fe3fdc473f3b98e4dd7"
+      },
+      "added-reading": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "in_progress",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 3.462031,
+          "p50_ms": 3.404022,
+          "p95_ms": 3.626595,
+          "cpu_ms_per_call": 3.451838
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.786543,
+          "p50_ms": 1.762187,
+          "p95_ms": 2.001191,
+          "cpu_ms_per_call": 1.780582
+        },
+        "rows": 24,
+        "equivalence_sha256": "3e68a307bfec52b2bbf8367ab026d367677f6e294b9d3fb178f565186030a62d"
+      },
+      "updated-unread": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "unread",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 8.551916,
+          "p50_ms": 7.726497,
+          "p95_ms": 10.535729,
+          "cpu_ms_per_call": 8.522769
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 4.222706,
+          "p50_ms": 4.166703,
+          "p95_ms": 4.416286,
+          "cpu_ms_per_call": 4.211276
+        },
+        "rows": 24,
+        "equivalence_sha256": "41bb4fb5dc2ee13ecf68fcc2b5774fbda64bd89da5fca42aa73d22f9779c3e5b"
+      },
+      "unread-read": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "read",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "unread"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 2.177247,
+          "p50_ms": 2.161693,
+          "p95_ms": 2.187353,
+          "cpu_ms_per_call": 2.170292
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 2.08621,
+          "p50_ms": 2.070621,
+          "p95_ms": 2.103312,
+          "cpu_ms_per_call": 2.080431
+        },
+        "rows": 0,
+        "equivalence_sha256": "d09bea4ca0ac61c68fccb85bdd08e05a763290a12195af04a9ff90a7ece60426"
+      },
+      "library-favorites": {
+        "filters": {
+          "kind": "manga",
+          "library_id": "library",
+          "shelf": null,
+          "favorite": true,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 1.885908,
+          "p50_ms": 1.814548,
+          "p95_ms": 1.96771,
+          "cpu_ms_per_call": 1.879474
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.697646,
+          "p50_ms": 1.675795,
+          "p95_ms": 1.876008,
+          "cpu_ms_per_call": 1.692293
+        },
+        "rows": 24,
+        "equivalence_sha256": "4eff5e860e0fa1b9cb0a145cf0ff878541cd71b77e4e73328760eace47ee05ad"
+      },
+      "author-tags": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [
+            "test-tag-0"
+          ],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": "Writer 2",
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 2.899737,
+          "p50_ms": 2.843463,
+          "p95_ms": 3.084607,
+          "cpu_ms_per_call": 2.890606
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.993882,
+          "p50_ms": 2.573368,
+          "p95_ms": 3.490763,
+          "cpu_ms_per_call": 3.982742
+        },
+        "rows": 24,
+        "equivalence_sha256": "ddb035394ab9f421107dcf740dcffa9576628eb7b3d7eccec3697bc71e3e9b10"
+      },
+      "gallery": {
+        "filters": {
+          "kind": "gallery",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "title"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 1.877707,
+          "p50_ms": 1.791807,
+          "p95_ms": 2.287355,
+          "cpu_ms_per_call": 1.867032
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 1.638577,
+          "p50_ms": 1.621455,
+          "p95_ms": 1.654795,
+          "cpu_ms_per_call": 1.632353
+        },
+        "rows": 24,
+        "equivalence_sha256": "39a1907bf5bba0dd7eefb8e74eb2e3705b03f09da2b3648f2701e544375dff80"
+      },
+      "all-kinds": {
+        "filters": {
+          "kind": null,
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 7.556699,
+          "p50_ms": 7.481243,
+          "p95_ms": 9.106667,
+          "cpu_ms_per_call": 7.533641
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 2.980293,
+          "p50_ms": 2.946475,
+          "p95_ms": 3.186518,
+          "cpu_ms_per_call": 2.970355
+        },
+        "rows": 24,
+        "equivalence_sha256": "de12eac8a59e3c849da1f9cc8e2289bdb6a9e5300779af041bcc8c767665f6f9"
+      }
+    },
+    "turso": {
+      "recentlyAdded": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 5.488614,
+          "p50_ms": 5.32751,
+          "p95_ms": 6.547279,
+          "cpu_ms_per_call": 5.470168
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.453392,
+          "p50_ms": 3.35648,
+          "p95_ms": 3.658025,
+          "cpu_ms_per_call": 3.437398
+        },
+        "rows": 24,
+        "equivalence_sha256": "123f54d37934105b6cb1451e71bf7a768302a5bdcb5da4ae51959d3407b55ff1"
+      },
+      "recentlyUpdated": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 93.799952,
+          "p50_ms": 92.856738,
+          "p95_ms": 98.267599,
+          "cpu_ms_per_call": 93.06273
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 19.246055,
+          "p50_ms": 18.13892,
+          "p95_ms": 23.180396,
+          "cpu_ms_per_call": 19.154369
+        },
+        "rows": 24,
+        "equivalence_sha256": "41bb4fb5dc2ee13ecf68fcc2b5774fbda64bd89da5fca42aa73d22f9779c3e5b"
+      },
+      "unread": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "unread"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 32.6089,
+          "p50_ms": 32.524309,
+          "p95_ms": 33.154109,
+          "cpu_ms_per_call": 32.536045
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 12.427075,
+          "p50_ms": 11.545502,
+          "p95_ms": 15.693644,
+          "cpu_ms_per_call": 12.373845
+        },
+        "rows": 24,
+        "equivalence_sha256": "c1726782a83a3bb9badd66a7e489d99484be0f36cec7c641d718786a9d957f4e"
+      },
+      "title": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "title"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 6.977079,
+          "p50_ms": 7.189518,
+          "p95_ms": 8.150223,
+          "cpu_ms_per_call": 6.933485
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.42097,
+          "p50_ms": 3.35352,
+          "p95_ms": 3.635134,
+          "cpu_ms_per_call": 3.402812
+        },
+        "rows": 24,
+        "equivalence_sha256": "ec26e195956875ddd7f8333fe43376f3a6e59a52f9e96c7db001213aeae5573a"
+      },
+      "rating": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "rating"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 6.55154,
+          "p50_ms": 6.076251,
+          "p95_ms": 8.190173,
+          "cpu_ms_per_call": 6.517259
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 4.141239,
+          "p50_ms": 3.765296,
+          "p95_ms": 5.786086,
+          "cpu_ms_per_call": 4.117051
+        },
+        "rows": 24,
+        "equivalence_sha256": "93a13cc15a4a64800caf7de35b7250a00edbaf1cf3400fe3fdc473f3b98e4dd7"
+      },
+      "added-reading": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "in_progress",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 33.274501,
+          "p50_ms": 33.229219,
+          "p95_ms": 33.734966,
+          "cpu_ms_per_call": 33.199479
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 5.24363,
+          "p50_ms": 4.887783,
+          "p95_ms": 7.013635,
+          "cpu_ms_per_call": 5.197767
+        },
+        "rows": 24,
+        "equivalence_sha256": "3e68a307bfec52b2bbf8367ab026d367677f6e294b9d3fb178f565186030a62d"
+      },
+      "updated-unread": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "unread",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 122.606934,
+          "p50_ms": 120.872334,
+          "p95_ms": 129.196136,
+          "cpu_ms_per_call": 122.249315
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 29.701808,
+          "p50_ms": 27.738733,
+          "p95_ms": 32.90611,
+          "cpu_ms_per_call": 29.586907
+        },
+        "rows": 24,
+        "equivalence_sha256": "41bb4fb5dc2ee13ecf68fcc2b5774fbda64bd89da5fca42aa73d22f9779c3e5b"
+      },
+      "unread-read": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": "read",
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "unread"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 56.391815,
+          "p50_ms": 55.896767,
+          "p95_ms": 59.002454,
+          "cpu_ms_per_call": 56.267215
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 8.03412,
+          "p50_ms": 7.870327,
+          "p95_ms": 8.691349,
+          "cpu_ms_per_call": 8.009723
+        },
+        "rows": 0,
+        "equivalence_sha256": "d09bea4ca0ac61c68fccb85bdd08e05a763290a12195af04a9ff90a7ece60426"
+      },
+      "library-favorites": {
+        "filters": {
+          "kind": "manga",
+          "library_id": "library",
+          "shelf": null,
+          "favorite": true,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyAdded"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 6.314833,
+          "p50_ms": 6.192752,
+          "p95_ms": 7.402881,
+          "cpu_ms_per_call": 6.291126
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 4.523212,
+          "p50_ms": 4.420606,
+          "p95_ms": 4.72646,
+          "cpu_ms_per_call": 4.50125
+        },
+        "rows": 24,
+        "equivalence_sha256": "4eff5e860e0fa1b9cb0a145cf0ff878541cd71b77e4e73328760eace47ee05ad"
+      },
+      "author-tags": {
+        "filters": {
+          "kind": "manga",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [
+            "test-tag-0"
+          ],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": "Writer 2",
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 105.321514,
+          "p50_ms": 104.506253,
+          "p95_ms": 110.383649,
+          "cpu_ms_per_call": 105.069353
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 47.242247,
+          "p50_ms": 46.519492,
+          "p95_ms": 50.992009,
+          "cpu_ms_per_call": 47.109956
+        },
+        "rows": 24,
+        "equivalence_sha256": "ddb035394ab9f421107dcf740dcffa9576628eb7b3d7eccec3697bc71e3e9b10"
+      },
+      "gallery": {
+        "filters": {
+          "kind": "gallery",
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "title"
+        },
+        "baseline": {
+          "iterations": 30,
+          "mean_ms": 4.430999,
+          "p50_ms": 4.407265,
+          "p95_ms": 4.494807,
+          "cpu_ms_per_call": 4.414838
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 3.552311,
+          "p50_ms": 3.443762,
+          "p95_ms": 3.800946,
+          "cpu_ms_per_call": 3.532573
+        },
+        "rows": 24,
+        "equivalence_sha256": "39a1907bf5bba0dd7eefb8e74eb2e3705b03f09da2b3648f2701e544375dff80"
+      },
+      "all-kinds": {
+        "filters": {
+          "kind": null,
+          "library_id": null,
+          "shelf": null,
+          "favorite": null,
+          "q": null,
+          "ids": null,
+          "tags_include": [],
+          "tags_exclude": [],
+          "tag_mode": "and",
+          "ratings": [],
+          "demographics": [],
+          "pub_status": [],
+          "read_state": null,
+          "artist": null,
+          "author": null,
+          "source": null,
+          "sort": "recentlyUpdated"
+        },
+        "baseline": {
+          "error": "(turso.lib.DatabaseError) Internal error: AggStep: register 11 does not hold an aggregate accumulator\n(Background on this error at: https://sqlalche.me/e/21/4xp6)"
+        },
+        "optimized": {
+          "iterations": 30,
+          "mean_ms": 19.874936,
+          "p50_ms": 18.694878,
+          "p95_ms": 24.292251,
+          "cpu_ms_per_call": 19.800101
+        },
+        "rows": 24,
+        "equivalence_sha256": "de12eac8a59e3c849da1f9cc8e2289bdb6a9e5300779af041bcc8c767665f6f9"
+      }
+    }
+  },
+  "index_cost": {
+    "sqlite": {
+      "file_bytes_before": 17895424,
+      "file_bytes_after": 17895424,
+      "write_before": {
+        "publication_refresh_100_rows": {
+          "iterations": 30,
+          "mean_ms": 0.035443,
+          "p50_ms": 0.034851,
+          "p95_ms": 0.03767,
+          "cpu_ms_per_call": 0.035542
+        },
+        "progress_toggle": {
+          "iterations": 30,
+          "mean_ms": 0.012273,
+          "p50_ms": 0.01194,
+          "p95_ms": 0.012811,
+          "cpu_ms_per_call": 0.012372
+        }
+      },
+      "write_after": {
+        "publication_refresh_100_rows": {
+          "iterations": 30,
+          "mean_ms": 0.063358,
+          "p50_ms": 0.062481,
+          "p95_ms": 0.066191,
+          "cpu_ms_per_call": 0.063441
+        },
+        "progress_toggle": {
+          "iterations": 30,
+          "mean_ms": 0.013987,
+          "p50_ms": 0.01222,
+          "p95_ms": 0.018421,
+          "cpu_ms_per_call": 0.0141
+        }
+      }
+    },
+    "turso": {
+      "file_bytes_before": 17895424,
+      "file_bytes_after": 17895424,
+      "write_before": {
+        "publication_refresh_100_rows": {
+          "iterations": 30,
+          "mean_ms": 0.261828,
+          "p50_ms": 0.258094,
+          "p95_ms": 0.280345,
+          "cpu_ms_per_call": 0.261343
+        },
+        "progress_toggle": {
+          "iterations": 30,
+          "mean_ms": 0.046604,
+          "p50_ms": 0.0454,
+          "p95_ms": 0.051461,
+          "cpu_ms_per_call": 0.046231
+        }
+      },
+      "write_after": {
+        "publication_refresh_100_rows": {
+          "iterations": 30,
+          "mean_ms": 1.309483,
+          "p50_ms": 1.305329,
+          "p95_ms": 1.38557,
+          "cpu_ms_per_call": 1.304696
+        },
+        "progress_toggle": {
+          "iterations": 30,
+          "mean_ms": 0.055916,
+          "p50_ms": 0.055181,
+          "p95_ms": 0.060771,
+          "cpu_ms_per_call": 0.055865
+        }
+      }
+    }
+  }
+}

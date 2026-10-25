@@ -111,7 +111,10 @@ The resulting query p50 values, again milliseconds, are:
 
 Both engines improve on the first two sorts. However, the combined index set
 regresses Turso MVCC's unread sort from about 36.8ms to 42.0ms, despite identical
-results. This rules out applying all four blindly. Query-plan selection matters.
+results. That experiment did not checkpoint the newly built native indexes. A later control
+found a large contribution from uncheckpointed MVCC state, so it does not establish
+a persistent planner regression. The [catalog optimization follow-up](../catalog/README.md)
+checkpoints/reopens both engines and validates filters and continuation pages.
 
 Next optimization candidates are to test indexes individually across filters and
 cursors, compute each timestamp/count aggregate once instead of repeating scalar

@@ -77,6 +77,11 @@ bench-downloads *args:
 bench-database *args:
     cd {{ backend_dir }} && uv run python scripts/bench_database.py {{args}}
 
+# Full catalog-operation comparison with historical SQL and result checks.
+[group('backend')]
+bench-catalog *args:
+    cd {{ backend_dir }} && uv run python scripts/bench_catalog.py {{args}}
+
 # Make a verified local Turso copy without modifying the SQLite source.
 [group('database')]
 db-to-turso source destination:

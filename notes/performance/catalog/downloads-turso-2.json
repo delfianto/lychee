@@ -1,0 +1,66 @@
+{
+  "python": "3.14.8",
+  "cpu_threads": 32,
+  "config": {
+    "series": 3,
+    "chapters": 10,
+    "pages": 8,
+    "catalog": 2000,
+    "width": 640,
+    "height": 960,
+    "conversion": 16,
+    "thumbnails": 8,
+    "engine": "turso",
+    "network_ms": 5,
+    "pool_timeout": 0.3,
+    "seconds": 15,
+    "output": "../notes/performance/catalog/downloads-turso-2.json"
+  },
+  "submitted_http": [
+    202,
+    202,
+    202
+  ],
+  "wall_s": 3.746,
+  "chapter_states": {
+    "done": 30
+  },
+  "completed_pages_per_s": 64.07,
+  "api_requests": 353,
+  "api_http": {
+    "200": 353
+  },
+  "api_p50_ms": 9.055,
+  "api_p95_ms": 24.691,
+  "api_max_ms": 79.041,
+  "api_endpoints": {
+    "/api/series?kind=manga&limit=24": {
+      "requests": 113,
+      "p50_ms": 9.631,
+      "p95_ms": 29.92,
+      "max_ms": 79.041
+    },
+    "/api/downloads": {
+      "requests": 119,
+      "p50_ms": 9.109,
+      "p95_ms": 24.344,
+      "max_ms": 43.54
+    },
+    "/api/libraries": {
+      "requests": 121,
+      "p50_ms": 8.6,
+      "p95_ms": 21.89,
+      "max_ms": 45.39
+    }
+  },
+  "sql_statements": 1783,
+  "background_sql_statements": 612,
+  "api_sql_statements": 1171,
+  "db_peak_connections": 7,
+  "db_hold_p95_ms": 14.383,
+  "tasks": [
+    "done",
+    "done",
+    "done"
+  ]
+}
