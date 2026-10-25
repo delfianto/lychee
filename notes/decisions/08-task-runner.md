@@ -5,14 +5,24 @@
 ## Ownership and lifetime
 
 `backend/src/tasks/queue.py` runs operations on separate download and sync/scan
-thread pools. The executors have a fixed capacity of 10; cancellation-aware live
-limiters enforce each configured 1–10 operation limit without replacing executors
-or leaving old pools draining outside the new limit. The independent download
-and sync limits persist in the singleton `task_queue_config` row. Both default
-to 1 only when no preference has been saved. `tasks/config.py` serializes settings
-saves, commits before applying live limits, and restores them before startup
-recovers queued downloads. Changing one limit preserves the other. The existing
-settings endpoints keep their response shapes.
+thread pools, each with a fixed coordination capacity of 10. These are internal
+bounds, not user-adjustable whole-job limits. Persisted controls apply only to
+resource stages: file fetching and shared scan/metadata I/O. A job does not keep
+an I/O permit while waiting for conversion or thumbnails.
+
+Settings → Libraries → I/O workers appears immediately before Image processing.
+GET/PUT `/api/libraries/workers` exposes `downloadWorkers` and
+`scanMetadataWorkers` (1–10), plus `conversionWorkers` and `thumbnailWorkers`
+(1–64). One Save workers button persists all four limits in one transaction
+before applying them. The adjacent Auto detect button refreshes CPU recommendations
+and fills the image-worker inputs without saving or replacing I/O edits. The existing `task_queue_config` singleton retains
+its `download_workers` / `sync_workers` columns so saved preferences survive this
+refactor without a migration. Both default to 1 only when unsaved. The old
+`parallelDownloads`, `parallelSyncs`, and image-processing endpoints remain
+compatibility adapters;
+the latter now controls scan/metadata I/O, never whole operation admission.
+`tasks/config.py` serializes both settings paths, commits before applying live
+limits, and restores them before startup recovers queued downloads.
 
 Every operation owns a `tasks/context.py` context: task ID, cancellation
 checkpoint, phase reporter, pause checks, and finalizers. `tasks/concurrency.py`
@@ -54,29 +64,41 @@ poster extraction polls the operation state and kills/reaps ffmpeg on cancellati
 
 ## Resource limits
 
-- Download operation and chapter limits use `parallelDownloads`. A separate global
-  file-request limiter of the same size bounds actual MangaDex file requests
-  across chapter workers. A chapter-owned producer stages downloaded source files
-  to disk independently of conversion; the queue holds paths, not image bytes.
-  HTTP response buffering remains bounded by file concurrency. Progress crosses
-  an owner-thread mailbox, keeping ORM sessions on their original thread. The
-  producer and CPU jobs are joined before staging cleanup. Chapter and file dispatchers recheck
-  the live limit while waiting, so increasing it expands an active download.
-  Reducing it stops new chapter claims until active chapters drain below the
-  new limit; running chapters are not interrupted.
-- Waiting chapter workers do not query the database until a global chapter slot
-  is available. Their setup transaction ends before fetching/encoding starts;
-  parents release planning reads before provider HTTP and child dispatch.
-  Empty series do not create drainers, and per-series drainer capacity is bounded
-  by the number of pending chapter rows. Parent progress averages use a locked
-  in-memory snapshot updated by chapter ID, without nested database connections.
-  Page-counter database writes coalesce within 250ms; stage completion and terminal
-  status flush immediately. Cancellation checkpoints remain unthrottled. Failed
-  writes roll back before recording chapter failure, preventing invalid sessions
-  from leaving rows stuck in `downloading`.
-- Sync operation and provider-item limits use `parallelSyncs`; filesystem/container
-  inspection uses bounded workers too. Database reconciliation stays on its owner
-  thread, with short commits before CPU work.
+- `downloadWorkers` bounds actual concurrent page HTTP requests globally. One
+  chapter fetches at a time, using that entire budget (10 means up to 10 files
+  within that chapter). Chapter rows are claimed only after fetch admission,
+  preserving queued pause/resume. Its chapter-owned producer stages source files
+  independently of conversion and releases fetch admission when the source is
+  exhausted, allowing the next chapter to fetch while earlier chapters encode or
+  generate thumbnails. At most 10 chapter pipelines retain staging globally;
+  this internal bound is independent of the file setting. Initial download,
+  resume, retry and startup recovery all use the same dispatcher.
+- MangaDex results are consumed in completion order and staged immediately.
+  Progress counts completed files rather than the highest page number. Only
+  lightweight paths wait for an earlier page; conversion/archive entries retain
+  reading order. HTTP buffers remain bounded by file concurrency. Live resizing
+  changes active request submission; reductions drain running requests first.
+- Waiting chapter workers do not query the database before admission. Planning
+  releases its database connection before HTTP and child dispatch. Parent
+  progress averages use a locked in-memory snapshot without nested database
+  connections. Page writes coalesce within 250ms; stage completion and terminal
+  status flush immediately. Fetch/CPU children are joined before staging cleanup.
+  Generic task cancellation also retires its unclaimed queued chapter rows.
+- `scanMetadataWorkers` bounds one global, cancellation-aware I/O limiter shared
+  by filesystem discovery/inspection and provider metadata/chapter requests.
+  Each fanout has fixed executor capacity and a live submission window; concurrent
+  scans cannot multiply the configured budget. MangaDex API/list/account/taxonomy
+  requests use this budget too. Nested calls reuse a permit only in the same
+  thread; copied operation contexts do not transfer permits to child threads.
+  Image worker limiters remain non-reentrant so multiple process submissions
+  from one owner each consume their own permit.
+- Repeated scans of the same library serialize indexing through its catalog
+  commit, then release that identity lock before derivatives. Distinct libraries
+  share I/O capacity without a whole-job tuning knob. Database reconciliation
+  stays on its owner thread, outside I/O permits so SQLite writer waits cannot
+  deadlock another scan's next file lookup. Background media coordinators and workers commit
+  catalog changes/release read connections before slow source reads or CPU work,
+  leaving the API's connection pool available during image processing.
 - `media/encode_pool.py` owns separate conversion and thumbnail process pools.
   Settings → Libraries → Image processing persists independent 1–64 worker
   limits in `image_processing_config`, restored before startup download recovery.

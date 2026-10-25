@@ -19,6 +19,7 @@ from src.core.persistence.base_model import utc_now
 from src.downloads.models import DownloadTask
 from src.downloads.provider import ChapterIndexProvider, ChapterListing, RemoteChapter, get_provider
 from src.integrations.models import Provider as ProviderConfig
+from src.tasks.queue import io_slot
 
 logger = get_logger(__name__)
 
@@ -112,13 +113,14 @@ def refresh_series_chapter_index(
         raise BadRequestError(f"provider {series.provider!r} is not available")
     config = session.get(ProviderConfig, series.provider)
     language = language or (config.language if config else "en")
-    if isinstance(provider, ChapterIndexProvider):
-        listing = provider.inspect_chapters(series.provider_series_id, language=language)
-    else:
-        remotes = provider.list_chapters(series.provider_series_id, language=language)
-        listing = ChapterListing(
-            remotes, status="ready" if remotes else "no_chapters", total_count=len(remotes)
-        )
+    with io_slot():
+        if isinstance(provider, ChapterIndexProvider):
+            listing = provider.inspect_chapters(series.provider_series_id, language=language)
+        else:
+            remotes = provider.list_chapters(series.provider_series_id, language=language)
+            listing = ChapterListing(
+                remotes, status="ready" if remotes else "no_chapters", total_count=len(remotes)
+            )
     if listing.status == "error":
         raise BadRequestError("MangaDex returned inconsistent chapter information; retry the check")
     series.chapter_index_language = language

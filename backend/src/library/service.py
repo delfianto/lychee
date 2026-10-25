@@ -17,6 +17,7 @@ from src.core.logging import get_logger
 from src.ingest.scanner import ScanSummary, scan_library
 from src.library.paths import is_provider_path
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
+from src.media.artifacts import artifact_lock
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
 from src.tasks.context import checkpoint, report_phase
@@ -150,8 +151,12 @@ def _finish_scan_phases(
 
 def _scan_one_work(library_id: str, storage_root: Path) -> Work:
     def work(session: Session, on_progress: Callable[[int, str], None]) -> dict[str, Any]:
-        library = _get(session, library_id)
-        summary = scan_library(session, library, on_progress=on_progress)
+        # A repeated scan must observe the previous index commit. This identity
+        # lock does not cover derivatives or consume a shared I/O permit.
+        with artifact_lock(f"scan:{library_id}"):
+            library = _get(session, library_id)
+            summary = scan_library(session, library, on_progress=on_progress)
+            session.commit()
         _finish_scan_phases(session, library, storage_root, on_progress)
         return _summary_dict(summary)
 
@@ -168,7 +173,9 @@ def _scan_all_work(storage_root: Path) -> Work:
         ]
         for index, library in enumerate(libraries, start=1):
             checkpoint()
-            summary = scan_library(session, library)
+            with artifact_lock(f"scan:{library.id}"):
+                summary = scan_library(session, library)
+                session.commit()
             total.series_added += summary.series_added
             total.books_added += summary.books_added
             total.books_updated += summary.books_updated

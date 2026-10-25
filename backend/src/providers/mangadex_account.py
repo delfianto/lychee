@@ -39,7 +39,7 @@ from src.providers.mangadex_client import API_BASE, USER_AGENT
 from src.providers.mangadex_lists import LIST_LOCK
 from src.tasks.concurrency import parallel_map
 from src.tasks.context import checkpoint, report_phase
-from src.tasks.queue import Work, queue
+from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
 _MANGADEX = "mangadex"
@@ -281,14 +281,17 @@ def _sync_work() -> Work:
 
         def fetch_metadata(md_id: str) -> tuple[str, SeriesMetadata | None]:
             checkpoint()
-            with queue.sync_item_limit.slot():
+            with queue.io_limit.slot():
                 return md_id, meta_by_id.get(md_id) or _safe_metadata(
                     provider, md_id, config.language
                 )
 
         try:
             for index, (md_id, meta) in enumerate(
-                parallel_map(fetch_metadata, sorted(union_ids), workers=queue.sync_workers), start=1
+                parallel_map(
+                    fetch_metadata, sorted(union_ids), workers=MAX_WORKERS, limit=queue.io_limit
+                ),
+                start=1,
             ):
                 sync_jobs.check_state(job.id)
                 pct = round(index / total * 90)

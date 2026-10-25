@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.catalog import repository as catalog_repo
@@ -21,6 +21,7 @@ from src.downloads.schema import DownloadConfigOut, DownloadConfigUpdate, Downlo
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
+from src.tasks.context import OperationCancelled
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
@@ -98,7 +99,19 @@ def _drain_parallel(
             return run_download_queue(worker_session, series_id, storage_root, on_progress=progress)
 
     workers = min(MAX_WORKERS, len(values))
-    return sum(parallel_map(drain, range(workers), workers=workers, limit=queue.chapter_limit))
+    try:
+        return sum(parallel_map(drain, range(workers), workers=workers, limit=queue.chapter_limit))
+    except OperationCancelled:
+        # parallel_map has joined all children. Generic task cancellation must
+        # also retire unclaimed rows, which otherwise remain queued indefinitely.
+        session.rollback()
+        session.execute(
+            update(DownloadTask)
+            .where(DownloadTask.id.in_(values), DownloadTask.status == "queued")
+            .values(status="cancelled", error="cancelled", phase=None, detail=None)
+        )
+        session.commit()
+        raise
 
 
 def _download_work(

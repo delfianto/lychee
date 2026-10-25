@@ -3,15 +3,16 @@
 Scans, downloads, and syncs are submitted here and run on a worker thread with
 its own DB session; lifecycle + progress flow through the ``TaskTracker`` (→ SSE).
 So the HTTP handler validates, enqueues, and returns ``202`` with a task id at
-once, while the browser follows ``/api/events``. One worker by default keeps
-SQLite writers from contending; the request thread only validates + enqueues.
+once, while the browser follows ``/api/events``. Resource limits apply to I/O
+stages, independently of image processing; the request thread validates + enqueues.
 """
 
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -43,11 +44,11 @@ class TaskQueue:
         self._sync_workers = clamp_workers(max_workers)
         self._download_executor: ThreadPoolExecutor | None = None
         self._sync_executor: ThreadPoolExecutor | None = None
-        self.download_limit = Limiter(self._download_workers)
-        self.sync_limit = Limiter(self._sync_workers)
-        self.sync_item_limit = Limiter(self._sync_workers)
+        self.io_limit = Limiter(self._sync_workers, reentrant=True)
+        # One chapter fetches at a time; CPU stages overlap the next fetch.
+        self.fetch_limit = Limiter(1)
         self.file_limit = Limiter(self._download_workers)
-        self.chapter_limit = Limiter(self._download_workers)
+        self.chapter_limit = Limiter(MAX_WORKERS)
         self._session_factory: sessionmaker[Session] = SessionLocal
         self._futures: set[Future[None]] = set()
         self._lock = threading.Lock()
@@ -63,16 +64,13 @@ class TaskQueue:
     def set_download_workers(self, count: int) -> int:
         clamped = clamp_workers(count)
         self._download_workers = clamped
-        self.download_limit.resize(clamped)
         self.file_limit.resize(clamped)
-        self.chapter_limit.resize(clamped)
         return clamped
 
     def set_sync_workers(self, count: int) -> int:
         clamped = clamp_workers(count)
         self._sync_workers = clamped
-        self.sync_limit.resize(clamped)
-        self.sync_item_limit.resize(clamped)
+        self.io_limit.resize(clamped)
         return clamped
 
     def configure(self, session_factory: sessionmaker[Session]) -> None:
@@ -80,8 +78,8 @@ class TaskQueue:
         self._session_factory = session_factory
 
     def _executor_for_locked(self, kind: str) -> ThreadPoolExecutor:
-        # Separate pools so downloads and sync/scan jobs run simultaneously without
-        # blocking one another, and each pool honours its own concurrency setting.
+        # Fixed operation capacity bounds staging/coordination, not I/O concurrency.
+        # Resource permits are held only by the work that uses that resource.
         if kind == "download":
             if self._download_executor is None:
                 self._download_executor = ThreadPoolExecutor(
@@ -117,17 +115,15 @@ class TaskQueue:
         )
         token = current_operation.set(operation)
         try:
-            limit = self.download_limit if task.kind == "download" else self.sync_limit
-            with limit.slot():
-                checkpoint()
-                task.status = "running"
-                tracker.progress(task, 0)
-                result = work(session, lambda pct, detail: tracker.progress(task, pct, detail))
-                checkpoint()
-                session.commit()
-                for finalize in operation.finalizers:
-                    finalize("done")
-                tracker.finish(task, result=result)
+            checkpoint()
+            task.status = "running"
+            tracker.progress(task, 0)
+            result = work(session, lambda pct, detail: tracker.progress(task, pct, detail))
+            checkpoint()
+            session.commit()
+            for finalize in operation.finalizers:
+                finalize("done")
+            tracker.finish(task, result=result)
         except OperationCancelled:
             session.rollback()
             for finalize in operation.finalizers:
@@ -166,3 +162,10 @@ class TaskQueue:
 
 
 queue = TaskQueue()
+
+
+@contextmanager
+def io_slot() -> Iterator[None]:
+    """Shared filesystem/metadata budget, released before CPU derivative work."""
+    with queue.io_limit.slot():
+        yield

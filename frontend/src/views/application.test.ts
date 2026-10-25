@@ -139,12 +139,16 @@ it("disables server path controls and emits typed changes separately from browse
 
 it("deep links to Settings sections and follows section changes without remounting the route", async () => {
   const { wrapper, router } = await renderApp("/settings?section=downloads");
-  expect(wrapper.get("main").text()).toContain("Parallel downloads");
+  expect(wrapper.get("main").text()).toContain("Downloads");
+  expect(wrapper.find('[aria-label="Download workers"]').exists()).toBe(false);
   await router.push("/settings?section=sync");
   await flushPromises();
-  expect(wrapper.get("main").text()).toContain("Parallel sync jobs");
+  expect(wrapper.get("main").text()).toContain("Sync jobs");
+  expect(wrapper.find('[aria-label="Scan/metadata I/O workers"]').exists()).toBe(false);
   await click(wrapper, "Libraries");
   expect(router.currentRoute.value.query.section).toBe("libraries");
+  expect(wrapper.find('[aria-label="Download workers"]').exists()).toBe(true);
+  expect(wrapper.find('[aria-label="Scan/metadata I/O workers"]').exists()).toBe(true);
   await router.push("/settings?section=unknown");
   await flushPromises();
   expect(wrapper.get("main").text()).toContain("Metadata providers");

@@ -39,7 +39,7 @@ from src.media.thumbnails import (
 )
 from src.media.video import extract_poster_png
 from src.tasks.concurrency import parallel_map
-from src.tasks.context import OperationCancelled, checkpoint, report_phase
+from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
 
 logger = get_logger(__name__)
 
@@ -85,12 +85,23 @@ def _first_book(session: Session, series_id: str) -> Book | None:
     )
 
 
+def _release_media_reads(session: Session) -> None:
+    # Background catalog changes are published before derivatives. Neither a
+    # coordinator nor an image worker should retain a connection while waiting
+    # on HTTP, filesystem bytes or an independent CPU pool. Foreground callers
+    # keep their request transaction semantics.
+    if current_operation.get() is not None:
+        session.commit()
+
+
 def _read_page(session: Session, book: Book, index: int) -> tuple[bytes, str]:
     library = session.get(Library, book.library_id)
     if library is None:
         raise NotFoundError("library missing for book")
     path = Path(library.path) / book.path_rel
-    with open_container(path, book.content_kind) as container:
+    kind = book.content_kind
+    _release_media_reads(session)
+    with open_container(path, kind) as container:
         return container.read_page(index), container.page_name(index)
 
 
@@ -116,8 +127,10 @@ def _local_cover_page_bytes(session: Session, series_id: str) -> bytes | None:
     if library is None:
         return None
     root = Path(library.path) / book.path_rel
+    kind = book.content_kind
+    _release_media_reads(session)
     try:
-        with open_container(root, book.content_kind) as container:
+        with open_container(root, kind) as container:
             for index in range(container.page_count()):
                 name = container.page_name(index)
                 if media_kind(name) == "video":
@@ -150,8 +163,10 @@ def _raw_cover_source(session: Session, series_id: str) -> bytes | None:
     if series.kind == "gallery":
         return _local_cover_page_bytes(session, series_id)
 
-    if series.cover_source and series.cover_source.startswith("http"):
-        remote = _download_image(series.cover_source)
+    cover_source = series.cover_source
+    _release_media_reads(session)
+    if cover_source and cover_source.startswith("http"):
+        remote = _download_image(cover_source)
         if remote is not None:
             return remote
     return _local_cover_page_bytes(session, series_id)
@@ -171,11 +186,13 @@ def _series_dir(session: Session, series: Series) -> Path | None:
     if library is None:
         return None
     root = Path(library.path)
-    if series.path_rel:
-        folder = root / series.path_rel
+    path_rel, series_id = series.path_rel, series.id
+    _release_media_reads(session)
+    if path_rel:
+        folder = root / path_rel
         if folder.is_dir():
             return folder
-    managed = root / series.id
+    managed = root / series_id
     return managed if managed.is_dir() else None
 
 
@@ -327,6 +344,7 @@ def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str
 
 def warm_series_covers(session: Session, store: ThumbnailStore, series_ids: list[str]) -> int:
     """Warm independent covers concurrently without sharing ORM sessions."""
+    _release_media_reads(session)
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
 
     def warm(series_id: str) -> bool:
@@ -461,6 +479,7 @@ def ensure_gallery_item_thumb(
     info = resolve_gallery_file(session, series_id, index)
     try:
         if info.kind == "video":
+            _release_media_reads(session)
             png = extract_poster_png(info.path)
             if png is None:
                 return False
@@ -539,6 +558,7 @@ def warm_gallery_item_thumbs(
         book = _first_book(session, series_id)
         if book is not None:
             jobs.extend((series_id, index) for index in range(book.page_count))
+    _release_media_reads(session)
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
 
     def warm(item: tuple[str, int]) -> bool:

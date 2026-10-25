@@ -432,11 +432,16 @@ class MangaDexProvider:
         on_page: Callable[[int, int], None] | None = None,
     ) -> Iterator[Path]:
         """Fetch files concurrently and feed conversion in original page order."""
+        pending: dict[int, Path] = {}
+        next_page = 1
         for index, content in self._iter_pages(chapter, data_saver=data_saver, on_page=on_page):
             checkpoint()
             path = directory / f"{index:04d}.source"
             path.write_bytes(content)
-            yield path
+            pending[index] = path
+            while next_page in pending:
+                yield pending.pop(next_page)
+                next_page += 1
 
     def fetch_adhoc_pages(
         self,
@@ -479,13 +484,13 @@ class MangaDexProvider:
         on_page: Callable[[int, int], None] | None,
         save: Callable[[int, bytes], None] | None = None,
     ) -> list[bytes]:
-        pages = []
+        pages: dict[int, bytes] = {}
         for index, content in self._iter_pages(chapter, data_saver=data_saver, on_page=on_page):
             if save is not None:
                 save(index, content)
             else:
-                pages.append(content)
-        return pages
+                pages[index] = content
+        return [pages[index] for index in sorted(pages)]
 
     def _iter_pages(
         self,
@@ -516,12 +521,12 @@ class MangaDexProvider:
                 return item[0], content
 
         results = parallel_map(
-            fetch, enumerate(files, 1), workers=MAX_WORKERS, ordered=True, limit=queue.file_limit
+            fetch, enumerate(files, 1), workers=MAX_WORKERS, limit=queue.file_limit
         )
         try:
-            for index, content in results:
+            for completed, (index, content) in enumerate(results, 1):
                 if on_page is not None:
-                    on_page(index, total)
+                    on_page(completed, total)
                 yield index, content
         finally:
             results.close()

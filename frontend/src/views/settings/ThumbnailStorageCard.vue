@@ -2,7 +2,7 @@
 import { ChevronDown, Clock, GalleryThumbnails, HardDrive, Images, Layers } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { fetchThumbnailStorage, saveThumbnailStorage } from "../../api/settingsQueries";
-import ImageProcessingSettings from "./ImageProcessingSettings.vue";
+import WorkerSettings from "./WorkerSettings.vue";
 import ServerPathField from "../../components/ServerPathField.vue";
 import { RECENTLY_ADDED_OPTIONS, useMainBarIcons, useRecentlyAddedKinds } from "../../lib/density";
 import { toast } from "../../lib/toast";
@@ -213,7 +213,7 @@ onMounted(load);
           </div>
         </div>
       </form>
-      <ImageProcessingSettings />
+      <WorkerSettings />
     </div>
   </section>
 </template>

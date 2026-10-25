@@ -24,6 +24,7 @@ from src.core.logging import get_logger
 from src.core.version import USER_AGENT
 from src.providers.ratelimit import TokenBucket
 from src.tasks.context import checkpoint, cooperative_wait
+from src.tasks.queue import io_slot
 
 logger = get_logger(__name__)
 
@@ -51,6 +52,7 @@ class MangaDexClient:
         self._athome = athome_bucket or TokenBucket(40 / 60, 40)
         self._max_retries = max_retries
 
+    @io_slot()
     def get(
         self,
         path: str,
@@ -68,6 +70,7 @@ class MangaDexClient:
 
         return self._with_retries(send)
 
+    @io_slot()
     def post(
         self, path: str, *, json: dict[str, object] | None = None, retry: bool = True
     ) -> httpx.Response:
@@ -86,6 +89,7 @@ class MangaDexClient:
             return response
         return self._with_retries(send)
 
+    @io_slot()
     def put(self, path: str, *, json: dict[str, object]) -> httpx.Response:
         def send() -> httpx.Response:
             self._global.acquire()
@@ -93,6 +97,7 @@ class MangaDexClient:
 
         return self._with_retries(send)
 
+    @io_slot()
     def delete(self, path: str) -> httpx.Response:
         """DELETE an api.mangadex.org path (rate limited + retried). Used for authed
         clears (e.g. personal rating)."""

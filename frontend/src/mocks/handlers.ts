@@ -548,6 +548,21 @@ export const handlers = [
     return HttpResponse.json({ items: recentUpdates(true, limit), nextCursor: null });
   }),
 
+  http.get("/api/libraries/workers", () =>
+    HttpResponse.json({
+      downloadWorkers: downloadConfig.parallelDownloads,
+      scanMetadataWorkers: syncState.parallelSyncs,
+      ...imageProcessing,
+    }),
+  ),
+  http.put("/api/libraries/workers", async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["WorkerSettingsUpdate"];
+    downloadConfig.parallelDownloads = body.downloadWorkers;
+    syncState.parallelSyncs = body.scanMetadataWorkers;
+    imageProcessing.conversionWorkers = body.conversionWorkers;
+    imageProcessing.thumbnailWorkers = body.thumbnailWorkers;
+    return HttpResponse.json({ ...body, ...imageProcessing });
+  }),
   http.get("/api/libraries/image-processing", () => HttpResponse.json(imageProcessing)),
   http.put("/api/libraries/image-processing", async ({ request }) => {
     Object.assign(imageProcessing, await request.json());

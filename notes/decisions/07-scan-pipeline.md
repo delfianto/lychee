@@ -38,8 +38,8 @@ short-circuit gate.
    scan.
 5. **Post-scan:** covers are warmed for the whole library
    (`library/service.py:_finish_scan_phases` → `warm_library_covers`); a
-   gallery library additionally enqueues a dedicated `"thumbs"` task
-   (`warm_gallery_item_thumbs`) with its own progress bar. Scan progress is
+   gallery library additionally warms its item thumbnails
+   (`warm_gallery_item_thumbs`) within the same owning scan operation and phase bar. Scan progress is
    reported over SSE via the generic task lifecycle events
    (`scan.started`/`.progress`/`.done`/`.failed`) — there's no per-entity
    "series added" / "book updated" event, just the task's overall percent.
@@ -65,12 +65,15 @@ always the surrogate nanoid.
 
 ## Concurrency
 
-One global `ThreadPoolExecutor` worker (`tasks/queue.py`, see
-[08](08-task-runner.md)) — every task of every kind (scan, download, sync,
-thumbs, local-import) runs strictly one at a time in submission order.
-There's no per-series serialization concept and no cross-series
-parallelism; it's accidental global serialization from a single worker
-thread, not an intentional per-series group scheme.
+Scans run on bounded operation coordinators, with one shared scan/metadata I/O
+budget across filesystem discovery, container inspection and provider requests.
+Inspection child threads receive immutable prior values; ORM reconciliation stays
+on the owning thread. Same-library indexing is serialized through its commit,
+without holding that lock through derivative generation. Independent conversion
+and thumbnail pools own CPU limits; scans release I/O permits and database reads
+before waiting on image work. The scan retains progress/cancellation ownership
+until every child has stopped. See [08](08-task-runner.md) for the live worker
+settings and cancellation boundaries.
 
 ## Not built
 

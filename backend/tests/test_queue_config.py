@@ -19,13 +19,10 @@ from src.tasks.queue import TaskQueue, queue
 def assert_limits(target: TaskQueue, downloads: int, syncs: int) -> None:
     assert target.download_workers == downloads
     assert target.sync_workers == syncs
-    assert (
-        target.download_limit.count
-        == target.chapter_limit.count
-        == target.file_limit.count
-        == downloads
-    )
-    assert target.sync_limit.count == target.sync_item_limit.count == syncs
+    assert target.file_limit.count == downloads
+    assert target.io_limit.count == syncs
+    assert target.chapter_limit.count == 10
+    assert target.fetch_limit.count == 1
 
 
 def test_preferences_persist_independently_and_restore_to_a_fresh_queue(
@@ -131,3 +128,193 @@ def test_failed_save_never_changes_live_limits(
     assert_limits(queue, 1, 1)
     db_session.rollback()
     assert db_session.get(TaskQueueConfig, "default") is None
+
+
+def test_library_workers_save_all_limits_and_restore_them(
+    client: TestClient, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.media import processing
+
+    client.patch("/api/downloads/config", json={"parallelDownloads": 7})
+    client.patch("/api/sync/config", json={"parallelSyncs": 3})
+    client.put(
+        "/api/libraries/image-processing", json={"conversionWorkers": 4, "thumbnailWorkers": 2}
+    )
+    url = "/api/libraries/workers"
+    initial = client.get(url).json()
+    assert (
+        initial.items()
+        >= {
+            "downloadWorkers": 7,
+            "scanMetadataWorkers": 3,
+            "conversionWorkers": 4,
+            "thumbnailWorkers": 2,
+        }.items()
+    )
+    values = {
+        "downloadWorkers": 10,
+        "scanMetadataWorkers": 6,
+        "conversionWorkers": 12,
+        "thumbnailWorkers": 5,
+    }
+    response = client.put(url, json=values)
+    assert response.status_code == 200
+    assert response.json().items() >= values.items()
+    assert_limits(queue, 10, 6)
+    assert encode_pool.conversion_workers() == 12
+    assert encode_pool.thumbnail_workers() == 5
+    fresh = TaskQueue()
+    monkeypatch.setattr(config, "queue", fresh)
+    encode_pool.configure_workers(1, 1)
+    with Session(db_engine) as session:
+        config.restore_queue(session)
+        processing.configure_processing(session)
+    assert_limits(fresh, 10, 6)
+    assert encode_pool.conversion_workers() == 12
+    assert encode_pool.thumbnail_workers() == 5
+
+
+@pytest.mark.parametrize(
+    "field,max_value",
+    [
+        ("downloadWorkers", 10),
+        ("scanMetadataWorkers", 10),
+        ("conversionWorkers", 64),
+        ("thumbnailWorkers", 64),
+    ],
+)
+@pytest.mark.parametrize("value", [0, 1.5, None, True, "4", "over_max"])
+def test_library_workers_reject_invalid_budgets(
+    client: TestClient, field, max_value, value
+) -> None:
+    initial = client.get("/api/libraries/workers").json()
+    body = {
+        "downloadWorkers": 4,
+        "scanMetadataWorkers": 3,
+        "conversionWorkers": 6,
+        "thumbnailWorkers": 2,
+        field: max_value + 1 if value == "over_max" else value,
+    }
+    assert client.put("/api/libraries/workers", json=body).status_code == 422
+    assert client.get("/api/libraries/workers").json() == initial
+    assert_limits(queue, initial["downloadWorkers"], initial["scanMetadataWorkers"])
+    assert encode_pool.conversion_workers() == initial["conversionWorkers"]
+    assert encode_pool.thumbnail_workers() == initial["thumbnailWorkers"]
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_failed_combined_save_rolls_back_all_rows_and_applies_no_limits(
+    client: TestClient,
+    db_session: Session,
+    db_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    existing: bool,
+) -> None:
+    from src.media.models import ImageProcessingConfig
+    from src.tasks.schema import WorkerSettingsUpdate
+
+    if existing:
+        config.save_worker_settings(
+            db_session,
+            WorkerSettingsUpdate(
+                download_workers=4,
+                scan_metadata_workers=3,
+                conversion_workers=6,
+                thumbnail_workers=2,
+            ),
+        )
+    before = config.get_worker_settings(db_session)
+
+    def fail():
+        db_session.flush()  # Exercise rollback after both inserts/updates reached the database.
+        raise RuntimeError("disk is full")
+
+    monkeypatch.setattr(db_session, "commit", fail)
+    with pytest.raises(RuntimeError, match="disk is full"):
+        config.save_worker_settings(
+            db_session,
+            WorkerSettingsUpdate(
+                download_workers=7,
+                scan_metadata_workers=5,
+                conversion_workers=12,
+                thumbnail_workers=4,
+            ),
+        )
+    assert_limits(queue, before.download_workers, before.scan_metadata_workers)
+    assert encode_pool.conversion_workers() == before.conversion_workers
+    assert encode_pool.thumbnail_workers() == before.thumbnail_workers
+    db_session.rollback()
+    with Session(db_engine) as session:
+        row = session.get(TaskQueueConfig, "default")
+        image = session.get(ImageProcessingConfig, "default")
+        if existing:
+            assert row is not None and image is not None
+            assert (
+                row.download_workers,
+                row.sync_workers,
+                image.conversion_workers,
+                image.thumbnail_workers,
+            ) == (4, 3, 6, 2)
+        else:
+            assert row is image is None
+
+
+def test_simultaneous_combined_saves_persist_one_complete_configuration(
+    client: TestClient, db_session: Session
+) -> None:
+    from src.media.models import ImageProcessingConfig
+
+    barrier = threading.Barrier(2)
+    configurations = [
+        {
+            "downloadWorkers": 4,
+            "scanMetadataWorkers": 3,
+            "conversionWorkers": 6,
+            "thumbnailWorkers": 2,
+        },
+        {
+            "downloadWorkers": 8,
+            "scanMetadataWorkers": 5,
+            "conversionWorkers": 12,
+            "thumbnailWorkers": 4,
+        },
+    ]
+
+    def save(body):
+        barrier.wait(timeout=3)
+        return client.put("/api/libraries/workers", json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as callers:
+        results = list(callers.map(save, configurations))
+    assert all(result.status_code == 200 for result in results)
+    final = client.get("/api/libraries/workers").json()
+    assert any(final.items() >= value.items() for value in configurations)
+    assert_limits(queue, final["downloadWorkers"], final["scanMetadataWorkers"])
+    assert encode_pool.conversion_workers() == final["conversionWorkers"]
+    assert encode_pool.thumbnail_workers() == final["thumbnailWorkers"]
+    assert db_session.scalar(select(func.count()).select_from(TaskQueueConfig)) == 1
+    assert db_session.scalar(select(func.count()).select_from(ImageProcessingConfig)) == 1
+
+
+def test_auto_detection_refreshes_cpu_recommendations_without_persisting_changes(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.media import processing
+    from src.media.models import ImageProcessingConfig
+
+    monkeypatch.setattr(processing.os, "process_cpu_count", lambda: 32)
+    initial = client.get("/api/libraries/workers").json()
+    monkeypatch.setattr(processing.os, "process_cpu_count", lambda: 16)
+    detected = client.get("/api/libraries/workers").json()
+    assert detected["cpuThreads"] == 16
+    assert detected["recommendedConversionWorkers"] == 8
+    assert detected["recommendedThumbnailWorkers"] == 2
+    for field in (
+        "downloadWorkers",
+        "scanMetadataWorkers",
+        "conversionWorkers",
+        "thumbnailWorkers",
+    ):
+        assert detected[field] == initial[field]
+    assert db_session.get(TaskQueueConfig, "default") is None
+    assert db_session.get(ImageProcessingConfig, "default") is None

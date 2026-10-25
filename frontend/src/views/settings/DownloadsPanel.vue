@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Settings → Downloads: the download queue + the MangaDex sync card. Owns its own
 // SSE wiring — the table reloads on throttled download.* events and on sync.done.
-import { Gauge, Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
+import { Globe, Pause, Play, RefreshCw, Square, X } from "@lucide/vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 
 import type { DownloadTask } from "../../api/client";
@@ -11,14 +11,12 @@ import {
   bulkDownloadAction,
   clearCompletedDownloads,
   deleteDownloadTask,
-  fetchDownloadConfig,
   fetchDownloadTasks,
   fetchSyncState,
   pauseDownload as pauseDownloadRemote,
   resumeDownload as resumeDownloadRemote,
   retryDownload as retryDownloadRemote,
   runSync,
-  updateDownloadConfig,
 } from "../../api/settingsQueries";
 import PhaseProgress from "../../components/PhaseProgress.vue";
 import OverallProgress from "../../components/OverallProgress.vue";
@@ -38,7 +36,6 @@ interface DlRow {
   size: string;
 }
 const dl = ref<DlRow[]>([]);
-const parallelDownloads = ref(1);
 const sync = reactive({ lastSync: "never", newChapters: 0, syncing: false });
 const dlLabel: Record<string, string> = {
   downloading: "Downloading",
@@ -98,20 +95,7 @@ function progressLabel(d: DlRow): string {
   return `${phase}${pages} · ${d.progress}%`;
 }
 async function loadDownloads(): Promise<void> {
-  const [tasks, cfg] = await Promise.all([fetchDownloadTasks(), fetchDownloadConfig()]);
-  dl.value = mapRows(tasks);
-  parallelDownloads.value = cfg.parallelDownloads;
-}
-async function setParallelDownloads(raw: number): Promise<void> {
-  const clamped = Math.max(1, Math.min(10, Math.round(Number.isFinite(raw) ? raw : 1)));
-  parallelDownloads.value = clamped;
-  try {
-    const saved = await updateDownloadConfig(clamped);
-    parallelDownloads.value = saved.parallelDownloads;
-    toast(`Parallel downloads set to ${saved.parallelDownloads}`);
-  } catch (e) {
-    toast(e instanceof Error ? e.message : "Couldn't update download settings", "error");
-  }
+  dl.value = mapRows(await fetchDownloadTasks());
 }
 async function loadSync(): Promise<void> {
   const data = await fetchSyncState();
@@ -229,7 +213,7 @@ onMounted(() => {
     <section class="flex flex-col gap-3">
       <h3 class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sync</h3>
       <div class="card bg-base-100">
-        <div class="card-body grid gap-3 p-4 xl:grid-cols-2 xl:gap-6">
+        <div class="card-body p-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-start gap-3">
               <Globe class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -247,28 +231,6 @@ onMounted(() => {
               <RefreshCw class="size-4" :class="{ 'animate-spin': sync.syncing }" />
               {{ sync.syncing ? "Syncing…" : "Sync now" }}
             </button>
-          </div>
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-base-content/10 pt-3 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6"
-          >
-            <div class="flex items-start gap-3">
-              <Gauge class="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <div class="text-sm font-medium">Parallel downloads</div>
-                <div class="text-xs text-base-content/50">
-                  Concurrent download jobs (min 1, max 10)
-                </div>
-              </div>
-            </div>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              :value="parallelDownloads"
-              aria-label="Parallel downloads"
-              class="input input-bordered input-sm w-20 text-right tabular-nums"
-              @change="setParallelDownloads(Number(($event.target as HTMLInputElement).value))"
-            />
           </div>
         </div>
       </div>
