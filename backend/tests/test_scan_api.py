@@ -140,9 +140,12 @@ def test_move_restore_preserves_reading_progress(
 
     # Move the file across two scans: remove → rescan (soft-delete + snapshot), then add
     # the identical content at a new name → rescan (restore by size+hash → re-apply progress).
-    (root / "Kagurabachi" / "ch1.cbz").unlink()
+    parked = tmp_path / "parked.cbz"
+    (root / "Kagurabachi" / "ch1.cbz").replace(parked)
     _scan(client, library_id)
-    _cbz(root / "Kagurabachi" / "ch1_moved.cbz", 3)  # byte-identical → same size + xxh3 hash
+    # Move the original archive back. Rebuilding it would change ZIP timestamps
+    # (and its fingerprint) when a slower runner crosses a two-second boundary.
+    parked.replace(root / "Kagurabachi" / "ch1_moved.cbz")
     _scan(client, library_id)
 
     db_session.expire_all()
