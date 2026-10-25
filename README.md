@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.10** — faster catalog and home queries, reliable concurrent downloads, and optional local Turso support. Standard SQLite remains the default.
+Current release: **v0.1.0-beta.11** — parallel file downloads, a shared scan/metadata I/O budget, and unified worker settings with CPU auto detection. Standard SQLite remains the default.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.
@@ -129,6 +129,10 @@ for toolchain compatibility notes.
 
 After an API schema or router change, run `just api-gen` to regenerate both the
 backend OpenAPI document and the frontend types.
+
+Tagged releases are published by GitHub Actions with categorized notes from the
+commits between tags. See the [release workflow guide](notes/releases/README.md)
+for previews, optional curated summaries, and retrying an older tag.
 
 ## Project notes
 
