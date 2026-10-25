@@ -1,0 +1,26 @@
+# Only application/build inputs enter the context, never host data or credentials.
+**
+!Dockerfile
+!LICENSE
+!backend/
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/alembic.ini
+!backend/src/
+!backend/src/**
+!backend/alembic/
+!backend/alembic/**
+!frontend/
+!frontend/**
+!docker/
+!docker/deployment.py
+**/node_modules
+**/.venv
+**/__pycache__
+**/.env
+**/.env.*
+**/dist
+**/coverage
+**/*.db
+**/*.db-wal
+**/*.db-shm

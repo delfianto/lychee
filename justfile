@@ -226,7 +226,18 @@ check: be-check fe-check mcp-check release-check
 release-check:
     cd {{ backend_dir }} && uv run ruff format --check --config pyproject.toml --target-version py312 ../.github/scripts && uv run ruff check --config pyproject.toml --target-version py312 ../.github/scripts
     cd {{ backend_dir }} && uv run basedpyright --project ../.github/scripts
+    cd {{ backend_dir }} && uv run ruff format --check ../docker && uv run ruff check ../docker && uv run basedpyright ../docker
     python3 -m unittest discover -s .github/scripts -v
+
+# Build an exact release locally with the same recipe as CI.
+[group('project')]
+image-build tag image="lychee:local":
+    python3 .github/scripts/image.py --tag {{quote(tag)}} --build {{quote(image)}}
+
+# Boot a temporary container to check API, SPA routing, migrations and image codecs.
+[group('project')]
+image-smoke image version:
+    python3 .github/scripts/smoke_image.py --image {{quote(image)}} --version {{quote(version)}}
 
 # Show which dev services are currently running.
 # Only counts processes *listening* on the port — client connections (browsers,

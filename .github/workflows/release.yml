@@ -4,9 +4,27 @@ on:
   push:
     branches: [main]
     tags: ["**"]
-    paths: [".github/scripts/**", ".github/workflows/release.yml", "notes/releases/**", "justfile"]
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/release.yml"
+      - "notes/releases/**"
+      - "justfile"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker/**"
+      - "backend/**"
+      - "frontend/**"
   pull_request:
-    paths: [".github/scripts/**", ".github/workflows/release.yml", "notes/releases/**"]
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/release.yml"
+      - "notes/releases/**"
+      - "justfile"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker/**"
+      - "backend/**"
+      - "frontend/**"
   workflow_dispatch:
     inputs:
       tag:
@@ -32,17 +50,101 @@ jobs:
       - name: Test release notes and publishing behavior
         run: python3 -m unittest discover -s .github/scripts -v
 
+  container-check:
+    needs: check
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type == 'branch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Prepare application source and image metadata
+        id: image
+        run: python3 .github/scripts/image.py --context "$RUNNER_TEMP/lychee-image" --github-output "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - name: Build container without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/lychee-image
+          platforms: linux/amd64
+          load: true
+          tags: lychee:ci
+          build-args: |
+            LYCHEE_VERSION=${{ steps.image.outputs.version }}
+            LYCHEE_REVISION=${{ steps.image.outputs.revision }}
+            LYCHEE_REPOSITORY=${{ steps.image.outputs.source }}
+          cache-from: type=gha,scope=lychee-amd64
+          cache-to: type=gha,scope=lychee-amd64,mode=max
+      - name: Smoke-test migrations, API, frontend and media tools
+        env:
+          EXPECTED_VERSION: ${{ steps.image.outputs.version }}
+          EXPECTED_REVISION: ${{ steps.image.outputs.revision }}
+        run: python3 .github/scripts/smoke_image.py --image lychee:ci --version "$EXPECTED_VERSION" --revision "$EXPECTED_REVISION"
+
   publish:
     needs: check
     if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && github.event.deleted != true }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Prepare exact tagged source and image metadata
+        id: image
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: python3 .github/scripts/image.py --tag "$RELEASE_TAG" --context "$RUNNER_TEMP/lychee-image" --github-output "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+        if: steps.image.outputs.build == 'true'
+      - name: Build tagged image for testing
+        if: steps.image.outputs.build == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/lychee-image
+          platforms: linux/amd64
+          load: true
+          tags: lychee:release-test
+          build-args: |
+            LYCHEE_VERSION=${{ steps.image.outputs.version }}
+            LYCHEE_REVISION=${{ steps.image.outputs.revision }}
+            LYCHEE_REPOSITORY=${{ steps.image.outputs.source }}
+          cache-from: type=gha,scope=lychee-amd64
+          cache-to: type=gha,scope=lychee-amd64,mode=max
+      - name: Smoke-test the release image
+        if: steps.image.outputs.build == 'true'
+        env:
+          EXPECTED_VERSION: ${{ steps.image.outputs.version }}
+          EXPECTED_REVISION: ${{ steps.image.outputs.revision }}
+        run: python3 .github/scripts/smoke_image.py --image lychee:release-test --version "$EXPECTED_VERSION" --revision "$EXPECTED_REVISION"
+      - name: Log in to GitHub Container Registry
+        if: steps.image.outputs.build == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Publish the tested image (cached layers)
+        if: steps.image.outputs.build == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/lychee-image
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.image }}
+          provenance: mode=min
+          build-args: |
+            LYCHEE_VERSION=${{ steps.image.outputs.version }}
+            LYCHEE_REVISION=${{ steps.image.outputs.revision }}
+            LYCHEE_REPOSITORY=${{ steps.image.outputs.source }}
+      - name: Show the versioned image
+        if: steps.image.outputs.build == 'true'
+        env:
+          RELEASE_IMAGE: ${{ steps.image.outputs.image }}
+        run: echo "Container image - $RELEASE_IMAGE" >> "$GITHUB_STEP_SUMMARY"
       - name: Generate notes and publish the tag's release
         env:
           GITHUB_TOKEN: ${{ github.token }}

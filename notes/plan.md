@@ -297,9 +297,11 @@
 - [x] **CI + task runner** — GitHub Actions (`ci.yml` backend: uv → ruff / basedpyright / alembic check /
       pytest; `frontend-ci.yml`: bun → typecheck / vitest / build) + a `just` task runner (`just check`
       runs the whole gate locally).
+- [x] **Docker packaging** — multi-stage image with the built frontend, Python API,
+      AVIF support and ffmpeg; cached amd64 CI builds with isolated smoke checks.
+      Version tags publish to GHCR before GitHub releases; older tags can be backfilled.
 - **Infra — on hold** (deferred to last, by request):
   - [⏸] Auth & multi-user.
-  - [⏸] Docker packaging.
 - [~] Tests: backend 175 pytest ✅; FE vitest set up (@vue/test-utils + happy-dom) with first
       component/unit tests — **coverage still thin**.
 - [—] OPDS / device-sync (explicitly out per ADR 15).

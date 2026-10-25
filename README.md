@@ -130,9 +130,12 @@ for toolchain compatibility notes.
 After an API schema or router change, run `just api-gen` to regenerate both the
 backend OpenAPI document and the frontend types.
 
-Tagged releases are published by GitHub Actions with categorized notes from the
-commits between tags. See the [release workflow guide](notes/releases/README.md)
-for previews, optional curated summaries, and retrying an older tag.
+Tagged releases are built and smoke-tested by GitHub Actions, published as
+version-tagged images at `ghcr.io/delfianto/lychee`, then published on GitHub
+with categorized notes from the commits between tags. See the
+[container guide](docker/README.md) covers image usage and local builds; the
+[release workflow guide](notes/releases/README.md) covers previews, optional
+curated summaries, and retrying an older tag.
 
 ## Project notes
 

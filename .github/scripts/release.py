@@ -148,6 +148,7 @@ def publish(release: Release, repository: str, token: str, api_url: str) -> str:
         print("Release already exists; preserving its notes and publication state.")
         return existing["html_url"]
     except HTTPError as exc:
+        exc.close()
         if exc.code != 404:
             raise
     request = Request(
