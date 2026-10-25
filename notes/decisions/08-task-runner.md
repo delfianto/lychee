@@ -75,6 +75,28 @@ Download rows persist their own phase counters in `phases_json`, including
 thumbnail work, and become done only after that work returns. A retry after
 publication reuses the existing chapter rather than downloading it again.
 
+## Work ordering
+
+Downloads and Sync display processing/cancelling work first, then queued, paused,
+failed, cancelled, and completed entries. Each group uses case-insensitive natural
+title/folder order; chapter labels use numeric ascending order, including decimals
+(`2`, `9.5`, `10`). Named extras and oneshots follow numbered chapters. Stable ties
+keep rows from changing places between progress updates. Both the API and settings
+views apply this policy; a completion moves a row below unfinished work.
+
+Download planning sorts the provider's chapter feed before applying a limit.
+Chapter claims sort the persisted remote number numerically in SQL before timestamp
+and ID ties, so bulk inserts sharing a timestamp cannot start with a random nanoid's
+chapter. Resume/retry uses the same claim path, and paused chapters stay excluded.
+The global chapter-capacity and fetch-admission limiters serve waiting requests
+FIFO and remove cancelled waiters; they retain live resizing and independent CPU
+stages. This provides fair admission between concurrent drains, not whole-series
+serialization. Chapters already fetching/encoding are never preempted by new work.
+
+Provider sync plans titles in natural ascending order, and filesystem scan discovery
+does the same for artist/work folders. Parallel I/O and image stages still complete
+in readiness order; display order does not constrain or serialize completion.
+
 Cancellation is cooperative: checkpoints run during file discovery, inspection,
 page fetch callbacks, conversion, and thumbnail generation. Queued process work
 is cancelled; already-running native image encodes are joined before the owner

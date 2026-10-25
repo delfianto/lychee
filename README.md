@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.12** — flatter chapter storage with automatic volume reconciliation, persistent auto-clear controls, and accurate chapter/folder activity counts. Standard SQLite remains the default.
+Current release: **v0.1.0-beta.13** — predictable download/sync ordering, clickable series metadata filters, and a cleaner navigation bar. Standard SQLite remains the default.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.

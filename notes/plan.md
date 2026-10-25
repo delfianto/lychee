@@ -123,6 +123,8 @@
       cursor-pagination via `/api/series`. Grids wait for pending detail saves; per-work edits are
       serialized so immediate Favorites navigation cannot read the pre-save state (manga/comics/gallery).
       Cached library screens refresh on return after successful edits, retaining their filters.
+      Detail-page demographics, content ratings, publication statuses, and tags link straight
+      into the matching manga/comic library filters, with removable selected-filter chips.
 - [x] **Gallery** — `GalleryView` + `GalleryDetail` + `Lightbox`, from `/api/series?kind=gallery` and
       `/api/series/{id}/images`. Compact library/artist dropdowns share the toolbar; text search also matches characters and series/franchise names. Library selection defaults to
       all galleries, followed by alphabetically sorted gallery roots; choosing a root scopes every
@@ -1050,6 +1052,9 @@ See [ADR 22](decisions/22-mdlists-chapters-staging.md) for storage and sync deta
 - [x] Activity badge counts pending/processing chapters and per-folder gallery work,
       with a visible breakdown and SSE invalidation. Folder completion waits for the
       final thumbnail; stale snapshots/progress cannot leave completed work active.
+- [x] Active-first download/sync lists with natural title/folder and ascending numeric
+      chapter order. Provider plans and chapter claims start lowest-first even with
+      tied timestamps; chapter/fetch admission is FIFO and cancellation-safe.
 - [x] Download/sync concurrency preferences persist in `task_queue_config` and restore
       before queued downloads resume. Conversion/thumbnail limits persist separately
       in `image_processing_config`. Only unsaved download/sync preferences default to 1.

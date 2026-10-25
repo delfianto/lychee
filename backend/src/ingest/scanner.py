@@ -39,6 +39,7 @@ from src.media.containers import is_cover_file, is_media_file, open_container
 from src.progress.models import ReadingProgress
 from src.tasks.concurrency import parallel_map
 from src.tasks.context import checkpoint, report_phase, report_work_units
+from src.tasks.ordering import natural_key
 from src.tasks.queue import MAX_WORKERS, io_slot, queue
 
 logger = get_logger(__name__)
@@ -124,7 +125,8 @@ def resolve_books(series_dir: Path, root: Path) -> list[Candidate]:
     def visit(directory: Path) -> None:
         checkpoint()
         entries = sorted(
-            p for p in directory.iterdir() if not p.name.startswith(".") and p.name != "temp"
+            (p for p in directory.iterdir() if not p.name.startswith(".") and p.name != "temp"),
+            key=lambda path: natural_key(path.name),
         )
         if any(
             e.is_file() and is_media_file(e.name) and not is_cover_file(e.name) for e in entries
@@ -211,7 +213,9 @@ def _scan_library(
     report_work_units(None)
     with io_slot():
         entries = [
-            p for p in sorted(root.iterdir()) if not p.name.startswith(".") and p.name != "temp"
+            p
+            for p in sorted(root.iterdir(), key=lambda path: natural_key(path.name))
+            if not p.name.startswith(".") and p.name != "temp"
         ]
     total_entries = max(len(entries), 1)
     scan_job = sync_jobs.create(
@@ -394,7 +398,7 @@ def _ingest_artist(
     with io_slot():
         children = [
             child
-            for child in sorted(artist_dir.iterdir())
+            for child in sorted(artist_dir.iterdir(), key=lambda path: natural_key(path.name))
             if not child.name.startswith(".")
             and child.name != "temp"
             and (child.is_dir() or (child.is_file() and _archive_kind(child.name)))

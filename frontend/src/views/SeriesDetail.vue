@@ -29,6 +29,7 @@ import MatchSeriesModal from "../components/MatchSeriesModal.vue";
 import SeriesSynopsis from "../components/SeriesSynopsis.vue";
 import SeriesInfoPanel from "../components/SeriesInfoPanel.vue";
 import { contentRatingClass, statusColor } from "../lib/display";
+import { metadataBrowseLink } from "../lib/metadataBrowse";
 import { ratingLabel } from "../lib/ratingLabels";
 import { createStaleGuard } from "../lib/staleGuard";
 import { toast } from "../lib/toast";
@@ -357,10 +358,13 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                 <CreatorCredits :names="series.authors" role="author" />
               </div>
               <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="flex items-center gap-1.5">
+                <RouterLink
+                  :to="metadataBrowseLink(series, 'pubStatus', series.status)"
+                  class="link link-hover flex items-center gap-1.5"
+                >
                   <span class="size-2 rounded-full" :class="statusColor[series.status]"></span>
                   {{ cap(series.status) }}
-                </span>
+                </RouterLink>
                 <span v-if="series.year" class="text-base-content/60">· {{ series.year }}</span>
                 <span
                   v-if="series.rating"
@@ -372,9 +376,13 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
                     series.rating.toFixed(2)
                   }}</span>
                 </span>
-                <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
+                <RouterLink
+                  :to="metadataBrowseLink(series, 'ratings', series.contentRating)"
+                  class="badge badge-sm link link-hover"
+                  :class="contentRatingClass[series.contentRating]"
+                >
                   {{ ratingLabel(series.contentRating) }}
-                </span>
+                </RouterLink>
               </div>
             </div>
 

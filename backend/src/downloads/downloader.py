@@ -35,6 +35,7 @@ from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
 from src.downloads.cancel import DownloadCancelled, check_cancelled, is_cancelled
 from src.downloads.models import DownloadTask
+from src.downloads.ordering import chapter_queue_order
 from src.downloads.paths import hold_library_lock, recover_library_moves, volume_directory
 from src.downloads.pipeline import FetchProgress, prefetch_pages
 from src.downloads.provider import (
@@ -53,6 +54,7 @@ from src.media.thumbnails import ThumbnailStore
 from src.tasks.config import auto_clear_downloads
 from src.tasks.context import OperationCancelled, current_operation, report_phase
 from src.tasks.events import activity_changed
+from src.tasks.ordering import chapter_key
 from src.tasks.queue import queue
 
 logger = get_logger(__name__)
@@ -426,6 +428,7 @@ def plan_downloads(
         and remote.provider_chapter_id not in local_pids
         and (want is None or remote.provider_chapter_id in want)
     ]
+    pending.sort(key=lambda remote: (chapter_key(remote.number), remote.provider_chapter_id))
     if limit is not None:
         pending = pending[:limit]
 
@@ -519,7 +522,7 @@ def run_download_queue(
                     row = session.scalar(
                         select(DownloadTask)
                         .where(DownloadTask.series_id == series_id, DownloadTask.status == "queued")
-                        .order_by(DownloadTask.created_at, DownloadTask.id)
+                        .order_by(*chapter_queue_order())
                     )
                     if row is None:
                         break

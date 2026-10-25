@@ -18,6 +18,7 @@ import {
   setSyncAutoClearCompleted,
 } from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
+import { compareSyncJobs } from "../../lib/transferOrder";
 
 interface SyncJobRow {
   id: string;
@@ -38,6 +39,7 @@ const sync = reactive({
   paused: false,
 });
 const jobs = ref<SyncJobRow[]>([]);
+const orderedJobs = computed(() => jobs.value.toSorted(compareSyncJobs));
 const autoClear = ref(false);
 const autoClearLoaded = ref(false);
 const savingAutoClear = ref(false);
@@ -257,10 +259,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-1.5">
+      <div role="list" aria-label="Sync queue" class="flex flex-col gap-1.5">
         <div
-          v-for="job in jobs"
+          v-for="job in orderedJobs"
           :key="job.id"
+          role="listitem"
           class="flex items-start gap-3 rounded-box surface-border bg-base-100 p-3"
         >
           <div class="min-w-0 grow">

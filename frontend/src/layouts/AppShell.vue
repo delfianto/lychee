@@ -168,11 +168,6 @@ const nav = computed<NavItem[]>(() => [
           >
             <ArrowLeft class="size-5" />
           </button>
-          <div class="avatar avatar-placeholder">
-            <div class="w-8 rounded-full bg-neutral text-neutral-content">
-              <span class="text-xs">U</span>
-            </div>
-          </div>
         </div>
       </header>
 

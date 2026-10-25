@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Generator, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
@@ -14,12 +15,14 @@ from src.tasks.context import checkpoint
 class Limiter:
     """A live concurrency limit; reducing it lets existing work drain."""
 
-    def __init__(self, count: int, *, reentrant: bool = False) -> None:
+    def __init__(self, count: int, *, reentrant: bool = False, fifo: bool = False) -> None:
         self._reentrant = reentrant
         self.count = count
         self.active = 0
         self._condition = Condition()
         self._local = local()
+        self._fifo = fifo
+        self._waiting: deque[object] = deque()
 
     def resize(self, count: int) -> None:
         with self._condition:
@@ -34,23 +37,36 @@ class Limiter:
             checkpoint()
             yield
             return
-        while True:
-            checkpoint()
+        ticket = object()
+        acquired = False
+        if self._fifo:
             with self._condition:
-                if self.active < self.count:
-                    self.active += 1
-                    break
-                self._condition.wait(timeout=0.1)
-        if self._reentrant:
-            self._local.held = True
+                self._waiting.append(ticket)
         try:
+            while True:
+                checkpoint()
+                with self._condition:
+                    first = not self._fifo or self._waiting[0] is ticket
+                    if self.active < self.count and first:
+                        self.active += 1
+                        acquired = True
+                        if self._fifo:
+                            self._waiting.popleft()
+                        self._condition.notify_all()
+                        break
+                    self._condition.wait(timeout=0.1)
+            if self._reentrant:
+                self._local.held = True
             checkpoint()
             yield
         finally:
-            if self._reentrant:
+            if self._reentrant and acquired:
                 self._local.held = False
             with self._condition:
-                self.active -= 1
+                if acquired:
+                    self.active -= 1
+                elif self._fifo:
+                    self._waiting.remove(ticket)
                 self._condition.notify_all()
 
 

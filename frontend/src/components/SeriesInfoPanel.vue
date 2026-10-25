@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import CreatorCredits from "./CreatorCredits.vue";
 import { ExternalLink } from "@lucide/vue";
+import { RouterLink } from "vue-router";
 import { contentRatingClass } from "../lib/display";
+import { metadataBrowseLink } from "../lib/metadataBrowse";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import type { Series } from "../types";
 
@@ -24,20 +26,30 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
         </div>
         <div>
           <div class="text-xs text-base-content/60">Demographic</div>
-          <span class="badge badge-sm badge-outline">{{
-            demographicLabel(series.demographic)
-          }}</span>
+          <RouterLink
+            :to="metadataBrowseLink(series, 'demographics', series.demographic)"
+            class="badge badge-sm badge-outline link link-hover"
+            >{{ demographicLabel(series.demographic) }}</RouterLink
+          >
         </div>
         <div>
           <div class="text-xs text-base-content/60">Content rating</div>
-          <span class="badge badge-sm" :class="contentRatingClass[series.contentRating]">
+          <RouterLink
+            :to="metadataBrowseLink(series, 'ratings', series.contentRating)"
+            class="badge badge-sm link link-hover"
+            :class="contentRatingClass[series.contentRating]"
+          >
             {{ ratingLabel(series.contentRating) }}
-          </span>
+          </RouterLink>
         </div>
         <div>
           <div class="text-xs text-base-content/60">Publication</div>
           <div>
-            {{ cap(series.status) }}<template v-if="series.year"> · {{ series.year }}</template>
+            <RouterLink
+              :to="metadataBrowseLink(series, 'pubStatus', series.status)"
+              class="link link-hover"
+              >{{ cap(series.status) }}</RouterLink
+            ><template v-if="series.year"> · {{ series.year }}</template>
           </div>
         </div>
       </div>
@@ -45,9 +57,13 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
       <div class="flex flex-col gap-2">
         <div class="text-xs text-base-content/60">Tags</div>
         <div class="flex flex-wrap gap-1">
-          <span v-for="t in series.tags" :key="t.id" class="badge badge-outline badge-sm">{{
-            t.name
-          }}</span>
+          <RouterLink
+            v-for="t in series.tags"
+            :key="t.id"
+            :to="metadataBrowseLink(series, 'tags', t.id)"
+            class="badge badge-outline badge-sm link link-hover"
+            >{{ t.name }}</RouterLink
+          >
         </div>
       </div>
 
