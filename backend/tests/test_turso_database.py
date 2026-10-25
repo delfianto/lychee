@@ -34,6 +34,8 @@ def test_native_migrations_are_idempotent_and_search_reopens(tmp_path: Path) -> 
     url = f"sqlite+turso:///{tmp_path / 'migrations.db'}"
     run_migrations(url)
     run_migrations(url)
+    log = tmp_path / "migrations.db-log"
+    assert not log.exists() or log.stat().st_size == 0
     engine = create_database_engine(url)
     try:
         with Session(engine) as session:

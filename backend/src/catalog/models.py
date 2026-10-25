@@ -27,6 +27,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -62,6 +63,11 @@ class Series(BaseModel):
     """A title: manga/comic (has chapters) or gallery (has images)."""
 
     __tablename__ = "series"
+    __table_args__ = (
+        Index("ix_series_kind_added", "kind", "created_at", "id"),
+        Index("ix_series_kind_title", "kind", "sort_title", "id"),
+        Index("ix_series_kind_rating", "kind", "rating", "id"),
+    )
 
     library_id: Mapped[str] = mapped_column(
         ForeignKey("library.id", ondelete="CASCADE"), index=True, nullable=False
@@ -222,6 +228,11 @@ class Chapter(BaseModel):
     """A logical reading unit: a page range within a Book, with display metadata."""
 
     __tablename__ = "chapter"
+    __table_args__ = (
+        Index("ix_chapter_series_read", "series_id", "provider_chapter_id", "id", "number_sort"),
+        Index("ix_chapter_series_created", "series_id", "created_at"),
+        Index("ix_chapter_series_uploaded", "series_id", "source_uploaded_at"),
+    )
 
     series_id: Mapped[str] = mapped_column(
         ForeignKey("series.id", ondelete="CASCADE"), index=True, nullable=False
@@ -258,6 +269,7 @@ class ProviderChapter(BaseModel):
 
     __tablename__ = "provider_chapter"
     __table_args__ = (
+        Index("ix_provider_chapter_published", "series_id", "provider", "published_at"),
         UniqueConstraint(
             "series_id",
             "provider",

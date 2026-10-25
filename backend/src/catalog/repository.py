@@ -1,7 +1,7 @@
 """Catalog queries — the series grid (filters + sort + keyset pagination) and detail.
 
-Per-series derived counts (chapter/unread/last-read) are correlated scalar
-subqueries selected alongside each ``Series`` row, so one query drives the grid.
+Candidate selection computes only the statistics needed by sorting/filtering.
+Display statistics are grouped once over the selected IDs, then hydrated in order.
 Pagination is keyset (stable under infinite scroll): the cursor holds the sort
 value + id of the last row, and the next page is everything ordered after it.
 """
@@ -9,18 +9,24 @@ value + id of the last row, and the next page is everything ordered after it.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from src.catalog.models import Book, Chapter, ProviderChapter, Series, SeriesCredit
+from src.catalog.models import Book, Chapter, Series, SeriesCredit
 from src.catalog.search_index import search_ids
+from src.catalog.series_stats import (
+    chapter_stats,
+    content_updated_at,
+    correlated_stats,
+    provider_dates,
+)
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
-from src.progress.state import chapter_completed, provider_completed
+from src.progress.state import chapter_completed
 from src.taxonomy.models import series_tag
 
 _TIME_SORTS = frozenset({"recentlyAdded", "recentlyUpdated"})
@@ -60,108 +66,17 @@ class SeriesRow:
     content_updated_at: datetime
 
 
-@dataclass(slots=True)
-class _Aggregates:
-    chapter_count: ColumnElement[int]
-    unread_count: ColumnElement[int]
-    last_read: ColumnElement[Any]
-    content_updated_at: ColumnElement[Any]
-
-
-def _aggregates() -> _Aggregates:
-    chapter_count = (
-        select(func.count(Chapter.id))
-        .where(Chapter.series_id == Series.id)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    unread_count = (
-        select(func.count(Chapter.id))
-        .select_from(Chapter)
-        .outerjoin(
-            ReadingProgress,
-            and_(ReadingProgress.chapter_id == Chapter.id, ReadingProgress.completed.is_(True)),
-        )
-        .where(
-            Chapter.series_id == Series.id,
-            ReadingProgress.chapter_id.is_(None),
-            ~provider_completed(),
-        )
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    last_read = (
-        select(func.max(Chapter.number_sort))
-        .select_from(Chapter)
-        .join(ReadingProgress, ReadingProgress.chapter_id == Chapter.id)
-        .where(Chapter.series_id == Series.id)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    local_update = (
-        select(func.max(Chapter.created_at))
-        .where(Chapter.series_id == Series.id)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    source_update = (
-        select(func.max(Chapter.source_uploaded_at))
-        .where(Chapter.series_id == Series.id)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    provider_update = (
-        select(func.max(ProviderChapter.published_at))
-        .where(ProviderChapter.series_id == Series.id, ProviderChapter.provider == Series.provider)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    remote_update = case(
-        (source_update > provider_update, source_update),
-        else_=func.coalesce(provider_update, source_update),
-    )
-    # Source publication is the reading timeline, not when we edited or synced a row.
-    content_updated_at = case(
-        (
-            Series.provider == "mangadex",
-            func.coalesce(remote_update, local_update, Series.created_at),
-        ),
-        else_=func.coalesce(local_update, Series.created_at),
-    )
-    return _Aggregates(chapter_count, unread_count, last_read, content_updated_at)
-
-
-def _sort_expr(sort: str, agg: _Aggregates) -> tuple[Any, bool]:
-    """Return (order expression, descending?) for a sort key.
-
-    The expression is a mapped column, ``coalesce``, or the unread subquery — all
-    valid order/compare operands, typed ``Any`` at this SQLAlchemy boundary.
-    """
-    if sort == "title":
-        return Series.sort_title, False
-    if sort == "recentlyUpdated":
-        return agg.content_updated_at, True
-    if sort == "rating":
-        return func.coalesce(Series.rating, -1.0), True
-    if sort == "unread":
-        return agg.unread_count, True
-    return Series.created_at, True  # recentlyAdded (default)
-
-
-def _sort_value(sort: str, row: SeriesRow) -> object:
-    """Extract a row's ordering value, for building the next-page cursor."""
+def _sort_value(sort: str, row: SeriesRow) -> Any:
     if sort == "title":
         return row.series.sort_title
-    if sort == "recentlyUpdated":
-        return row.content_updated_at.isoformat()
     if sort == "rating":
         return row.series.rating if row.series.rating is not None else -1.0
     if sort == "unread":
         return row.unread_count
-    return row.series.created_at.isoformat()
+    return row.content_updated_at if sort == "recentlyUpdated" else row.series.created_at
 
 
-def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]:
+def _conditions(f: SeriesFilters) -> list[ColumnElement[bool]]:
     conds: list[ColumnElement[bool]] = []
     if f.kind:
         kinds = ["comic" if part == "comics" else part for part in f.kind.split(",") if part]
@@ -216,13 +131,6 @@ def _conditions(f: SeriesFilters, agg: _Aggregates) -> list[ColumnElement[bool]]
                 series_tag.c.tag_id.in_(f.tags_exclude),
             )
         )
-    if f.read_state == "unread":
-        conds.append(agg.unread_count > 0)
-    elif f.read_state == "read":
-        conds.append(agg.unread_count == 0)
-    elif f.read_state == "in_progress":
-        conds.append(agg.unread_count > 0)
-        conds.append(exists().where(ReadingProgress.series_id == Series.id))
     return conds
 
 
@@ -234,113 +142,145 @@ def list_series(
     limit: int = 24,
 ) -> tuple[list[SeriesRow], str | None]:
     """Return one page of grid rows and the cursor for the next page (or None)."""
-    agg = _aggregates()
-    # Bound the candidate page before evaluating the display-only chapter and
-    # progress aggregates. Some engines otherwise evaluate correlated subqueries
-    # for the entire matching catalog before applying ORDER BY/LIMIT.
-    page = select(Series.id).where(*_conditions(filters, agg))
-    order_expr, descending = _sort_expr(filters.sort, agg)
+    conditions = _conditions(filters)
+    # Kind-only grids need most chapter groups anyway. Avoid forcing a repeated
+    # series/index traversal inside their global rollups; narrower filters scope
+    # the rollups before aggregation.
+    eligible = (
+        select(Series.id).where(*conditions).correlate(None)
+        if _conditions(replace(filters, kind=None))
+        else None
+    )
+    grouped = session.get_bind().dialect.driver == "turso"
+    scalar = None if grouped else correlated_stats()
+    statement = select(Series.id)
+    reads = None
+    unread = None
+    if filters.sort == "unread" or filters.read_state in {"unread", "read", "in_progress"}:
+        if grouped and filters.sort not in {"recentlyAdded", "title"}:
+            reads = chapter_stats(eligible, dates=False)
+            statement = statement.outerjoin(reads, reads.c.series_id == Series.id)
+            unread = func.coalesce(reads.c.unread_count, 0)
+        else:
+            unread = correlated_stats()[1] if scalar is None else scalar[1]
+        if filters.read_state in {"unread", "in_progress"}:
+            conditions.append(unread > 0)
+        elif filters.read_state == "read":
+            conditions.append(unread == 0)
+        if filters.read_state == "in_progress":
+            conditions.append(exists().where(ReadingProgress.series_id == Series.id))
+
+    descending = filters.sort != "title"
+    if filters.sort == "title":
+        order_expr = Series.sort_title
+    elif filters.sort == "rating":
+        order_expr = func.coalesce(Series.rating, -1.0)
+    elif filters.sort == "unread":
+        assert unread is not None
+        order_expr = unread
+    elif filters.sort == "recentlyUpdated":
+        if grouped:
+            dates = chapter_stats(eligible, reads=False)
+            remote = provider_dates(eligible)
+            statement = statement.outerjoin(dates, dates.c.series_id == Series.id).outerjoin(
+                remote, remote.c.series_id == Series.id
+            )
+            order_expr = content_updated_at(
+                Series.provider,
+                Series.created_at,
+                dates.c.local_update,
+                dates.c.source_update,
+                remote.c.provider_update,
+            )
+        else:
+            assert scalar is not None
+            order_expr = scalar[3]
+    else:
+        order_expr = Series.created_at
+    statement = statement.add_columns(order_expr.label("sort_value")).where(*conditions)
     if cursor is not None:
         data = decode_cursor(cursor)
         value: Any = data["v"]
         last_id: str = data["id"]
         if filters.sort in _TIME_SORTS and isinstance(value, str):
             value = datetime.fromisoformat(value)
-        after = (
+        statement = statement.where(
             or_(order_expr < value, and_(order_expr == value, Series.id < last_id))
             if descending
             else or_(order_expr > value, and_(order_expr == value, Series.id > last_id))
         )
-        page = page.where(after)
-
-    ordering = (
+    page = statement.order_by(
         order_expr.desc() if descending else order_expr.asc(),
         Series.id.desc() if descending else Series.id.asc(),
-    )
-    candidates = page.order_by(*ordering).limit(limit + 1).subquery()
-    stmt = (
-        select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
+    ).limit(limit + 1)
+    if grouped:
+        candidates = [(row.id, row.sort_value) for row in session.execute(page)]
+        hydrated = get_series_rows(session, [sid for sid, _ in candidates[:limit]])
+        rows = [hydrated[sid] for sid, _ in candidates[:limit] if sid in hydrated]
+    else:
+        assert scalar is not None
+        selected_page = page.with_only_columns(Series.id).subquery()
+        statement = (
+            select(Series, *scalar)
+            .join(selected_page, selected_page.c.id == Series.id)
+            .order_by(
+                order_expr.desc() if descending else order_expr.asc(),
+                Series.id.desc() if descending else Series.id.asc(),
+            )
+            .options(selectinload(Series.tags), selectinload(Series.credits))
         )
-        .join(candidates, Series.id == candidates.c.id)
-        .order_by(*ordering)
-        .options(selectinload(Series.tags), selectinload(Series.credits))
-    )
-
-    rows = [
-        SeriesRow(
-            series=r[0],
-            chapter_count=r[1],
-            unread_count=r[2],
-            last_read=r[3],
-            content_updated_at=r[4],
-        )
-        for r in session.execute(stmt).all()
-    ]
-
-    next_cursor: str | None = None
-    if len(rows) > limit:
-        rows = rows[:limit]
-        last = rows[-1]
-        next_cursor = encode_cursor({"v": _sort_value(filters.sort, last), "id": last.series.id})
+        results = session.execute(statement).all()
+        all_rows = [SeriesRow(row[0], row[1], row[2], row[3], row[4]) for row in results]
+        candidates = [(row.series.id, _sort_value(filters.sort, row)) for row in all_rows]
+        rows = all_rows[:limit]
+    next_cursor = None
+    if len(candidates) > limit:
+        # Retain the selection boundary if concurrent edits change hydration.
+        last_id, value = candidates[limit - 1]
+        if isinstance(value, datetime):
+            value = value.isoformat()
+        next_cursor = encode_cursor({"v": value, "id": last_id})
     return rows, next_cursor
 
 
 def get_series(session: Session, series_id: str) -> SeriesRow | None:
     """Fetch a single series with its derived counts, or None."""
-    agg = _aggregates()
-    stmt = (
-        select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
-        )
-        .where(Series.id == series_id)
-        .options(selectinload(Series.tags), selectinload(Series.credits))
-    )
-    row = session.execute(stmt).first()
-    if row is None:
-        return None
-    return SeriesRow(
-        series=row[0],
-        chapter_count=row[1],
-        unread_count=row[2],
-        last_read=row[3],
-        content_updated_at=row[4],
-    )
+    return get_series_rows(session, [series_id]).get(series_id)
 
 
 def get_series_rows(session: Session, series_ids: list[str]) -> dict[str, SeriesRow]:
-    """Fetch several series with derived counts, keyed by id (for feeds/dashboard)."""
+    """Hydrate display statistics once over a bounded set of IDs."""
     if not series_ids:
         return {}
-    agg = _aggregates()
-    stmt = (
-        select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
+    series_ids = list(dict.fromkeys(series_ids))
+    if session.get_bind().dialect.driver == "turso":
+        local = chapter_stats(series_ids)
+        remote = provider_dates(series_ids)
+        statement = (
+            select(
+                Series,
+                func.coalesce(local.c.chapter_count, 0),
+                func.coalesce(local.c.unread_count, 0),
+                local.c.last_read,
+                content_updated_at(
+                    Series.provider,
+                    Series.created_at,
+                    local.c.local_update,
+                    local.c.source_update,
+                    remote.c.provider_update,
+                ),
+            )
+            .outerjoin(local, local.c.series_id == Series.id)
+            .outerjoin(remote, remote.c.series_id == Series.id)
         )
-        .where(Series.id.in_(series_ids))
-        .options(selectinload(Series.tags), selectinload(Series.credits))
+    else:
+        statement = select(Series, *correlated_stats())
+    statement = statement.where(Series.id.in_(series_ids)).options(
+        selectinload(Series.tags), selectinload(Series.credits)
     )
     return {
-        r[0].id: SeriesRow(
-            series=r[0],
-            chapter_count=r[1],
-            unread_count=r[2],
-            last_read=r[3],
-            content_updated_at=r[4],
-        )
-        for r in session.execute(stmt).all()
+        row[0].id: SeriesRow(row[0], row[1], row[2], row[3], row[4])
+        for row in session.execute(statement).all()
     }
 
 
@@ -447,36 +387,27 @@ def dashboard_counts(session: Session) -> tuple[int, int, int]:
 
 def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
     """Series with progress and something still unread, most-recently-read first."""
-    agg = _aggregates()
-    last_progress = (
-        select(func.max(ReadingProgress.updated_at))
-        .where(ReadingProgress.series_id == Series.id)
-        .correlate(Series)
-        .scalar_subquery()
-    )
-    stmt = (
+    progress = (
         select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
+            ReadingProgress.series_id, func.max(ReadingProgress.updated_at).label("last_progress")
         )
-        .where(exists().where(ReadingProgress.series_id == Series.id), agg.unread_count > 0)
-        .options(selectinload(Series.tags), selectinload(Series.credits))
-        .order_by(last_progress.desc(), Series.id.desc())
-        .limit(limit)
+        .group_by(ReadingProgress.series_id)
+        .subquery()
     )
-    return [
-        SeriesRow(
-            series=r[0],
-            chapter_count=r[1],
-            unread_count=r[2],
-            last_read=r[3],
-            content_updated_at=r[4],
+    eligible = select(progress.c.series_id)
+    reads = chapter_stats(eligible, dates=False)
+    ids = list(
+        session.scalars(
+            select(Series.id)
+            .join(progress, progress.c.series_id == Series.id)
+            .join(reads, reads.c.series_id == Series.id)
+            .where(reads.c.unread_count > 0)
+            .order_by(progress.c.last_progress.desc(), Series.id.desc())
+            .limit(limit)
         )
-        for r in session.execute(stmt).all()
-    ]
+    )
+    rows = get_series_rows(session, ids)
+    return [rows[sid] for sid in ids if sid in rows]
 
 
 def recently_added(
@@ -488,30 +419,7 @@ def recently_added(
     """Newest series first for the configured kinds, for the dashboard rail."""
     if not kinds:
         return []
-    agg = _aggregates()
-    stmt = (
-        select(
-            Series,
-            agg.chapter_count.label("chapter_count"),
-            agg.unread_count.label("unread_count"),
-            agg.last_read.label("last_read"),
-            agg.content_updated_at.label("content_updated_at"),
-        )
-        .where(Series.kind.in_(kinds))
-        .options(selectinload(Series.tags), selectinload(Series.credits))
-        .order_by(Series.created_at.desc(), Series.id.desc())
-        .limit(limit)
-    )
-    return [
-        SeriesRow(
-            series=r[0],
-            chapter_count=r[1],
-            unread_count=r[2],
-            last_read=r[3],
-            content_updated_at=r[4],
-        )
-        for r in session.execute(stmt).all()
-    ]
+    return list_series(session, SeriesFilters(kind=",".join(kinds)), limit=limit)[0]
 
 
 def search_series(
