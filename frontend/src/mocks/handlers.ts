@@ -21,6 +21,7 @@ const imageProcessing = {
 
 const downloadConfig = {
   parallelDownloads: 2,
+  autoClearCompleted: false,
 };
 
 import type { components } from "../api/schema";
@@ -58,7 +59,13 @@ import {
   tag as taxonomyTag,
 } from "./data/taxonomy";
 import { coverSvg, galleryImageSvg, pageSvg, svgResponseInit } from "./images";
-import { simulateTask, subscribeTaskStream, taskSnapshots, cancelTask } from "./taskBus";
+import {
+  simulateTask,
+  subscribeTaskStream,
+  taskSnapshots,
+  cancelTask,
+  activityChanged,
+} from "./taskBus";
 import { decodeCursorOffset, encodeCursor, nowIso, pick, randInt, rngFor, slugify } from "./utils";
 
 type SeriesOut = components["schemas"]["SeriesOut"];
@@ -207,6 +214,10 @@ function simulateDownload(row: DownloadTaskOut): TaskOut {
       row.phase = null;
       row.detail = null;
       row.sizeBytes = randInt(rngFor(row.id), 4_000_000, 42_000_000);
+      if (downloadConfig.autoClearCompleted) {
+        const index = downloadsDb.findIndex((download) => download.id === row.id);
+        if (index >= 0) downloadsDb.splice(index, 1);
+      }
     },
   });
 }
@@ -887,7 +898,11 @@ export const handlers = [
 
   http.patch("/api/sync/config", async ({ request }) => {
     const body = (await request.json()) as components["schemas"]["SyncConfigUpdate"];
-    syncState.parallelSyncs = Math.max(1, Math.min(10, body.parallelSyncs));
+    if (body.parallelSyncs != null)
+      syncState.parallelSyncs = Math.max(1, Math.min(10, body.parallelSyncs));
+    if (body.autoClearCompleted != null) syncState.autoClearCompleted = body.autoClearCompleted;
+    if (syncState.autoClearCompleted)
+      syncState.jobs = syncState.jobs?.filter((job) => job.status !== "done");
     return HttpResponse.json(syncState);
   }),
 
@@ -920,6 +935,7 @@ export const handlers = [
         }
       }
     }
+    activityChanged();
     return HttpResponse.json(syncState);
   }),
 
@@ -956,6 +972,8 @@ export const handlers = [
           job.progress = 100;
           job.detail = `Pulled from MangaDex · ${found} new chapter(s)`;
         }
+        if (syncState.autoClearCompleted)
+          syncState.jobs = syncState.jobs?.filter((entry) => entry.status !== "done");
       },
       result: { newChapters: randInt(rngFor("sync" + nowIso()), 0, 12) },
     });
@@ -1212,11 +1230,33 @@ export const handlers = [
   }),
 
   // --- downloads --------------------------------------------------------
+  http.get("/api/activity", () => {
+    const downloadChapters = downloadsDb.filter((row) =>
+      ["queued", "downloading"].includes(row.status),
+    ).length;
+    const syncJobs = (syncState.jobs ?? []).filter((job) =>
+      ["queued", "running", "cancelling"].includes(job.status),
+    ).length;
+    return HttpResponse.json({
+      downloadChapters,
+      syncJobs,
+      otherJobs: 0,
+      total: downloadChapters + syncJobs,
+    });
+  }),
   http.get("/api/downloads/config", () => HttpResponse.json(downloadConfig)),
 
   http.patch("/api/downloads/config", async ({ request }) => {
     const body = (await request.json()) as components["schemas"]["DownloadConfigUpdate"];
-    downloadConfig.parallelDownloads = Math.max(1, Math.min(10, body.parallelDownloads));
+    if (body.parallelDownloads != null)
+      downloadConfig.parallelDownloads = Math.max(1, Math.min(10, body.parallelDownloads));
+    if (body.autoClearCompleted != null)
+      downloadConfig.autoClearCompleted = body.autoClearCompleted;
+    if (downloadConfig.autoClearCompleted) {
+      for (let index = downloadsDb.length - 1; index >= 0; index--) {
+        if (downloadsDb[index]?.status === "done") downloadsDb.splice(index, 1);
+      }
+    }
     return HttpResponse.json(downloadConfig);
   }),
 
@@ -1240,6 +1280,7 @@ export const handlers = [
       } else if (body.action === "resume-all") {
         for (const row of downloadsDb) if (row.status === "paused") simulateDownload(row);
       }
+      activityChanged();
       return HttpResponse.json(downloadsDb);
     }
 
@@ -1293,6 +1334,7 @@ export const handlers = [
     const row = downloadsDb.find((d) => d.id === params.task_id);
     if (!row) return apiError(404, "download_not_found", "Download not found.");
     row.status = "paused";
+    activityChanged();
     await delay(100);
     return HttpResponse.json(downloadsDb);
   }),
@@ -1309,6 +1351,7 @@ export const handlers = [
     const idx = downloadsDb.findIndex((d) => d.id === params.task_id);
     if (idx === -1) return apiError(404, "download_not_found", "Download not found.");
     downloadsDb.splice(idx, 1);
+    activityChanged();
     await delay(100);
     return new HttpResponse(null, { status: 204 });
   }),

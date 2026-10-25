@@ -101,6 +101,7 @@ class SyncOut(CamelModel):
     syncing: bool
     paused: bool = False
     parallel_syncs: int = 1
+    auto_clear_completed: bool = False
     jobs: list[SyncJobOut] = Field(default_factory=list)
 
 
@@ -110,7 +111,8 @@ class SyncControlRequest(CamelModel):
 
 
 class SyncConfigUpdate(CamelModel):
-    parallel_syncs: int = Field(ge=1, le=10)
+    parallel_syncs: int | None = Field(default=None, ge=1, le=10)
+    auto_clear_completed: bool | None = Field(default=None, strict=True)
 
 
 class AboutOut(CamelModel):

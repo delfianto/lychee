@@ -3,8 +3,10 @@
 from threading import Lock
 from typing import Literal
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from src.downloads.models import DownloadTask
 from src.media import processing
 from src.media.models import ImageProcessingConfig
 from src.tasks.models import TaskQueueConfig
@@ -17,6 +19,8 @@ _configuration_lock = Lock()
 def _apply(row: TaskQueueConfig | None) -> None:
     queue.set_download_workers(row.download_workers if row else 1)
     queue.set_sync_workers(row.sync_workers if row else 1)
+    queue.auto_clear_downloads = bool(row and row.download_auto_clear_completed)
+    queue.auto_clear_syncs = bool(row and row.sync_auto_clear_completed)
 
 
 def restore_queue(session: Session) -> None:
@@ -24,7 +28,13 @@ def restore_queue(session: Session) -> None:
         _apply(session.get(TaskQueueConfig, "default", populate_existing=True))
 
 
-def save_queue_workers(session: Session, kind: Literal["download", "sync"], count: int) -> None:
+def save_queue_workers(
+    session: Session,
+    kind: Literal["download", "sync"],
+    count: int | None,
+    *,
+    auto_clear_completed: bool | None = None,
+) -> None:
     # Serialize read/modify/write/apply across both settings. Simultaneous first
     # saves create one row and never overwrite the other setting with a stale read.
     with _configuration_lock:
@@ -36,12 +46,27 @@ def save_queue_workers(session: Session, kind: Literal["download", "sync"], coun
                 sync_workers=queue.sync_workers,
             )
             session.add(row)
-        if kind == "download":
+        if kind == "download" and count is not None:
             row.download_workers = count
-        else:
+        elif count is not None:
             row.sync_workers = count
+        if auto_clear_completed is not None:
+            if kind == "download":
+                row.download_auto_clear_completed = auto_clear_completed
+                if auto_clear_completed:
+                    session.execute(delete(DownloadTask).where(DownloadTask.status == "done"))
+            else:
+                row.sync_auto_clear_completed = auto_clear_completed
         session.commit()
         _apply(row)
+
+
+def auto_clear_downloads(session: Session) -> None:
+    """Run after a chapter finishes all stages; serialize with preference changes."""
+    with _configuration_lock:
+        if queue.auto_clear_downloads:
+            session.execute(delete(DownloadTask).where(DownloadTask.status == "done"))
+            session.commit()
 
 
 def get_worker_settings(session: Session) -> WorkerSettingsOut:

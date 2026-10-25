@@ -10,7 +10,7 @@ type TaskOut = components["schemas"]["TaskOut"];
 
 interface TaskEvent {
   event: string; // "<kind>.started" | ".progress" | ".done" | ".failed"
-  task: TaskOut;
+  task?: TaskOut;
 }
 
 type Listener = (payload: TaskEvent) => void;
@@ -38,6 +38,10 @@ export function subscribeTaskStream(fn: Listener): () => void {
 
 function emit(event: string, task: TaskOut): void {
   for (const fn of listeners) fn({ event, task: { ...task } });
+}
+
+export function activityChanged(): void {
+  for (const fn of listeners) fn({ event: "activity.changed" });
 }
 
 let counter = 0;

@@ -42,6 +42,8 @@ class TaskQueue:
     def __init__(self, *, max_workers: int = 1) -> None:
         self._download_workers = clamp_workers(max_workers)
         self._sync_workers = clamp_workers(max_workers)
+        self.auto_clear_downloads = False
+        self.auto_clear_syncs = False
         self._download_executor: ThreadPoolExecutor | None = None
         self._sync_executor: ThreadPoolExecutor | None = None
         self.io_limit = Limiter(self._sync_workers, reentrant=True)
@@ -76,6 +78,8 @@ class TaskQueue:
     def configure(self, session_factory: sessionmaker[Session]) -> None:
         """Bind workers to a session factory (tests point this at their temp engine)."""
         self._session_factory = session_factory
+        self.auto_clear_downloads = False
+        self.auto_clear_syncs = False
 
     def _executor_for_locked(self, kind: str) -> ThreadPoolExecutor:
         # Fixed operation capacity bounds staging/coordination, not I/O concurrency.
@@ -112,6 +116,7 @@ class TaskQueue:
             task.id,
             lambda: tracker.checkpoint(task.id),
             lambda name, done, total, detail: tracker.phase(task, name, done, total, detail),
+            units=lambda remaining, kind: tracker.units(task, remaining, kind),
         )
         token = current_operation.set(operation)
         try:

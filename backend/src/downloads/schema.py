@@ -37,7 +37,9 @@ class DownloadCreate(CamelModel):
 
 class DownloadConfigOut(CamelModel):
     parallel_downloads: int
+    auto_clear_completed: bool = False
 
 
 class DownloadConfigUpdate(CamelModel):
-    parallel_downloads: int = Field(ge=1, le=10)
+    parallel_downloads: int | None = Field(default=None, ge=1, le=10)
+    auto_clear_completed: bool | None = Field(default=None, strict=True)

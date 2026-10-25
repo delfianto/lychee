@@ -59,6 +59,7 @@ def bootstrap() -> None:
     from src.core.persistence.database import SessionLocal
     from src.downloads.downloader import reclaim_orphaned_downloads
     from src.downloads.models import DownloadTask
+    from src.downloads.paths import recover_moves
     from src.downloads.service import _resume_work
     from src.tasks.queue import queue
 
@@ -68,6 +69,7 @@ def bootstrap() -> None:
 
         restore_queue(session)
         configure_processing(session)
+        recover_moves(session)
         reclaimed = reclaim_orphaned_downloads(session)
         # Kick a drain for every series that still has queued chapters so a restart
         # actually continues the queue (reclaim alone only flips status).

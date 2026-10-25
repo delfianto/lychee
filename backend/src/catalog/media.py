@@ -39,7 +39,13 @@ from src.media.thumbnails import (
 )
 from src.media.video import extract_poster_png
 from src.tasks.concurrency import parallel_map
-from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
+from src.tasks.context import (
+    OperationCancelled,
+    checkpoint,
+    current_operation,
+    report_phase,
+    report_work_units,
+)
 
 logger = get_logger(__name__)
 
@@ -551,28 +557,37 @@ def warm_gallery_item_thumbs(
         )
     )
     if not series_ids:
+        report_work_units(0, "folder")
         return 0
     jobs = []
+    remaining: dict[str, int] = {}
     for series_id in series_ids:
         checkpoint()
         book = _first_book(session, series_id)
         if book is not None:
             jobs.extend((series_id, index) for index in range(book.page_count))
+            if book.page_count:
+                remaining[series_id] = book.page_count
     _release_media_reads(session)
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
 
-    def warm(item: tuple[str, int]) -> bool:
+    def warm(item: tuple[str, int]) -> tuple[str, bool]:
         checkpoint()
         with factory() as worker_session:
-            return ensure_gallery_item_thumb(worker_session, store, *item)
+            return item[0], ensure_gallery_item_thumb(worker_session, store, *item)
 
     total = len(jobs)
     report_phase("thumbnails", 0, total, "Generating gallery thumbnails")
+    report_work_units(len(remaining), "folder")
     warmed = 0
-    for completed, generated in enumerate(
+    for completed, (series_id, generated) in enumerate(
         parallel_map(warm, jobs, workers=MAX_IMAGE_WORKERS, limit=thumbnail_limit()), 1
     ):
         warmed += int(generated)
+        remaining[series_id] -= 1
+        if remaining[series_id] == 0:
+            del remaining[series_id]
+            report_work_units(len(remaining), "folder")
         detail = f"Thumbnails {completed}/{total} · {warmed} new"
         report_phase("thumbnails", completed, total, detail)
         if on_progress is not None:

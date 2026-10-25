@@ -9,11 +9,19 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from src.core.exceptions import NotFoundError
+from src.core.persistence.database import DbSession
+from src.tasks import activity
 from src.tasks.events import broker
-from src.tasks.schema import TaskOut
+from src.tasks.schema import ActivityOut, TaskOut
 from src.tasks.tracker import tracker
 
 router = APIRouter(prefix="/api", tags=["tasks"])
+
+
+@router.get("/activity")
+def get_activity(db: DbSession) -> ActivityOut:
+    """Queued + processing chapters and sync/folder jobs; paused work is excluded."""
+    return activity.activity_snapshot(db)
 
 
 @router.get("/tasks")

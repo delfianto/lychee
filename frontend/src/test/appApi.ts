@@ -171,7 +171,7 @@ function seed() {
       recommendedConversionWorkers: 16,
       recommendedThumbnailWorkers: 4,
     },
-    downloadConfig: { parallelDownloads: 1 },
+    downloadConfig: { parallelDownloads: 1, autoClearCompleted: false },
     importConfig: {
       enabled: true,
       quality: 75,
@@ -192,6 +192,7 @@ function seed() {
       syncing: false,
       paused: false,
       parallelSyncs: 1,
+      autoClearCompleted: false,
       jobs: [],
     } as SyncState,
     chapters: [
@@ -239,19 +240,24 @@ class TestEventSource {
     this.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ event, task }) }));
   }
 }
+let taskSequence = 0;
+const emittedTasks = new Map<string, { id: string; status: string }>();
 export function taskEvent(
   kind: string,
   status: "running" | "done" | "failed" = "done",
   extra: Partial<Task> = {},
 ) {
+  const previous = emittedTasks.get(kind);
+  const id = previous?.status === "running" ? previous.id : `test-${kind}-${++taskSequence}`;
   const task: Task = {
-    id: `test-${kind}`,
+    id,
     kind,
     label: `${kind} task`,
     status,
     progress: status === "done" ? 100 : 0,
     ...extra,
   };
+  emittedTasks.set(kind, { id: task.id, status });
   TestEventSource.source.emit(`${kind}.${status === "running" ? "progress" : status}`, task);
 }
 export function useAppApi() {
@@ -556,9 +562,28 @@ export function useAppApi() {
         else return task();
         return json(db.downloads);
       }
+      if (path === "/api/activity") {
+        const downloadChapters = db.downloads.filter((row) =>
+          ["queued", "downloading"].includes(row.status),
+        ).length;
+        const syncJobs = (db.sync.jobs ?? []).filter((job) =>
+          ["queued", "running", "cancelling"].includes(job.status),
+        ).length;
+        return json({
+          downloadChapters,
+          syncJobs,
+          otherJobs: 0,
+          total: downloadChapters + syncJobs,
+        });
+      }
       if (path === "/api/downloads/config") {
         if (method === "PATCH") {
-          db.downloadConfig.parallelDownloads = Number(body.parallelDownloads ?? 1);
+          if (body.parallelDownloads != null)
+            db.downloadConfig.parallelDownloads = Number(body.parallelDownloads);
+          if (body.autoClearCompleted != null)
+            db.downloadConfig.autoClearCompleted = Boolean(body.autoClearCompleted);
+          if (db.downloadConfig.autoClearCompleted)
+            db.downloads = db.downloads.filter((d) => d.status !== "done");
         }
         return json(db.downloadConfig);
       }
@@ -578,7 +603,11 @@ export function useAppApi() {
       }
       if (path === "/api/sync") return method === "GET" ? json(db.sync) : task("sync");
       if (path === "/api/sync/config") {
-        db.sync.parallelSyncs = Number(body.parallelSyncs ?? 1);
+        if (body.parallelSyncs != null) db.sync.parallelSyncs = Number(body.parallelSyncs);
+        if (body.autoClearCompleted != null)
+          db.sync.autoClearCompleted = Boolean(body.autoClearCompleted);
+        if (db.sync.autoClearCompleted)
+          db.sync.jobs = db.sync.jobs?.filter((job) => job.status !== "done");
         return json(db.sync);
       }
       if (path === "/api/sync/control") {

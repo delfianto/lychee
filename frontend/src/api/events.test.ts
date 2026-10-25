@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Task } from "./events";
 
-const { fetchTasks } = vi.hoisted(() => ({ fetchTasks: vi.fn() }));
-vi.mock("./client", () => ({ api: { GET: fetchTasks } }));
+const { fetchTasks, fetchActivity } = vi.hoisted(() => ({
+  fetchTasks: vi.fn(),
+  fetchActivity: vi.fn(),
+}));
+vi.mock("./client", () => ({
+  api: { GET: (path: string) => (path === "/api/activity" ? fetchActivity() : fetchTasks()) },
+}));
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -31,9 +36,86 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
 
 beforeEach(() => {
   fetchTasks.mockResolvedValue({ data: [] });
+  fetchActivity.mockResolvedValue({
+    data: { downloadChapters: 0, syncJobs: 0, otherJobs: 0, total: 0 },
+  });
   vi.resetModules(); // `source`/`tasks` are module-level singletons seeded on connect
   FakeEventSource.instances = [];
   vi.stubGlobal("EventSource", FakeEventSource);
+});
+
+it("removes stale operations absent from the authoritative snapshot without removing newer accepted work", async () => {
+  const { connectTaskStream, refreshTasks, rememberTask, activeTasks } = await import("./events");
+  connectTaskStream();
+  await flushPromises();
+  rememberTask(task("old-server"));
+  let resolve!: (value: { data: Task[] }) => void;
+  fetchTasks.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const pending = refreshTasks();
+  rememberTask(task("just-accepted", { status: "queued" }));
+  resolve({ data: [] });
+  await pending;
+  expect(activeTasks.value.map((item) => item.id)).toEqual(["just-accepted"]);
+});
+
+it("does not revive completed operations when late progress arrives", async () => {
+  const { connectTaskStream, activeTasks, useTasks } = await import("./events");
+  connectTaskStream();
+  const source = FakeEventSource.instances[0]!;
+  source.emit("download.done", task("finished", { status: "done", progress: 100 }));
+  source.emit("download.progress", task("finished", { progress: 99 }));
+  expect(activeTasks.value).toHaveLength(0);
+  expect(useTasks().tasks.value[0]?.status).toBe("done");
+});
+
+it("refreshes chapter/folder counts from unit-change events and discards an outdated response", async () => {
+  vi.useFakeTimers();
+  try {
+    const { connectTaskStream, refreshActivity, activity } = await import("./events");
+    connectTaskStream();
+    await flushPromises();
+    let resolve!: (value: {
+      data: { downloadChapters: number; syncJobs: number; otherJobs: number; total: number };
+    }) => void;
+    fetchActivity.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const pending = refreshActivity();
+    fetchActivity.mockResolvedValueOnce({
+      data: { downloadChapters: 2, syncJobs: 1, otherJobs: 0, total: 3 },
+    });
+    FakeEventSource.instances[0]!.emitRaw(JSON.stringify({ event: "activity.changed" }));
+    await vi.advanceTimersByTimeAsync(100);
+    resolve({ data: { downloadChapters: 10, syncJobs: 4, otherJobs: 0, total: 14 } });
+    await pending;
+    expect(activity.value?.total).toBe(3);
+    FakeEventSource.instances[0]!.emitRaw("null");
+    FakeEventSource.instances[0]!.emitRaw("{}");
+    FakeEventSource.instances[0]!.emitRaw(JSON.stringify({ event: 42, task: task("invalid") }));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retains the last counter during request failures and does not accept a stale active snapshot", async () => {
+  const { connectTaskStream, refreshActivity, refreshTasks, activity, activeTasks } =
+    await import("./events");
+  connectTaskStream();
+  await flushPromises();
+  fetchActivity.mockRejectedValueOnce(new Error("Disconnected"));
+  await refreshActivity();
+  expect(activity.value?.total).toBe(0);
+  const source = FakeEventSource.instances[0]!;
+  source.emit("scan.done", task("completed", { status: "done" }));
+  fetchTasks.mockResolvedValueOnce({ data: [task("completed")] });
+  await refreshTasks();
+  expect(activeTasks.value).toHaveLength(0);
 });
 
 describe("connectTaskStream", () => {

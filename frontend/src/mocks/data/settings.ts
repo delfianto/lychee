@@ -13,7 +13,7 @@ const SERVER_STARTED = Date.now() - 3 * 86_400_000 - 4 * 3_600_000;
 
 export function buildAbout(): AboutOut {
   return {
-    version: "0.1.0-beta.11",
+    version: "0.1.0-beta.12",
     platform: "linux-x86_64 · Python 3.14.0",
     database: "SQLite 3.46 · 214.7 MB",
     started: new Date(SERVER_STARTED).toISOString(),
@@ -39,6 +39,7 @@ export const syncState: SyncOut = {
   syncing: false,
   paused: false,
   parallelSyncs: 2,
+  autoClearCompleted: false,
   jobs: [
     {
       id: "sync-job-1",

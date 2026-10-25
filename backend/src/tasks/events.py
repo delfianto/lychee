@@ -47,3 +47,8 @@ class EventBroker:
 
 
 broker = EventBroker()
+
+
+def activity_changed() -> None:
+    """Invalidate lightweight counts after a committed queue state change."""
+    broker.publish({"event": "activity.changed"})

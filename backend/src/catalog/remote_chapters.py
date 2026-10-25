@@ -17,6 +17,7 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.logging import get_logger
 from src.core.persistence.base_model import utc_now
 from src.downloads.models import DownloadTask
+from src.downloads.paths import reconcile_chapter_volumes
 from src.downloads.provider import ChapterIndexProvider, ChapterListing, RemoteChapter, get_provider
 from src.integrations.models import Provider as ProviderConfig
 from src.tasks.queue import io_slot
@@ -54,6 +55,7 @@ def upsert_provider_chapters(
 ) -> int:
     """Upsert remote feed rows for a series. Returns the number of remotes processed."""
     provider_id = provider or series.provider or "mangadex"
+    reconcile_chapter_volumes(session, series, remotes, provider=provider_id)
     now = utc_now()
     existing = {
         row.provider_chapter_id: row

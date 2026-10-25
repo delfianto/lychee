@@ -19,6 +19,15 @@ class TaskOut(CamelModel):
     detail: str | None = None
     result: dict[str, Any] | None = None
     phases: dict[str, dict[str, int]] = Field(default_factory=dict)
+    work_units: int | None = None
+    work_unit_kind: str | None = None
+
+
+class ActivityOut(CamelModel):
+    download_chapters: int
+    sync_jobs: int
+    other_jobs: int
+    total: int
 
 
 class WorkerSettingsUpdate(ImageProcessingUpdate):

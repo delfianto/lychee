@@ -29,7 +29,10 @@ def test_preferences_persist_independently_and_restore_to_a_fresh_queue(
     client: TestClient, db_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     encode_pool.configure_workers(2, 3)
-    assert client.get("/api/downloads/config").json() == {"parallelDownloads": 1}
+    assert client.get("/api/downloads/config").json() == {
+        "parallelDownloads": 1,
+        "autoClearCompleted": False,
+    }
     assert client.get("/api/sync").json()["parallelSyncs"] == 1
     assert client.patch("/api/downloads/config", json={"parallelDownloads": 10}).status_code == 200
     assert client.patch("/api/sync/config", json={"parallelSyncs": 5}).status_code == 200
@@ -74,7 +77,10 @@ def test_bootstrap_restores_all_budgets_before_download_recovery(
     bootstrap.bootstrap()
     bootstrap.bootstrap()  # Repeated startup must not reset saved preferences.
     assert recovered == [True, True]
-    assert client.get("/api/downloads/config").json() == {"parallelDownloads": 7}
+    assert client.get("/api/downloads/config").json() == {
+        "parallelDownloads": 7,
+        "autoClearCompleted": False,
+    }
     assert client.get("/api/sync").json()["parallelSyncs"] == 4
 
 
@@ -100,7 +106,10 @@ def test_simultaneous_first_saves_do_not_duplicate_rows_or_lose_a_setting(
     client.patch("/api/downloads/config", json={"parallelDownloads": 2})
     assert client.get("/api/sync").json()["parallelSyncs"] == 3
     client.patch("/api/sync/config", json={"parallelSyncs": 6})
-    assert client.get("/api/downloads/config").json() == {"parallelDownloads": 2}
+    assert client.get("/api/downloads/config").json() == {
+        "parallelDownloads": 2,
+        "autoClearCompleted": False,
+    }
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(TaskQueueConfig)) == 1
     assert (row.download_workers, row.sync_workers) == (2, 6)

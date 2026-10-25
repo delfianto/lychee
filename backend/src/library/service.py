@@ -14,7 +14,9 @@ from src.catalog.media import warm_gallery_item_thumbs, warm_library_covers
 from src.catalog.models import Library, Series
 from src.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from src.core.logging import get_logger
+from src.downloads.paths import recover_library_moves
 from src.ingest.scanner import ScanSummary, scan_library
+from src.integrations.sync import sync_jobs
 from src.library.paths import is_provider_path
 from src.library.schema import LibraryCreate, LibraryOut, LibraryUpdate
 from src.media.artifacts import artifact_lock
@@ -155,9 +157,12 @@ def _scan_one_work(library_id: str, storage_root: Path) -> Work:
         # lock does not cover derivatives or consume a shared I/O permit.
         with artifact_lock(f"scan:{library_id}"):
             library = _get(session, library_id)
+            recover_library_moves(session, library)
             summary = scan_library(session, library, on_progress=on_progress)
             session.commit()
         _finish_scan_phases(session, library, storage_root, on_progress)
+        if summary.job_id:
+            sync_jobs.update(summary.job_id, status="done", progress=100)
         return _summary_dict(summary)
 
     return work
@@ -174,6 +179,7 @@ def _scan_all_work(storage_root: Path) -> Work:
         for index, library in enumerate(libraries, start=1):
             checkpoint()
             with artifact_lock(f"scan:{library.id}"):
+                recover_library_moves(session, library)
                 summary = scan_library(session, library)
                 session.commit()
             total.series_added += summary.series_added
@@ -183,6 +189,8 @@ def _scan_all_work(storage_root: Path) -> Work:
             total.lychee_info_applied += summary.lychee_info_applied
             total.lychee_info_warnings.extend(summary.lychee_info_warnings)
             _finish_scan_phases(session, library, storage_root)
+            if summary.job_id:
+                sync_jobs.update(summary.job_id, status="done", progress=100)
             on_progress(round(index / len(libraries) * 100) if libraries else 100, library.name)
         return _summary_dict(total)
 

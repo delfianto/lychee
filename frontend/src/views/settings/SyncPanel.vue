@@ -11,7 +11,12 @@ import OverallProgress from "../../components/OverallProgress.vue";
 import type { SyncState } from "../../api/client";
 import { onTaskDone, onTaskEvent } from "../../api/events";
 import { relativeTime } from "../../api/format";
-import { controlSync, fetchSyncState, runSync } from "../../api/settingsQueries";
+import {
+  controlSync,
+  fetchSyncState,
+  runSync,
+  setSyncAutoClearCompleted,
+} from "../../api/settingsQueries";
 import { toast } from "../../lib/toast";
 
 interface SyncJobRow {
@@ -33,6 +38,25 @@ const sync = reactive({
   paused: false,
 });
 const jobs = ref<SyncJobRow[]>([]);
+const autoClear = ref(false);
+const autoClearLoaded = ref(false);
+const savingAutoClear = ref(false);
+
+async function toggleAutoClear(event: Event): Promise<void> {
+  const previous = autoClear.value;
+  autoClear.value = (event.target as HTMLInputElement).checked;
+  savingAutoClear.value = true;
+  try {
+    const updated = await setSyncAutoClearCompleted(autoClear.value);
+    autoClear.value = updated.autoClearCompleted;
+    applySyncState(updated);
+  } catch (e) {
+    autoClear.value = previous;
+    toast(e instanceof Error ? e.message : "Couldn't save sync settings", "error");
+  } finally {
+    savingAutoClear.value = false;
+  }
+}
 
 const statusLabel: Record<string, string> = {
   queued: "Queued",
@@ -77,6 +101,8 @@ const hasFinished = computed(() =>
 
 function applySyncState(data: SyncState | null): void {
   if (!data) return;
+  if (!savingAutoClear.value) autoClear.value = data.autoClearCompleted;
+  autoClearLoaded.value = true;
   sync.lastSync = data.lastSync ? relativeTime(data.lastSync) : "never";
   sync.newChapters = data.newChapters;
   sync.syncing = data.syncing;
@@ -185,6 +211,21 @@ onMounted(() => {
           Sync jobs
         </h3>
         <div class="flex flex-wrap items-center gap-1">
+          <label
+            class="mr-2 flex cursor-pointer items-center gap-2 text-xs"
+            title="Remove successful entries automatically. Failed and cancelled entries stay visible."
+          >
+            <input
+              type="checkbox"
+              role="switch"
+              class="toggle toggle-sm toggle-primary"
+              aria-label="Auto-clear completed sync jobs"
+              :checked="autoClear"
+              :disabled="!autoClearLoaded || savingAutoClear"
+              @change="toggleAutoClear"
+            />
+            Auto-clear completed
+          </label>
           <button
             class="btn btn-ghost btn-sm gap-1"
             :disabled="!hasRunningOrQueued"

@@ -8,7 +8,7 @@ A download runs in two phases so it can be paused and resumed:
 * :func:`run_download_queue` drains those rows one at a time — for each, fetch
   page bytes from the provider, encode each to AVIF (discarding the original),
   pack them into the **manga library** as
-  ``{MangaDex UUID}/Vol.XX/Ch.YY.cbz`` for MangaDex series, and create the Chapter.
+  ``{MangaDex UUID}/[Vol.XX/]Ch.YY.cbz`` for MangaDex series, and create the Chapter.
 
 Downloads require an enabled ``kind=manga`` library with a real filesystem path.
 """
@@ -19,7 +19,7 @@ import re
 import threading
 from collections.abc import Callable
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from time import monotonic
@@ -30,11 +30,12 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from src.catalog.media import generate_series_cover, write_series_cover
-from src.catalog.models import Book, Chapter, Library, Series
+from src.catalog.models import Book, Chapter, Library, ProviderChapter, Series
 from src.core.exceptions import BadRequestError
 from src.core.logging import get_logger
 from src.downloads.cancel import DownloadCancelled, check_cancelled, is_cancelled
 from src.downloads.models import DownloadTask
+from src.downloads.paths import hold_library_lock, recover_library_moves, volume_directory
 from src.downloads.pipeline import FetchProgress, prefetch_pages
 from src.downloads.provider import (
     DiskDownloadProvider,
@@ -49,7 +50,9 @@ from src.media.encode_pool import encode_pages
 from src.media.staging import workspace
 from src.media.storage import thumbnail_root
 from src.media.thumbnails import ThumbnailStore
+from src.tasks.config import auto_clear_downloads
 from src.tasks.context import OperationCancelled, current_operation, report_phase
+from src.tasks.events import activity_changed
 from src.tasks.queue import queue
 
 logger = get_logger(__name__)
@@ -128,12 +131,6 @@ def _series_dir_name(series: Series) -> str:
     return _safe_fs_name(series.title, fallback=series.id)
 
 
-def _volume_dir_name(volume: int | None) -> str:
-    if volume is None:
-        return "No Volume"
-    return f"Vol.{volume:02d}"
-
-
 def _chapter_file_name(number: str, title: str | None = None) -> str:
     base = "Oneshot" if number == "Oneshot" else f"Ch.{_safe_fs_name(number)}"
     if title:
@@ -142,11 +139,11 @@ def _chapter_file_name(number: str, title: str | None = None) -> str:
 
 
 def chapter_path_rel(series: Series, remote: RemoteChapter) -> str:
-    """Relative path under the manga library: ``Series Folder/Vol.XX/Ch.YY.cbz``."""
+    """Use a volume folder only when the provider assigns a volume."""
     return "/".join(
         [
             _series_dir_name(series),
-            _volume_dir_name(remote.volume),
+            *([directory] if (directory := volume_directory(remote.volume)) else []),
             _chapter_file_name(remote.number, remote.title).removesuffix(".cbz")
             + (
                 f" [{_safe_fs_name(remote.provider_chapter_id)[:8]}]"
@@ -258,8 +255,6 @@ def _download_chapter(
     }
     phase("fetching", 0, 0)
 
-    rel = chapter_path_rel(series, remote)
-    dest = Path(library.path) / rel
     with workspace(Path(library.path), prefix="download") as work:
 
         def fetch_sources():
@@ -316,6 +311,22 @@ def _download_chapter(
         if page_count == 0:
             raise BadRequestError("The provider returned no readable pages")
         check_cancelled(series.id)
+        # Encoding may outlive a metadata refresh. Release progress writes before
+        # waiting on the scanner/reconciler, and use the current volume at publish.
+        session.commit()
+        hold_library_lock(session, library.id)
+        recover_library_moves(session, library)
+        latest = session.execute(
+            select(ProviderChapter.volume).where(
+                ProviderChapter.series_id == series.id,
+                ProviderChapter.provider == provider.id,
+                ProviderChapter.provider_chapter_id == remote.provider_chapter_id,
+            )
+        ).first()
+        if latest is not None:
+            remote = replace(remote, volume=latest[0])
+        rel = chapter_path_rel(series, remote)
+        dest = Path(library.path) / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(dest)  # same library filesystem: publish the complete archive atomically
 
@@ -436,6 +447,7 @@ def plan_downloads(
         )
         queued += 1
     session.commit()
+    activity_changed()
     return queued
 
 
@@ -550,8 +562,10 @@ def run_download_queue(
                     row.phase = None
                     row.detail = None
                     session.commit()
+                    activity_changed()
                     processed += 1
                     chapter_progress(100, row.chapter_label)
+                    auto_clear_downloads(session)
                 except OperationCancelled:
                     session.rollback()
                     session.execute(
@@ -560,6 +574,7 @@ def run_download_queue(
                         .values(status="cancelled", error="cancelled", phase=None, detail=None)
                     )
                     session.commit()
+                    activity_changed()
                     raise
                 except Exception as exc:  # noqa: BLE001 - record failure and keep draining
                     # Failed flushes invalidate the transaction. Roll back before
@@ -571,6 +586,7 @@ def run_download_queue(
                         .values(status="failed", error=str(exc), phase=None, detail=None)
                     )
                     session.commit()
+                    activity_changed()
                     context = None  # rollback expires cached ORM objects
         check_series()
         return processed

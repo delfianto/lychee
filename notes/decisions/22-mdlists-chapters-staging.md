@@ -63,6 +63,8 @@ For a manga library rooted at `/library/manga`:
 ```text
 /library/manga/temp/download-<job>/    # incomplete source pages + archive
 /library/manga/<MangaDex UUID>/Vol.01/Ch.1.cbz # completed archive
+/library/manga/<MangaDex UUID>/Ch.2.cbz        # volume unknown
+/library/manga/<MangaDex UUID>/Oneshot [<chapter-id-prefix>].cbz # unnumbered, no volume
 ```
 
 For converted imports under the storage root `/library`:
@@ -80,6 +82,39 @@ reverted in favor of stable provider identity. Existing title folders are not mo
 or migrated; their contents must be cleared and downloaded again when resetting a
 library. Scans index local originals in place. Transcoded imports use internal
 Lychee series IDs and source-derived book keys; these are not MangaDex identifiers.
+
+### Volume reconciliation
+
+`downloads/paths.py` reconciles downloaded MangaDex chapters by provider chapter
+UUID whenever the remote feed is refreshed (sync, chapter check, or download
+planning). A null volume means the archive belongs directly under the series
+folder; a numbered volume means `Vol.XX/`. Existing `No Volume/` archives are
+flattened by the same pass. Volume corrections in either direction are supported;
+absence from a feed does not change a local chapter. A oneshot follows an explicit
+provider volume if one exists. Filenames stay unchanged during reorganization.
+
+Only provider-owned, single-chapter CBZs in the managed layout are eligible.
+Arbitrary scanned containers and shared multi-chapter books are never moved.
+`Book.path_rel` and `Chapter.volume` change together while Book/Chapter IDs, reading
+progress, and image caches remain intact. Neither downloads nor encoding nor
+thumbnail generation is repeated. Scanning preserves the logical metadata of an
+existing provider chapter, including its oneshot label.
+
+Publication, reconciliation, and scans share the library's index lock, retained
+through the database transaction. Downloads hold it only after encoding; they
+re-read the current indexed volume before publishing. Queued/paused/failed rows
+also receive updated volume metadata. File operations use the shared I/O budget.
+
+Moves create a hard link to the existing CBZ without overwriting a destination.
+Both paths remain readable until commit; commit removes the original, rollback
+removes the new link. A flushed, atomically published journal under the hidden
+`.lychee-moves/` directory records both paths and the archive's filesystem identity.
+Startup recovers journals before resuming downloads; scans and later moves recover
+them before indexing. Recovery follows the committed Book path and refuses to
+delete a replaced file. Unresolved journals stop that operation rather than letting
+a scan index duplicate aliases. The filesystem must support same-filesystem hard
+links; failures leave the source archive intact and fail the sync for retry.
+Empty old volume folders are removed. No database migration or API change is needed.
 
 ## Coordinated pipeline follow-up
 

@@ -1244,6 +1244,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Activity
+         * @description Queued + processing chapters and sync/folder jobs; paused work is excluded.
+         */
+        get: operations["get_activity_api_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1514,6 +1534,17 @@ export interface components {
             started: string;
             /** Uptimeseconds */
             uptimeSeconds: number;
+        };
+        /** ActivityOut */
+        ActivityOut: {
+            /** Downloadchapters */
+            downloadChapters: number;
+            /** Syncjobs */
+            syncJobs: number;
+            /** Otherjobs */
+            otherJobs: number;
+            /** Total */
+            total: number;
         };
         /** AliasCreate */
         AliasCreate: {
@@ -1818,11 +1849,18 @@ export interface components {
         DownloadConfigOut: {
             /** Paralleldownloads */
             parallelDownloads: number;
+            /**
+             * Autoclearcompleted
+             * @default false
+             */
+            autoClearCompleted: boolean;
         };
         /** DownloadConfigUpdate */
         DownloadConfigUpdate: {
             /** Paralleldownloads */
-            parallelDownloads: number;
+            parallelDownloads?: number | null;
+            /** Autoclearcompleted */
+            autoClearCompleted?: boolean | null;
         };
         /**
          * DownloadCreate
@@ -2337,7 +2375,9 @@ export interface components {
         /** SyncConfigUpdate */
         SyncConfigUpdate: {
             /** Parallelsyncs */
-            parallelSyncs: number;
+            parallelSyncs?: number | null;
+            /** Autoclearcompleted */
+            autoClearCompleted?: boolean | null;
         };
         /** SyncControlRequest */
         SyncControlRequest: {
@@ -2396,6 +2436,11 @@ export interface components {
              * @default 1
              */
             parallelSyncs: number;
+            /**
+             * Autoclearcompleted
+             * @default false
+             */
+            autoClearCompleted: boolean;
             /** Jobs */
             jobs?: components["schemas"]["SyncJobOut"][];
         };
@@ -2432,6 +2477,10 @@ export interface components {
                     [key: string]: number;
                 };
             };
+            /** Workunits */
+            workUnits?: number | null;
+            /** Workunitkind */
+            workUnitKind?: string | null;
         };
         /** TaxonomyCreate */
         TaxonomyCreate: {
@@ -5082,6 +5131,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_activity_api_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
                 };
             };
         };

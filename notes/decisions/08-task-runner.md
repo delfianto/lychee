@@ -49,6 +49,25 @@ events on reconnect or return to a visible tab. `POST /api/tasks/{id}/cancel` re
 cancellation of the entire operation. The UI keeps cancelling work visible until
 its child workers stop.
 
+The navbar badge counts concrete work via GET `/api/activity`, independently of
+the grouped operations shown in its dropdown. `downloadChapters` counts persisted
+queued/downloading chapter rows once, including encoding and thumbnails, regardless
+of how many parent drain operations reference them. `syncJobs` counts outstanding
+MangaDex series checks and gallery work folders. Gallery tasks publish `workUnits`
+and `workUnitKind`; a folder remains outstanding through covers and its final item
+thumbnail, then decrements once. Files/images within a folder and the parent library
+scan are not extra jobs. Paused, successful, failed, and cancelled work is excluded;
+cooperative cancellation stays counted until the workers stop. `otherJobs` covers
+discovery/preparation and other operations without concrete child units yet.
+
+Committed chapter-state changes and sync/folder updates publish lightweight
+`activity.changed` invalidations over the shared SSE stream. The browser coalesces
+these into count requests rather than loading full queues or polling. Reconnect,
+tab focus, and opening the activity dropdown refresh authoritative snapshots.
+Tasks absent from a snapshot are removed unless newer events arrived during the
+request, and late progress cannot revive a terminal task. The sync log's history
+cap prunes finished entries only; large active queues retain every job.
+
 The existing sync job log links to the owning task and exposes its phase counters.
 Cancelling a scan/account job cancels that owner; cancel-all also reaches queued
 operations. Individual chapter-check jobs can still be cancelled independently.
@@ -121,6 +140,21 @@ poster extraction polls the operation state and kills/reaps ffmpeg on cancellati
 The operation queue, task history, and sync job log are not persistent. Download
 rows are persisted; startup recovery requeues orphaned downloading rows. There is
 no scheduler, priority queue, retry policy, or durable generic job table.
+
+Downloads and Sync each expose an independent **Auto-clear completed** toggle,
+off by default. Both save immediately to boolean columns on `task_queue_config`
+and restore before startup download recovery. PATCH `/api/downloads/config` and
+`/api/sync/config` accept `autoClearCompleted` independently of the compatibility
+worker fields, so toggling cleanup cannot reset a worker budget. Enabling clears
+existing successful entries; failures, cancellations, paused, and active entries
+remain visible. Download cleanup deletes queue history only, after encoding and
+thumbnails complete; Book/Chapter records and files remain intact. Sync/scan/import
+cleanup runs in the job manager; scan/import owners retain their rows until the
+whole operation's finalizer runs. The browser need not remain open. Generic task
+history in the background activity modal retains its existing bounded policy.
+Migration `c6a9f024e318` adds both preferences with false defaults and preserves
+existing worker settings. Manually clearing completed entries keeps its existing
+behavior (including failed/cancelled sync entries).
 
 The originally proposed SQLite task database, leases, and APScheduler were never
 implemented. Bounded in-process work remains the intended design.
