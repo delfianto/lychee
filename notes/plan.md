@@ -45,6 +45,15 @@
 - [x] Tune native progress commits and bound grid candidates before display aggregates;
       three final benchmark runs per engine, 412 backend tests on each, native CI gate.
 
+## Catalog query optimization (2026-10-25)
+
+- [x] Measured scalar/grouped query strategies for SQLite/native Turso, scoped
+      display statistics, covering/order indexes with an Alembic migration and
+      native startup checkpoint. No persisted summary cache or API change.
+- [x] Result-checked historical comparisons, three NVMe runs, 10,000-work scaling,
+      home rails, index storage/write costs and full download regression runs.
+      [Results and reproduction](performance/catalog/README.md).
+
 ## Remaining work (accurate — the genuine gaps)
 1. **Functional (user-facing, small backend):**
    - [x] `PATCH /api/series/{id}` — favorite / library-status / personal rating now persist (migration
