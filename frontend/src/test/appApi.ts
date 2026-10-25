@@ -304,7 +304,7 @@ export function useAppApi() {
         return json({
           stats: { series: db.series.length, unreadChapters: 2, reading: 1 },
           continueReading: db.series.filter((s) => s.kind !== "gallery"),
-          readingList: db.series.filter((s) => s.libraryStatus === "reading").slice(0, 12),
+          readingList: db.series.filter((s) => s.libraryStatus === "reading").slice(0, 24),
           recentUpdates: db.series.slice(0, 1).map((series) => ({
             series,
             volume: 1,
@@ -312,11 +312,14 @@ export function useAppApi() {
             updatedAt: new Date().toISOString(),
           })),
           recentlyAdded: db.series.filter((s) => kinds.includes(s.kind ?? "manga")),
+          rediscover: [],
+          quickReads: [],
+          cursors: {},
         });
       }
       if (path === "/api/libraries/summary")
         return json([
-          { key: "manga", title: "Manga", sizeGb: 1.5 },
+          { key: "manga", title: "Manga", sizeGb: db.series.length ? 1.5 : 0 },
           { key: "empty", title: "Empty", sizeGb: 0 },
         ]);
       if (path === "/api/creators") {
@@ -377,6 +380,10 @@ export function useAppApi() {
           items: db.series.filter(
             (s) =>
               (!kinds || kinds.includes(s.kind ?? "manga")) &&
+              (!url.searchParams.has("collectionId") ||
+                db.collections
+                  .find((c) => c.id === url.searchParams.get("collectionId"))
+                  ?.seriesIds.includes(s.id)) &&
               (!url.searchParams.has("favorite") ||
                 s.favorite === (url.searchParams.get("favorite") === "true")),
           ),

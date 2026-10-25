@@ -274,6 +274,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dashboard/{section}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard Section
+         * @description Load the next page of one Home shelf without reloading the dashboard.
+         */
+        get: operations["dashboard_section_api_dashboard__section__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/libraries/summary": {
         parameters: {
             query?: never;
@@ -1816,13 +1836,21 @@ export interface components {
         DashboardOut: {
             stats: components["schemas"]["DashboardStats"];
             /** Continuereading */
-            continueReading: components["schemas"]["SeriesOut"][];
+            continueReading: components["schemas"]["HomeSeriesOut"][];
             /** Readinglist */
-            readingList: components["schemas"]["SeriesOut"][];
+            readingList: components["schemas"]["HomeSeriesOut"][];
             /** Recentupdates */
             recentUpdates: components["schemas"]["RecentUpdateOut"][];
             /** Recentlyadded */
-            recentlyAdded: components["schemas"]["SeriesOut"][];
+            recentlyAdded: components["schemas"]["HomeSeriesOut"][];
+            /** Rediscover */
+            rediscover?: components["schemas"]["HomeSeriesOut"][];
+            /** Quickreads */
+            quickReads?: components["schemas"]["HomeSeriesOut"][];
+            /** Cursors */
+            cursors?: {
+                [key: string]: string | null;
+            };
         };
         /** DashboardStats */
         DashboardStats: {
@@ -1961,6 +1989,86 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HomeSectionOut */
+        HomeSectionOut: {
+            /** Items */
+            items?: components["schemas"]["HomeSeriesOut"][];
+            /** Updates */
+            updates?: components["schemas"]["RecentUpdateOut"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
+        /** HomeSeriesOut */
+        HomeSeriesOut: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Coverurl */
+            coverUrl: string;
+            /** Authors */
+            authors: string[];
+            /** Artists */
+            artists: string[];
+            /** Status */
+            status: string;
+            /** Contentrating */
+            contentRating: string;
+            /** Demographic */
+            demographic: string;
+            /** Tags */
+            tags: components["schemas"]["TagOut"][];
+            /** Chaptercount */
+            chapterCount: number;
+            /** Unreadcount */
+            unreadCount: number;
+            /** Year */
+            year?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Lastreadchapter */
+            lastReadChapter?: number | null;
+            /** Totalchapters */
+            totalChapters?: number | null;
+            /** Origincountry */
+            originCountry?: string | null;
+            /** Rating */
+            rating?: number | null;
+            /** Userrating */
+            userRating?: number | null;
+            /**
+             * Favorite
+             * @default false
+             */
+            favorite: boolean;
+            /** Kind */
+            kind?: string | null;
+            /** Imagecount */
+            imageCount?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Characters */
+            characters?: string[] | null;
+            /** Librarystatus */
+            libraryStatus?: string | null;
+            /** Sourceurl */
+            sourceUrl?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /**
+             * Availablechapters
+             * @default 0
+             */
+            availableChapters: number;
+            /** Chapterssyncedat */
+            chaptersSyncedAt?: string | null;
+            /** Pagecount */
+            pageCount?: number | null;
+            /** Resumechapterid */
+            resumeChapterId?: string | null;
+            /** Resumechapterlabel */
+            resumeChapterLabel?: string | null;
         };
         /** ImageProcessingOut */
         ImageProcessingOut: {
@@ -2692,6 +2800,7 @@ export interface operations {
             query?: {
                 kind?: string | null;
                 libraryId?: string | null;
+                collectionId?: string | null;
                 shelf?: string | null;
                 favorite?: boolean | null;
                 q?: string | null;
@@ -3163,6 +3272,10 @@ export interface operations {
         parameters: {
             query?: {
                 recentlyAddedKinds?: string | null;
+                limit?: number;
+                discoveryKind?: "manga" | "comic";
+                seed?: string | null;
+                following?: boolean;
             };
             header?: never;
             path?: never;
@@ -3177,6 +3290,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_section_api_dashboard__section__get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                discoveryKind?: "manga" | "comic";
+                seed?: string | null;
+                recentlyAddedKinds?: string | null;
+                following?: boolean;
+            };
+            header?: never;
+            path: {
+                section: "continueReading" | "recentUpdates" | "readingList" | "recentlyAdded" | "rediscover" | "quickReads";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeSectionOut"];
                 };
             };
             /** @description Validation Error */

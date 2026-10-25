@@ -900,7 +900,46 @@ for (const seed of FILLER) {
   seed.description = pick(rng, GENERIC_BLURBS[seed.kind]);
 }
 
-export const seriesSeeds: SeriesSeed[] = [...FLAGSHIPS, ...FILLER];
+const HOME_SHORT_READS: SeriesSeed[] = [
+  {
+    ...FLAGSHIPS[0]!,
+    id: "paper-lantern",
+    title: "Paper Lantern",
+    authors: ["Mio Hayashi"],
+    artists: ["Mio Hayashi"],
+    status: "completed",
+    tagIds: ["genre-romance", "format-oneshot"],
+    contentRating: "safe",
+    demographic: "josei",
+    description: "A chance meeting at the last lantern festival before the old town disappears.",
+    libraryStatus: "plan_to_read",
+    chapterCount: 1,
+    availableChapters: 0,
+    unreadCount: 1,
+    lastReadChapter: null,
+    totalChapters: 1,
+  },
+  {
+    ...FLAGSHIPS[0]!,
+    id: "last-orbit",
+    title: "Last Orbit",
+    kind: "comic",
+    authors: ["Robin Vale"],
+    artists: ["Jules Reed"],
+    status: "completed",
+    tagIds: ["genre-sci-fi"],
+    contentRating: "safe",
+    demographic: "none",
+    description: "One final repair job aboard a station already marked for demolition.",
+    libraryStatus: "plan_to_read",
+    chapterCount: 2,
+    availableChapters: 0,
+    unreadCount: 2,
+    lastReadChapter: null,
+    totalChapters: 2,
+  },
+];
+export const seriesSeeds: SeriesSeed[] = [...FLAGSHIPS, ...HOME_SHORT_READS, ...FILLER];
 export const seriesCatalog: SeriesOut[] = seriesSeeds.map(toSeriesOut);
 
 export const DOWNLOAD_DEMO_SERIES_IDS = ["mecha-vandal-zero", "bloodmoon-apothecary"];

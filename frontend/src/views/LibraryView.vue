@@ -1,7 +1,19 @@
 <script setup lang="ts">
-import { ChevronUp, Grid2x2, LayoutGrid, List, Search, SlidersHorizontal, X } from "@lucide/vue";
+import {
+  ChevronUp,
+  Grid2x2,
+  LayoutGrid,
+  List,
+  Search,
+  SlidersHorizontal,
+  Pin,
+  X,
+} from "@lucide/vue";
 import { type Component, computed, onActivated, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { storeToRefs } from "pinia";
+import { useHome } from "../stores/home";
+import { usePresets, presetFilters, type BrowsePreset } from "../stores/presets";
 
 import { buildLibraryQuery, fetchTagGroups, type TagGroup, useSeriesList } from "../api/queries";
 import FilterPanel from "../components/FilterPanel.vue";
@@ -12,18 +24,15 @@ import { type Density, useDensity } from "../lib/density";
 import { metadataBrowseFilters } from "../lib/metadataBrowse";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import { toast } from "../lib/toast";
-import type {
-  BrowseFilters,
-  ContentRating,
-  Demographic,
-  LibraryStatus,
-  PublicationStatus,
-} from "../types";
+import type { BrowseFilters, LibraryStatus } from "../types";
 
 defineOptions({ name: "LibraryView" });
 
 const props = defineProps<{ libraryKey: string }>();
 const route = useRoute();
+const home = useHome();
+const presetStore = usePresets();
+const { presets } = storeToRefs(presetStore);
 
 // --- Density -------------------------------------------------------------
 const { density } = useDensity();
@@ -96,6 +105,7 @@ watch(
       route.query.demographics,
       route.query.pubStatus,
       route.query.tags,
+      route.query.preset,
     ]);
     if (signature === lastMetadataQuery) return;
     const selection = metadataBrowseFilters(route.query);
@@ -104,11 +114,12 @@ watch(
       selection.demographics.size ||
       selection.statuses.size ||
       Object.keys(selection.tags).length;
-    if (hasSelection || lastMetadataQuery !== undefined) {
+    const preset = presets.value.find((p) => p.name === route.query.preset);
+    if (hasSelection || preset || lastMetadataQuery !== undefined) {
       activeTab.value = "all";
       resetFilters();
       filters.tagMode = "and";
-      Object.assign(filters, selection);
+      Object.assign(filters, preset ? presetFilters(preset) : selection);
     }
     lastMetadataQuery = signature;
   },
@@ -181,35 +192,11 @@ const activeChips = computed(() => {
 });
 
 // --- Presets (persisted, shared across libraries) ------------------------
-interface Preset {
-  name: string;
-  query: string;
-  tags: Record<string, "include" | "exclude">;
-  tagMode: "and" | "or";
-  author?: string;
-  artist?: string;
-  ratings: ContentRating[];
-  demographics: Demographic[];
-  statuses: PublicationStatus[];
-  readStates: string[];
-}
-const PRESETS_KEY = "lychee.presets";
-function loadPresets(): Preset[] {
-  try {
-    return JSON.parse(localStorage.getItem(PRESETS_KEY) ?? "[]") as Preset[];
-  } catch {
-    return [];
-  }
-}
-const presets = ref<Preset[]>(loadPresets());
 const presetName = ref("");
-function persistPresets(): void {
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets.value));
-}
 function savePreset(): void {
   const name = presetName.value.trim();
   if (!name) return;
-  const p: Preset = {
+  const p: BrowsePreset = {
     name,
     query: filters.query,
     ...(filters.author ? { author: filters.author } : {}),
@@ -221,27 +208,24 @@ function savePreset(): void {
     statuses: [...filters.statuses],
     readStates: [...filters.readStates],
   };
-  const idx = presets.value.findIndex((x) => x.name === name);
-  if (idx >= 0) presets.value[idx] = p;
-  else presets.value.push(p);
-  persistPresets();
+  presetStore.save(p);
   toast(`Saved preset “${name}”`);
   presetName.value = "";
 }
-function applyPreset(p: Preset): void {
-  filters.query = p.query;
-  filters.author = p.author ?? "";
-  filters.artist = p.artist ?? "";
-  filters.tags = { ...p.tags };
-  filters.tagMode = p.tagMode;
-  filters.ratings = new Set(p.ratings);
-  filters.demographics = new Set(p.demographics);
-  filters.statuses = new Set(p.statuses);
-  filters.readStates = new Set(p.readStates);
+function applyPreset(p: BrowsePreset): void {
+  Object.assign(filters, presetFilters(p));
 }
 function deletePreset(name: string): void {
-  presets.value = presets.value.filter((p) => p.name !== name);
-  persistPresets();
+  presetStore.remove(name);
+}
+function pinPreset(p: BrowsePreset): void {
+  if (props.libraryKey !== "manga" && props.libraryKey !== "comics") return;
+  home.pin({
+    id: `filter:${props.libraryKey}:${p.name}`,
+    type: "filter",
+    name: p.name,
+    libraryKey: props.libraryKey,
+  });
 }
 
 // --- Data (server-filtered + cursor-paginated) ---------------------------
@@ -404,6 +388,17 @@ watch(
         @click="applyPreset(p)"
       >
         {{ p.name }}
+        <button
+          v-if="libraryKey === 'manga' || libraryKey === 'comics'"
+          class="ml-1 hover:text-primary"
+          :aria-label="`${home.preferences.pins.some((pin) => pin.id === `filter:${libraryKey}:${p.name}`) ? 'Unpin' : 'Pin'} ${p.name} ${home.preferences.pins.some((pin) => pin.id === `filter:${libraryKey}:${p.name}`) ? 'from' : 'to'} Home`"
+          :aria-pressed="
+            home.preferences.pins.some((pin) => pin.id === `filter:${libraryKey}:${p.name}`)
+          "
+          @click.stop="pinPreset(p)"
+        >
+          <Pin class="size-3" />
+        </button>
         <button
           class="opacity-60 hover:opacity-100"
           aria-label="Delete preset"

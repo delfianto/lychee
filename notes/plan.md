@@ -115,9 +115,14 @@
 - [x] **Shell/nav** — top-nav `AppShell` (Home · Reading · Favorites · Manga · Comics · Gallery ·
       Lists), icon-only below `xl`, mobile drawer, static brand, search → `/search`, random dice
       (`/api/series`), light/dark toggle, settings↔back, 404 route.
-- [x] **Home dashboard** — stats + per-library storage · continue-reading · reading-list shelf · recent updates · recently
-      added — all from `/api/dashboard` + `/api/libraries/summary`. Continue-reading titles link to
-      the work detail page alongside the reader button.
+- [x] **Home dashboard** — compact stats/storage; paginated continue-reading, reading-list,
+      recent updates and recently added shelves (24 initially, load more independently).
+      Continue includes local/provider progress with explicit next-chapter links; updates include
+      cached provider publication dates and an optional reading-list/favorites scope. Rediscover
+      and Quick reads add stable shuffled unread picks and short, locally available works.
+      Customize Home hides/reorders shelves; lists and saved Manga/Comic filters can be pinned.
+      Browser preferences persist, offscreen task refreshes are deferred, and returning retains
+      loaded shelf depth. `/api/dashboard` + `/api/dashboard/{section}` + `/api/libraries/summary`.
 - [x] **Library** (`LibraryView`) — 3 density modes, shelf tabs, search + `FilterPanel` (tags from
       `/api/taxonomy`), saved presets (localStorage), active-filter chips, **server** filter/sort/
       cursor-pagination via `/api/series`. Grids wait for pending detail saves; per-work edits are

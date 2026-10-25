@@ -3,16 +3,22 @@ import { RouterLink } from "vue-router";
 
 import type { RecentUpdate } from "../types";
 import CoverImage from "./CoverImage.vue";
+import ShelfRail from "./ShelfRail.vue";
 
-defineProps<{ updates: RecentUpdate[] }>();
+defineProps<{ updates: RecentUpdate[]; rail?: boolean }>();
 </script>
 
 <template>
-  <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+  <component
+    :is="rail ? ShelfRail : 'div'"
+    v-bind="rail ? { itemCount: updates.length, stacked: true } : {}"
+    :class="rail ? undefined : 'grid gap-2 sm:grid-cols-2 lg:grid-cols-3'"
+  >
     <RouterLink
       v-for="(u, i) in updates"
       :key="i"
       :to="`/series/${u.series.id}`"
+      :class="rail ? 'w-72 sm:w-80' : undefined"
       class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2 transition hover:bg-base-300/40"
     >
       <CoverImage
@@ -33,5 +39,5 @@ defineProps<{ updates: RecentUpdate[] }>();
         <p class="text-xs text-base-content/50">{{ u.updatedAt }}</p>
       </div>
     </RouterLink>
-  </div>
+  </component>
 </template>

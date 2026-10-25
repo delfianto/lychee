@@ -104,7 +104,7 @@ def test_dashboard_reading_list_without_local_chapters(
     assert data["continueReading"] == []
     assert data["recentUpdates"] == []
     assert data["stats"]["reading"] == 15
-    assert [s["title"] for s in data["readingList"]] == [f"Reading {i:02}" for i in range(12)]
+    assert [s["title"] for s in data["readingList"]] == [f"Reading {i:02}" for i in range(15)]
     assert all(s["chapterCount"] == 0 for s in data["readingList"])
 
 
