@@ -33,6 +33,7 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
+          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --locked --extra dev
@@ -80,6 +81,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
+          python-version: "3.14"
       - name: Install dependencies
         run: uv sync --locked --extra dev
       - name: Format and lint
