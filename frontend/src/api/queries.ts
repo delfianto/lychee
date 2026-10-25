@@ -6,7 +6,15 @@ import { rememberTask } from "./events";
 import { computed, ref } from "vue";
 
 import { createStaleGuard } from "../lib/staleGuard";
-import type { BrowseFilters, Chapter, RecentUpdate, Series, Tag, VolumeGroup } from "../types";
+import type {
+  BrowseFilters,
+  Chapter,
+  HomeSeries,
+  RecentUpdate,
+  Series,
+  Tag,
+  VolumeGroup,
+} from "../types";
 import {
   type Chapter as ApiChapter,
   type Series as ApiSeries,
@@ -17,7 +25,7 @@ import {
 import { relativeTime } from "./format";
 import type { paths } from "./schema";
 
-function toSeries(s: ApiSeries): Series {
+export function toSeries(s: ApiSeries): Series {
   return {
     id: s.id,
     title: s.title,
@@ -50,7 +58,7 @@ function toSeries(s: ApiSeries): Series {
   };
 }
 
-function toUpdate(u: ApiUpdate): RecentUpdate {
+export function toUpdate(u: ApiUpdate): RecentUpdate {
   return {
     series: toSeries(u.series),
     volume: u.volume,
@@ -123,31 +131,80 @@ export async function deleteChapterLocal(chapterId: string): Promise<DeleteChapt
 
 export interface DashboardData {
   stats: { series: number; unreadChapters: number; reading: number };
-  continueReading: Series[];
-  readingList: Series[];
+  continueReading: HomeSeries[];
+  readingList: HomeSeries[];
   recentUpdates: RecentUpdate[];
-  recentlyAdded: Series[];
+  recentlyAdded: HomeSeries[];
+  rediscover: HomeSeries[];
+  quickReads: HomeSeries[];
+  cursors: Record<string, string | null>;
+}
+
+export function toHomeSeries(
+  s: import("./schema").components["schemas"]["HomeSeriesOut"],
+): HomeSeries {
+  return {
+    ...toSeries(s),
+    pageCount: s.pageCount ?? undefined,
+    resumeChapterId: s.resumeChapterId ?? undefined,
+    resumeChapterLabel: s.resumeChapterLabel ?? undefined,
+  };
 }
 
 export async function fetchDashboard(
   recentlyAddedKinds?: readonly string[],
+  options: {
+    discoveryKind?: "manga" | "comic";
+    seed?: string;
+    following?: boolean;
+    limit?: number;
+  } = {},
 ): Promise<DashboardData> {
-  const query =
-    recentlyAddedKinds !== undefined
+  const query = {
+    ...options,
+    ...(recentlyAddedKinds !== undefined
       ? { recentlyAddedKinds: recentlyAddedKinds.join(",") || "none" }
-      : undefined;
-  const { data, error } = await api.GET(
-    "/api/dashboard",
-    query ? { params: { query } } : undefined,
-  );
+      : {}),
+  };
+  const { data, error } = await api.GET("/api/dashboard", { params: { query } });
   if (error || !data) throw new Error("Failed to load dashboard");
   return {
     stats: data.stats,
-    continueReading: data.continueReading.map(toSeries),
-    readingList: data.readingList.map(toSeries),
+    continueReading: data.continueReading.map(toHomeSeries),
+    readingList: data.readingList.map(toHomeSeries),
     recentUpdates: data.recentUpdates.map(toUpdate),
-    recentlyAdded: data.recentlyAdded.map(toSeries),
+    recentlyAdded: data.recentlyAdded.map(toHomeSeries),
+    rediscover: (data.rediscover ?? []).map(toHomeSeries),
+    quickReads: (data.quickReads ?? []).map(toHomeSeries),
+    cursors: data.cursors ?? {},
   };
+}
+
+export interface HomePage {
+  items: HomeSeries[];
+  updates: RecentUpdate[];
+  nextCursor: string | null;
+}
+
+export async function fetchHomeSection(
+  section: paths["/api/dashboard/{section}"]["get"]["parameters"]["path"]["section"],
+  query: NonNullable<paths["/api/dashboard/{section}"]["get"]["parameters"]["query"]>,
+): Promise<HomePage> {
+  const { data, error } = await api.GET("/api/dashboard/{section}", {
+    params: { path: { section }, query },
+  });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't load this shelf"));
+  return {
+    items: (data.items ?? []).map(toHomeSeries),
+    updates: (data.updates ?? []).map(toUpdate),
+    nextCursor: data.nextCursor ?? null,
+  };
+}
+
+export async function fetchSeriesPage(query: SeriesQuery): Promise<HomePage> {
+  const { data, error } = await api.GET("/api/series", { params: { query } });
+  if (error || !data) throw new Error(apiErrorMessage(error, "Couldn't load this shelf"));
+  return { items: data.items.map(toSeries), updates: [], nextCursor: data.nextCursor ?? null };
 }
 
 export interface LibrarySummary {

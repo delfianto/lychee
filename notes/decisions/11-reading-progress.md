@@ -37,8 +37,7 @@ physical container) — matching the split in [05](05-domain-model.md).
 
 There's no `series_read_progress` table. `unreadCount`, `lastReadChapter`,
 and "continue reading" for downloaded chapters are computed live via correlated SQL subqueries
-(`backend/src/catalog/repository.py` — `_aggregates`, `dashboard_counts`,
-`continue_reading`, `recently_added`), not a denormalized row kept in sync
+(`backend/src/catalog/series_stats.py`, `catalog/repository.py`, and `catalog/home.py`), not a denormalized row kept in sync
 on write.
 
 ## Update API
@@ -71,10 +70,41 @@ restore, matched back by chapter `number`.
 
 ## Home sections
 
-`GET /api/dashboard` returns `continue_reading`, `recently_added`, and
-stats; `GET /api/updates`/`/api/updates/unread` cover the recent-updates
-feed. There's no separately-named "on deck" concept — it's folded into the
-unread-updates feed rather than being its own endpoint.
+`GET /api/dashboard` returns stats and the first 24 records of each Home shelf,
+with per-shelf cursors. `GET /api/dashboard/{section}` loads later pages (up to
+60 records per request); it does not silently stop after six/twelve items.
+`catalog/home.py` owns Home selection and `catalog/presentation.py` shares the
+series mapper with catalog/list/download services. Home summaries omit descriptions.
+
+Continue reading joins local and matching-provider progress, excludes completed or
+dropped shelf entries, and requires an unread local or cached provider chapter.
+A SQL window chooses one resume target per visible series: the most recently read
+unfinished chapter, then the lowest unread chapter, preferring a local copy. It
+includes provider-only reads and remote chapters after all local chapters are read;
+opening Home never fetches a remote feed or chapter images. The Home card title
+opens work details and its Continue button opens the chosen chapter directly.
+
+Recent updates combine local chapter dates and cached provider publication dates,
+without duplicating downloaded provider chapters. Home can scope them to Reading,
+Re-reading and Favorites. The existing `/api/updates` feeds remain available.
+
+Rediscover selects unread works older than 30 days. Newly imported libraries fall
+back to the older eligible additions beyond the newest 24. Started, completed,
+dropped and Quick-read candidates are excluded. A seeded hash ranks only candidate
+IDs, then hydrates the selected page; picks are stable for the supplied daily seed
+and change with Shuffle. Quick reads require unread oneshots/completed publications,
+1–200 known local pages, no missing cached chapters in the selected language, and
+no known shortage against the series chapter total. Deleted/unknown-page containers
+are excluded. Discovery is scoped independently to Manga or Comics.
+
+The browser persists section visibility/order, discovery scope, and typed list or
+saved-filter pins through `stores/home.ts`. Existing saved presets are shared by
+`stores/presets.ts`; editing a preset updates its Home shelf. List shelves use the
+server's `collectionId` series filter and page independently. Shelf loading errors
+are isolated, and hidden/removed pins do not trigger requests. Home retains its
+loaded depth on return from details/reader, debounces background completion events,
+and defers refreshes while cached offscreen. Stats occupy a compact strip; resume
+cards and updates share horizontal paging controls.
 
 ## External sync: tracker push shipped, device/reader sync stays out of scope
 

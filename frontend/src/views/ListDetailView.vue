@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Pencil, Trash2 } from "@lucide/vue";
+import { ArrowLeft, Pencil, Pin, Trash2 } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
@@ -11,10 +11,12 @@ import { mediaKindLabel } from "../lib/display";
 import { toast } from "../lib/toast";
 import type { Series, Collection } from "../types";
 import { useCollections } from "../stores/collections";
+import { useHome } from "../stores/home";
 
 const route = useRoute();
 const router = useRouter();
 const collections = useCollections();
+const home = useHome();
 
 const listId = ref(String(route.params.id));
 const name = ref("");
@@ -147,6 +149,18 @@ async function confirmDeleteList(): Promise<void> {
             >
           </p>
         </div>
+        <button
+          v-if="!loading"
+          class="btn btn-ghost btn-sm gap-1.5"
+          :aria-pressed="home.preferences.pins.some((pin) => pin.id === `list:${listId}`)"
+          @click="home.pin({ id: `list:${listId}`, type: 'list', collectionId: listId })"
+        >
+          <Pin class="size-4" />{{
+            home.preferences.pins.some((pin) => pin.id === `list:${listId}`)
+              ? "Pinned to Home"
+              : "Show on Home"
+          }}
+        </button>
         <button v-if="!loading" class="btn btn-ghost btn-sm gap-1.5 text-error" @click="del(false)">
           <Trash2 class="size-4" />{{ metadata?.provider ? "Remove from Lychee" : "Delete list" }}
         </button>

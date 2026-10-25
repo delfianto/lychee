@@ -41,7 +41,7 @@ configuration; the final image contains only runtime application/build artifacts
 Once its workflow has built the image, use the exact tag:
 
 ```sh
-docker pull ghcr.io/delfianto/lychee:v0.1.0-beta.13
+docker pull ghcr.io/delfianto/lychee:v0.1.0-beta.14
 ```
 
 Persist `/data` for the SQLite database and `/library` for library files,
@@ -66,7 +66,7 @@ permissions, grant this repository Actions write access to that package.
 ## Local build and verification
 
 ```sh
-just image-build v0.1.0-beta.13 lychee:local
+just image-build v0.1.0-beta.14 lychee:local
 just image-smoke lychee:local 0.1.0-beta.12
 ```
 

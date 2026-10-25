@@ -17,13 +17,14 @@ from src.catalog import repository as repo
 from src.catalog.links import source_url
 from src.catalog.metadata import reconcile_tags
 from src.catalog.models import ProviderChapter, Series, SeriesCredit, TitleVariant
+from src.catalog.presentation import to_series_out as to_series_out
 from src.catalog.remote_chapters import (
     download_status_map,
     ensure_chapter_index,
     local_by_number_lang,
     local_by_provider_id,
 )
-from src.catalog.repository import ChapterRow, SeriesFilters, SeriesRow, UpdateRow
+from src.catalog.repository import ChapterRow, SeriesFilters, UpdateRow
 from src.catalog.schema import (
     ChapterAvailabilityOut,
     ChapterDetailOut,
@@ -35,13 +36,11 @@ from src.catalog.schema import (
     SeriesArtOut,
     SeriesOut,
     SeriesUpdate,
-    TagOut,
     VolumeGroupOut,
 )
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.schema import Page
 from src.ingest.lychee_info import LycheeInfoFile
-from src.media.thumbnails import PREVIEW_VERSION
 from src.progress.models import ReadingProgress
 from src.progress.state import provider_states
 from src.taxonomy.models import Tag
@@ -66,17 +65,11 @@ _RECENTLY_ADDED_KINDS = ("manga", "comic", "gallery")
 _MAX_LIMIT = 100
 
 
-def cover_url(series_id: str) -> str:
-    # Covers — provider art or local page — are downloaded once and served by our own
-    # endpoint as cached AVIF thumbnails (never hotlinked).
-    return f"/api/series/{series_id}/cover?v={PREVIEW_VERSION}"
-
-
 def _csv(value: str | None) -> list[str]:
     return [part for part in value.split(",") if part] if value else []
 
 
-def _parse_recently_added_kinds(value: str | None) -> list[str]:
+def parse_recently_added_kinds(value: str | None) -> list[str]:
     if value is None:
         return ["manga"]
     if value == "none":
@@ -94,44 +87,11 @@ def _parse_tags(tags: str | None) -> tuple[list[str], list[str]]:
     return include, exclude
 
 
-def to_series_out(row: SeriesRow) -> SeriesOut:
-    s = row.series
-    return SeriesOut(
-        id=s.id,
-        title=s.title,
-        cover_url=cover_url(s.id),
-        authors=[c.name for c in s.credits if c.role == "author"],
-        artists=[c.name for c in s.credits if c.role == "artist"],
-        status=s.status,
-        content_rating=s.content_rating,
-        demographic=s.demographic,
-        tags=[TagOut(id=t.id, name=t.name, group=t.group) for t in s.tags],
-        chapter_count=row.chapter_count,
-        unread_count=row.unread_count,
-        year=s.year,
-        description=s.description,
-        last_read_chapter=row.last_read,
-        total_chapters=s.total_chapters,
-        origin_country=s.origin_country,
-        rating=s.rating,
-        user_rating=s.user_rating,
-        favorite=s.favorite,
-        kind=s.kind,
-        image_count=s.image_count,
-        source=s.source,
-        characters=s.characters_json,
-        library_status=s.library_status,
-        provider=s.provider,
-        source_url=source_url(s.provider, s.provider_series_id),
-        available_chapters=s.available_chapters,
-        chapters_synced_at=s.chapter_index_at,
-    )
-
-
 def build_series_filters(
     *,
     kind: str | None = None,
     library_id: str | None = None,
+    collection_id: str | None = None,
     shelf: str | None = None,
     favorite: bool | None = None,
     q: str | None = None,
@@ -150,6 +110,7 @@ def build_series_filters(
     return SeriesFilters(
         kind=kind,
         library_id=library_id,
+        collection_id=collection_id,
         shelf=shelf,
         favorite=favorite,
         q=q,
@@ -703,23 +664,47 @@ def updates(
     return Page[RecentUpdateOut](items=items, next_cursor=next_cursor)
 
 
-def dashboard(session: Session, *, recently_added_kinds: str | None = None) -> DashboardOut:
+def dashboard(
+    session: Session,
+    *,
+    recently_added_kinds: str | None = None,
+    limit: int = 24,
+    discovery_kind: str = "manga",
+    seed: str | None = None,
+    following: bool = False,
+) -> DashboardOut:
+    from src.catalog import home
+
     series_count, unread_chapters, reading = repo.dashboard_counts(session)
-    recent = updates(session, unread_only=False, cursor=None, limit=12)
-    # A shelf entry needs no local chapters or progress. Alphabetical order keeps
-    # this rail stable while an account sync imports and refreshes metadata.
-    reading_list, _ = repo.list_series(
-        session, repo.SeriesFilters(shelf="reading", sort="title"), limit=12
-    )
-    kinds = _parse_recently_added_kinds(recently_added_kinds)
+    kinds = tuple(parse_recently_added_kinds(recently_added_kinds))
+    shelves = {
+        name: home.section(
+            session,
+            name,
+            limit=limit,
+            kind=discovery_kind,
+            seed=seed,
+            recently_added_kinds=kinds,
+            following=following,
+        )
+        for name in (
+            "continueReading",
+            "readingList",
+            "recentUpdates",
+            "recentlyAdded",
+            "rediscover",
+            "quickReads",
+        )
+    }
     return DashboardOut(
         stats=DashboardStats(series=series_count, unread_chapters=unread_chapters, reading=reading),
-        continue_reading=[to_series_out(r) for r in repo.continue_reading(session, limit=6)],
-        reading_list=[to_series_out(r) for r in reading_list],
-        recent_updates=recent.items,
-        recently_added=[
-            to_series_out(r) for r in repo.recently_added(session, kinds=kinds, limit=12)
-        ],
+        continue_reading=shelves["continueReading"].items,
+        reading_list=shelves["readingList"].items,
+        recent_updates=shelves["recentUpdates"].updates,
+        recently_added=shelves["recentlyAdded"].items,
+        rediscover=shelves["rediscover"].items,
+        quick_reads=shelves["quickReads"].items,
+        cursors={name: page.next_cursor for name, page in shelves.items()},
     )
 
 

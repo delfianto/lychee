@@ -9,6 +9,21 @@ from src.progress.models import ProviderReadingProgress, ReadingProgress
 from src.progress.state import provider_completed
 
 
+def chapter_publication_date() -> Any:
+    """Prefer source publication, including a cached date for older local downloads."""
+    cached = (
+        select(ProviderChapter.published_at)
+        .where(
+            ProviderChapter.series_id == Chapter.series_id,
+            ProviderChapter.provider == func.coalesce(Chapter.provider, Series.provider),
+            ProviderChapter.provider_chapter_id == Chapter.provider_chapter_id,
+        )
+        .correlate(Chapter, Series)
+        .scalar_subquery()
+    )
+    return func.coalesce(Chapter.source_uploaded_at, cached, Chapter.created_at)
+
+
 def chapter_stats(series_ids: Any, *, reads: bool = True, dates: bool = True) -> Any:
     statement = select(Chapter.series_id)
     if reads:

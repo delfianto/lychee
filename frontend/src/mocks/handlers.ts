@@ -149,6 +149,11 @@ function filterSeries(url: URL): SeriesOut[] {
   const q = url.searchParams;
   return seriesCatalog.filter((s) => {
     if (!matchesCsv(s.kind ?? "manga", q.get("kind"))) return false;
+    if (
+      q.get("collectionId") &&
+      !collectionsDb.find((c) => c.id === q.get("collectionId"))?.seriesIds.includes(s.id)
+    )
+      return false;
     if (q.get("shelf") && s.libraryStatus !== q.get("shelf")) return false;
     if (q.get("favorite") === "true" && !s.favorite) return false;
     if (q.get("favorite") === "false" && s.favorite) return false;
@@ -188,6 +193,72 @@ function recentUpdates(unreadOnly: boolean, limit: number) {
         : null;
     })
     .filter((u): u is NonNullable<typeof u> => u !== null);
+}
+
+function homePage(section: string, url: URL) {
+  const limit = Math.max(1, Math.min(60, Number(url.searchParams.get("limit") ?? 24)));
+  const offset = decodeCursorOffset(url.searchParams.get("cursor"));
+  const kind = url.searchParams.get("discoveryKind") ?? "manga";
+  const seed = url.searchParams.get("seed") ?? new Date().toISOString().slice(0, 10);
+  const candidates = seriesCatalog.filter(
+    (s) =>
+      s.kind === kind &&
+      !["completed", "dropped"].includes(s.libraryStatus ?? "none") &&
+      !(s.lastReadChapter ?? 0),
+  );
+  const localPages = (s: SeriesOut) =>
+    chaptersDb
+      .filter((chapter) => chapter.seriesId === s.id && chapter.status === "downloaded")
+      .reduce((sum, chapter) => sum + chapter.pageCount, 0);
+  const quick = candidates.filter(
+    (s) =>
+      s.status === "completed" && localPages(s) > 0 && localPages(s) <= 200 && !s.availableChapters,
+  );
+  const shuffle = (items: SeriesOut[]) =>
+    [...items].sort((a, b) => rngFor(`${seed}:${a.id}`)() - rngFor(`${seed}:${b.id}`)());
+  let items: components["schemas"]["HomeSeriesOut"][] = [];
+  let updates: ReturnType<typeof recentUpdates> = [];
+  if (section === "continueReading")
+    items = seriesCatalog
+      .filter((s) => s.kind !== "gallery" && (s.lastReadChapter ?? 0) > 0 && s.unreadCount > 0)
+      .map((s) => {
+        const next = chaptersDb.find((c) => c.seriesId === s.id && !c.read);
+        return {
+          ...s,
+          resumeChapterId:
+            next?.status === "downloaded"
+              ? next.id
+              : next
+                ? `adhoc:${s.id}:${next.providerChapterId}`
+                : s.id,
+          resumeChapterLabel: next?.number,
+        };
+      });
+  if (section === "readingList")
+    items = seriesCatalog
+      .filter((s) => s.kind !== "gallery" && s.libraryStatus === "reading")
+      .sort((a, b) => a.title.localeCompare(b.title));
+  if (section === "recentlyAdded")
+    items = seriesCatalog.filter((s) =>
+      matchesCsv(s.kind ?? "manga", url.searchParams.get("recentlyAddedKinds") ?? "manga"),
+    );
+  if (section === "quickReads")
+    items = shuffle(quick).map((s) => ({ ...s, pageCount: localPages(s) }));
+  if (section === "rediscover")
+    items = shuffle(candidates.filter((s) => !quick.some((q) => q.id === s.id)));
+  if (section === "recentUpdates")
+    updates = recentUpdates(false, chaptersDb.length).filter(
+      (u) =>
+        url.searchParams.get("following") !== "true" ||
+        ["reading", "re_reading"].includes(u.series.libraryStatus ?? "none") ||
+        u.series.favorite,
+    );
+  const total = items.length + updates.length;
+  return {
+    items: items.slice(offset, offset + limit),
+    updates: updates.slice(offset, offset + limit),
+    nextCursor: offset + limit < total ? encodeCursor(offset + limit) : null,
+  };
 }
 
 // --- download simulation ----------------------------------------------------
@@ -519,25 +590,34 @@ export const handlers = [
   // --- dashboard / updates / search ---------------------------------------
   http.get("/api/dashboard", async ({ request }) => {
     const url = new URL(request.url);
-    const kinds = url.searchParams.get("recentlyAddedKinds") ?? "manga";
     await delay(150);
-    const continueReading = seriesCatalog.filter(
-      (s) => s.libraryStatus === "reading" || s.libraryStatus === "re_reading",
-    );
+    const names = [
+      "continueReading",
+      "readingList",
+      "recentUpdates",
+      "recentlyAdded",
+      "rediscover",
+      "quickReads",
+    ];
+    const pages = Object.fromEntries(names.map((name) => [name, homePage(name, url)]));
     return HttpResponse.json({
       stats: {
-        series: seriesCatalog.length,
+        series: seriesCatalog.filter((s) => s.kind !== "gallery").length,
         unreadChapters: seriesCatalog.reduce((sum, s) => sum + s.unreadCount, 0),
-        reading: continueReading.length,
+        reading: seriesCatalog.filter((s) => s.libraryStatus === "reading").length,
       },
-      continueReading: continueReading.slice(0, 12),
-      readingList: seriesCatalog
-        .filter((s) => s.libraryStatus === "reading")
-        .sort((a, b) => a.title.localeCompare(b.title))
-        .slice(0, 12),
-      recentUpdates: recentUpdates(false, 8),
-      recentlyAdded: seriesCatalog.filter((s) => matchesCsv(s.kind ?? "manga", kinds)).slice(0, 12),
+      ...Object.fromEntries(
+        names.map((name) => [
+          name,
+          name === "recentUpdates" ? pages[name]!.updates : pages[name]!.items,
+        ]),
+      ),
+      cursors: Object.fromEntries(names.map((name) => [name, pages[name]!.nextCursor])),
     });
+  }),
+  http.get("/api/dashboard/:section", async ({ params, request }) => {
+    await delay(100);
+    return HttpResponse.json(homePage(String(params.section), new URL(request.url)));
   }),
 
   http.get("/api/libraries/summary", async () => {

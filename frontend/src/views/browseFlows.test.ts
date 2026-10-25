@@ -47,10 +47,13 @@ it("shows the synced reading shelf without local progress and refreshes when syn
   taskEvent("import");
   await vi.waitFor(() => expect(wrapper.text()).toContain("Newly synced title"));
   wrapper.unmount();
-  const requestCount = api.requests.length;
+  const homeRequests = () =>
+    api.requests.filter((r) => r.path === "/api/dashboard" || r.path === "/api/libraries/summary")
+      .length;
+  const requestCount = homeRequests();
   taskEvent("import");
   await flushPromises();
-  expect(api.requests.length).toBe(requestCount);
+  expect(homeRequests()).toBe(requestCount);
 });
 
 it("hides the reading-list rail when the shelf is empty and filters recently added by configured kinds", async () => {

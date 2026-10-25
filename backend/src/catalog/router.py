@@ -20,6 +20,8 @@ from src.catalog.schema import (
     DashboardOut,
     DeleteChapterOut,
     GalleryMediaItem,
+    HomeSection,
+    HomeSectionOut,
     LibrarySummaryOut,
     MangaMatchOut,
     MatchRequest,
@@ -55,6 +57,7 @@ def list_series(
     db: DbSession,
     kind: str | None = None,
     library_id: str | None = Query(None, alias="libraryId"),
+    collection_id: str | None = Query(None, alias="collectionId"),
     shelf: str | None = None,
     favorite: bool | None = None,
     q: str | None = None,
@@ -75,6 +78,7 @@ def list_series(
     filters = service.build_series_filters(
         kind=kind,
         library_id=library_id,
+        collection_id=collection_id,
         shelf=shelf,
         favorite=favorite,
         q=q,
@@ -194,9 +198,46 @@ def unread_updates(
 def dashboard(
     db: DbSession,
     recently_added_kinds: str | None = Query(None, alias="recentlyAddedKinds"),
+    limit: int = Query(24, ge=1, le=60),
+    discovery_kind: Literal["manga", "comic"] = Query("manga", alias="discoveryKind"),
+    seed: str | None = Query(None, max_length=80),
+    following: bool = False,
 ) -> DashboardOut:
     """One call for the Home dashboard: stats + continue-reading + updates + added."""
-    return service.dashboard(db, recently_added_kinds=recently_added_kinds)
+    return service.dashboard(
+        db,
+        recently_added_kinds=recently_added_kinds,
+        limit=limit,
+        discovery_kind=discovery_kind,
+        seed=seed,
+        following=following,
+    )
+
+
+@router.get("/dashboard/{section}")
+def dashboard_section(
+    db: DbSession,
+    section: HomeSection,
+    cursor: str | None = Query(None, max_length=2048),
+    limit: int = Query(24, ge=1, le=60),
+    discovery_kind: Literal["manga", "comic"] = Query("manga", alias="discoveryKind"),
+    seed: str | None = Query(None, max_length=80),
+    recently_added_kinds: str | None = Query(None, alias="recentlyAddedKinds"),
+    following: bool = False,
+) -> HomeSectionOut:
+    """Load the next page of one Home shelf without reloading the dashboard."""
+    from src.catalog import home
+
+    return home.section(
+        db,
+        section,
+        cursor=cursor,
+        limit=limit,
+        kind=discovery_kind,
+        seed=seed,
+        recently_added_kinds=tuple(service.parse_recently_added_kinds(recently_added_kinds)),
+        following=following,
+    )
 
 
 @router.get("/libraries/summary")

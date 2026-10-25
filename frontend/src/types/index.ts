@@ -119,6 +119,12 @@ export interface VolumeGroup {
   chapters: Chapter[];
 }
 
+export interface HomeSeries extends Series {
+  pageCount?: number;
+  resumeChapterId?: string;
+  resumeChapterLabel?: string;
+}
+
 export interface BrowseFilters {
   author?: string;
   artist?: string;

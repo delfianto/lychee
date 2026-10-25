@@ -7,6 +7,8 @@ filesystem paths.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from src.core.schema import CamelModel, UtcDatetime
@@ -193,12 +195,32 @@ class DashboardStats(CamelModel):
     reading: int
 
 
+HomeSection = Literal[
+    "continueReading", "recentUpdates", "readingList", "recentlyAdded", "rediscover", "quickReads"
+]
+
+
+class HomeSeriesOut(SeriesOut):
+    page_count: int | None = None
+    resume_chapter_id: str | None = None
+    resume_chapter_label: str | None = None
+
+
+class HomeSectionOut(CamelModel):
+    items: list[HomeSeriesOut] = Field(default_factory=list)
+    updates: list[RecentUpdateOut] = Field(default_factory=list)
+    next_cursor: str | None = None
+
+
 class DashboardOut(CamelModel):
     stats: DashboardStats
-    continue_reading: list[SeriesOut]
-    reading_list: list[SeriesOut]
+    continue_reading: list[HomeSeriesOut]
+    reading_list: list[HomeSeriesOut]
     recent_updates: list[RecentUpdateOut]
-    recently_added: list[SeriesOut]
+    recently_added: list[HomeSeriesOut]
+    rediscover: list[HomeSeriesOut] = Field(default_factory=list)
+    quick_reads: list[HomeSeriesOut] = Field(default_factory=list)
+    cursors: dict[str, str | None] = Field(default_factory=dict)
 
 
 class ChapterAvailabilityOut(CamelModel):

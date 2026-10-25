@@ -8,7 +8,6 @@ value + id of the last row, and the next page is everything ordered after it.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -19,11 +18,13 @@ from sqlalchemy.orm import Session, selectinload
 from src.catalog.models import Book, Chapter, Series, SeriesCredit
 from src.catalog.search_index import search_ids
 from src.catalog.series_stats import (
+    chapter_publication_date,
     chapter_stats,
     content_updated_at,
     correlated_stats,
     provider_dates,
 )
+from src.collections.models import CollectionSeries
 from src.core.schema import decode_cursor, encode_cursor
 from src.progress.models import ReadingProgress
 from src.progress.state import chapter_completed
@@ -38,6 +39,7 @@ class SeriesFilters:
 
     kind: str | None = None
     library_id: str | None = None
+    collection_id: str | None = None
     shelf: str | None = None
     favorite: bool | None = None
     q: str | None = None
@@ -86,6 +88,13 @@ def _conditions(f: SeriesFilters) -> list[ColumnElement[bool]]:
             conds.append(Series.kind.in_(kinds))
     if f.library_id is not None:
         conds.append(Series.library_id == f.library_id)
+    if f.collection_id is not None:
+        conds.append(
+            exists().where(
+                CollectionSeries.series_id == Series.id,
+                CollectionSeries.collection_id == f.collection_id,
+            )
+        )
     if f.shelf:
         conds.append(Series.library_status == f.shelf)
     if f.favorite is not None:
@@ -339,7 +348,7 @@ def recent_updates(
     limit: int = 24,
 ) -> tuple[list[UpdateRow], str | None]:
     """Chapter updates across chaptered series, newest first, keyset-paginated."""
-    updated = func.coalesce(Chapter.source_uploaded_at, Chapter.created_at)
+    updated = chapter_publication_date()
     stmt = (
         select(Chapter, updated.label("updated"))
         .join(Series, Series.id == Chapter.series_id)
@@ -383,43 +392,6 @@ def dashboard_counts(session: Session) -> tuple[int, int, int]:
         session.scalar(select(func.count(Series.id)).where(Series.library_status == "reading")) or 0
     )
     return series_count, unread_chapters, reading
-
-
-def continue_reading(session: Session, *, limit: int = 6) -> list[SeriesRow]:
-    """Series with progress and something still unread, most-recently-read first."""
-    progress = (
-        select(
-            ReadingProgress.series_id, func.max(ReadingProgress.updated_at).label("last_progress")
-        )
-        .group_by(ReadingProgress.series_id)
-        .subquery()
-    )
-    eligible = select(progress.c.series_id)
-    reads = chapter_stats(eligible, dates=False)
-    ids = list(
-        session.scalars(
-            select(Series.id)
-            .join(progress, progress.c.series_id == Series.id)
-            .join(reads, reads.c.series_id == Series.id)
-            .where(reads.c.unread_count > 0)
-            .order_by(progress.c.last_progress.desc(), Series.id.desc())
-            .limit(limit)
-        )
-    )
-    rows = get_series_rows(session, ids)
-    return [rows[sid] for sid in ids if sid in rows]
-
-
-def recently_added(
-    session: Session,
-    *,
-    kinds: Sequence[str] = ("manga",),
-    limit: int = 12,
-) -> list[SeriesRow]:
-    """Newest series first for the configured kinds, for the dashboard rail."""
-    if not kinds:
-        return []
-    return list_series(session, SeriesFilters(kind=",".join(kinds)), limit=limit)[0]
 
 
 def search_series(

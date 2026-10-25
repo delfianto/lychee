@@ -1,6 +1,6 @@
 # lychee
 
-Current release: **v0.1.0-beta.13** — predictable download/sync ordering, clickable series metadata filters, and a cleaner navigation bar. Standard SQLite remains the default.
+Current release: **v0.1.0-beta.14** — paginated reading shelves, local discovery, pinned lists and filters, and a customizable Home layout. Standard SQLite remains the default.
 
 Self-hosted manga, comic, and art-gallery media server. Point it at folders on
 disk, scan your library, and read in the browser with progress tracking.
