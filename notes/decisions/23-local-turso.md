@@ -84,3 +84,14 @@ and NVMe; Turso's write advantage does not remove its read cost on this workload
 References: [Python SDK](https://docs.turso.tech/sdk/python/quickstart),
 [MVCC/conflicts](https://docs.turso.tech/tursodb/concurrent-writes),
 [native FTS](https://docs.turso.tech/sql-reference/functions/fts).
+
+## Catalog query plans and startup checkpoint
+
+The [query optimization follow-up](../performance/catalog/README.md) retains SQLite's
+scalar strategy while using native grouped rollups and bounded hydration. Migration
+`a4b9d7e6c201` adds the measured indexes to both engines. `run_migrations()` now
+checkpoints a native URL after upgrade, before bootstrap restores workers: new
+native indexes left in the MVCC log can substantially increase aggregate read cost.
+A busy checkpoint logs a warning without failing the schema upgrade. There is no
+periodic checkpoint job or new user setting. Publication indexes improve reads but
+increase metadata refresh write cost; the report quantifies that tradeoff.

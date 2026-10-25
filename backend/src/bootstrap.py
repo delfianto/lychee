@@ -26,6 +26,23 @@ def run_migrations(database_url: str | None = None) -> None:
     if database_url is not None:
         config.attributes["database_url"] = database_url
     command.upgrade(config, "head")
+    from sqlalchemy.pool import NullPool
+
+    from src.core.config import settings
+    from src.core.persistence.database import create_database_engine
+
+    url = database_url or settings.database_url
+    if url.startswith("sqlite+turso:"):
+        # Run before startup restores workers. Native index builds otherwise
+        # leave a large MVCC log that makes subsequent aggregate reads slower.
+        engine = create_database_engine(url, migrations=True, poolclass=NullPool)
+        try:
+            with engine.connect() as connection:
+                result = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)").first()
+                if result is not None and result[0]:
+                    logger.warning("turso_checkpoint_busy")
+        finally:
+            engine.dispose()
 
 
 def bootstrap() -> None:

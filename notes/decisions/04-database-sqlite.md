@@ -86,3 +86,12 @@ the self-hosted ethos; Postgres's operational overhead (a service to run,
 not a file to copy) buys concurrency/scale this workload doesn't need.
 SQLAlchemy keeps a Postgres migration path open if that ever changes, but
 nothing points that direction today.
+
+## Catalog query optimization
+
+Migration `a4b9d7e6c201` adds eight covering/order indexes declared in catalog and
+progress ORM metadata. SQLite uses indexed scalar display statistics; native Turso
+uses bounded grouped hydration and grouped count/date selection where needed.
+Added/title cursors retain early-stop indexed predicates. Source timeline and
+local/provider completion semantics remain unchanged. See the [measured results](../performance/catalog/README.md)
+for both engines, the index write/space cost and scaling limits.
