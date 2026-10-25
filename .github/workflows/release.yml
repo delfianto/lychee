@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ["**"]
+    paths: [".github/scripts/**", ".github/workflows/release.yml", "notes/releases/**", "justfile"]
+  pull_request:
+    paths: [".github/scripts/**", ".github/workflows/release.yml", "notes/releases/**"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release (also supports backfilling old tags)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: ${{ github.event.deleted != true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Test release notes and publishing behavior
+        run: python3 -m unittest discover -s .github/scripts -v
+
+  publish:
+    needs: check
+    if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && github.event.deleted != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Generate notes and publish the tag's release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: python3 .github/scripts/release.py --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-notes.md" --publish
+      - name: Show generated release notes
+        if: success()
+        run: cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"

@@ -217,9 +217,16 @@ api-gen:
 [group('project')]
 install: be-install fe-install mcp-install
 
-# Run the whole CI gate locally (backend + frontend + mcp).
+# Run the whole CI gate locally (backend + frontend + mcp + release tooling).
 [group('project')]
-check: be-check fe-check mcp-check
+check: be-check fe-check mcp-check release-check
+
+# Check release tooling without app startup or GitHub writes (Python 3.12-compatible).
+[group('project')]
+release-check:
+    cd {{ backend_dir }} && uv run ruff format --check --config pyproject.toml --target-version py312 ../.github/scripts && uv run ruff check --config pyproject.toml --target-version py312 ../.github/scripts
+    cd {{ backend_dir }} && uv run basedpyright --project ../.github/scripts
+    python3 -m unittest discover -s .github/scripts -v
 
 # Show which dev services are currently running.
 # Only counts processes *listening* on the port — client connections (browsers,
