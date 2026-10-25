@@ -23,6 +23,7 @@ from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled
 from src.tasks.events import activity_changed
+from src.tasks.ordering import chapter_key, natural_key, work_status_rank
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 
@@ -62,11 +63,19 @@ def _tasks_out(session: Session, rows: list[DownloadTask]) -> list[DownloadTaskO
                 size_bytes=row.size_bytes,
             )
         )
-    return out
+    return sorted(
+        out,
+        key=lambda task: (
+            work_status_rank(task.status),
+            natural_key(task.series.title),
+            chapter_key(task.chapter),
+            task.id,
+        ),
+    )
 
 
 def list_downloads(session: Session) -> list[DownloadTaskOut]:
-    rows = list(session.scalars(select(DownloadTask).order_by(DownloadTask.created_at.desc())))
+    rows = list(session.scalars(select(DownloadTask)))
     return _tasks_out(session, rows)
 
 

@@ -9,6 +9,7 @@ import SegmentedToggle from "../components/SegmentedToggle.vue";
 import ErrorState from "../components/ErrorState.vue";
 import SeriesCollection from "../components/SeriesCollection.vue";
 import { type Density, useDensity } from "../lib/density";
+import { metadataBrowseFilters } from "../lib/metadataBrowse";
 import { demographicLabel, ratingLabel } from "../lib/ratingLabels";
 import { toast } from "../lib/toast";
 import type {
@@ -75,6 +76,44 @@ function resetFilters(): void {
   filters.statuses = new Set();
   filters.readStates = new Set();
 }
+
+// A detail-page link opens a fresh metadata selection, even when this view is
+// cached. Returning from a work to the same URL preserves local filter edits.
+let lastMetadataQuery: string | undefined;
+let lastLibrary = props.libraryKey;
+watch(
+  () => [props.libraryKey, route.path, route.query] as const,
+  () => {
+    if (props.libraryKey !== lastLibrary) {
+      lastLibrary = props.libraryKey;
+      lastMetadataQuery = undefined;
+      activeTab.value = "all";
+      resetFilters();
+    }
+    if (route.path !== `/${props.libraryKey}`) return;
+    const signature = JSON.stringify([
+      route.query.ratings,
+      route.query.demographics,
+      route.query.pubStatus,
+      route.query.tags,
+    ]);
+    if (signature === lastMetadataQuery) return;
+    const selection = metadataBrowseFilters(route.query);
+    const hasSelection =
+      selection.ratings.size ||
+      selection.demographics.size ||
+      selection.statuses.size ||
+      Object.keys(selection.tags).length;
+    if (hasSelection || lastMetadataQuery !== undefined) {
+      activeTab.value = "all";
+      resetFilters();
+      filters.tagMode = "and";
+      Object.assign(filters, selection);
+    }
+    lastMetadataQuery = signature;
+  },
+  { immediate: true },
+);
 
 // Cycle a tag chip: neutral → include → exclude → neutral.
 function cycleTag(id: string): void {
@@ -249,15 +288,6 @@ watch(
     reloadTimer = setTimeout(() => void reload(q), 200);
   },
   { immediate: true },
-);
-
-// Reset tab + filters when switching libraries.
-watch(
-  () => props.libraryKey,
-  () => {
-    activeTab.value = "all";
-    resetFilters();
-  },
 );
 </script>
 

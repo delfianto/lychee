@@ -48,9 +48,9 @@ class TaskQueue:
         self._sync_executor: ThreadPoolExecutor | None = None
         self.io_limit = Limiter(self._sync_workers, reentrant=True)
         # One chapter fetches at a time; CPU stages overlap the next fetch.
-        self.fetch_limit = Limiter(1)
+        self.fetch_limit = Limiter(1, fifo=True)
         self.file_limit = Limiter(self._download_workers)
-        self.chapter_limit = Limiter(MAX_WORKERS)
+        self.chapter_limit = Limiter(MAX_WORKERS, fifo=True)
         self._session_factory: sessionmaker[Session] = SessionLocal
         self._futures: set[Future[None]] = set()
         self._lock = threading.Lock()

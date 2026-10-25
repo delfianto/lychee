@@ -25,6 +25,7 @@ import OverallProgress from "../../components/OverallProgress.vue";
 import ConfirmDialog from "../../components/ConfirmDialog.vue";
 import CoverImage from "../../components/CoverImage.vue";
 import { toast } from "../../lib/toast";
+import { compareDownloads } from "../../lib/transferOrder";
 
 interface DlRow {
   id: string;
@@ -38,6 +39,7 @@ interface DlRow {
   size: string;
 }
 const dl = ref<DlRow[]>([]);
+const orderedDownloads = computed(() => dl.value.toSorted(compareDownloads));
 const autoClear = ref(false);
 const autoClearLoaded = ref(false);
 const savingAutoClear = ref(false);
@@ -317,10 +319,11 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div role="list" aria-label="Download queue" class="flex flex-col gap-1.5">
         <div
-          v-for="d in dl"
+          v-for="d in orderedDownloads"
           :key="d.id"
+          role="listitem"
           class="flex items-center gap-3 rounded-box surface-border bg-base-100 p-2.5"
         >
           <CoverImage

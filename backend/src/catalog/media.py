@@ -46,6 +46,7 @@ from src.tasks.context import (
     report_phase,
     report_work_units,
 )
+from src.tasks.ordering import natural_key
 
 logger = get_logger(__name__)
 
@@ -342,9 +343,19 @@ def get_cover(session: Session, store: ThumbnailStore, series_id: str, size: str
     return Served(data=data, media_type="image/avif", etag=_etag(data))
 
 
+def _library_series_order(
+    session: Session, library_id: str, *, kind: str | None = None
+) -> list[str]:
+    statement = select(Series.id, Series.title).where(Series.library_id == library_id)
+    if kind is not None:
+        statement = statement.where(Series.kind == kind)
+    rows = sorted(session.execute(statement), key=lambda row: (natural_key(row[1]), row[0]))
+    return [row[0] for row in rows]
+
+
 def warm_library_covers(session: Session, store: ThumbnailStore, library_id: str) -> int:
     """Warm the single cover preview for every series in a library (best-effort)."""
-    series_ids = list(session.scalars(select(Series.id).where(Series.library_id == library_id)))
+    series_ids = _library_series_order(session, library_id)
     return warm_series_covers(session, store, series_ids)
 
 
@@ -551,11 +562,7 @@ def warm_gallery_item_thumbs(
     Called after scan so the detail grid does not hit full-resolution originals.
     Idempotent; skips ids that already exist.
     """
-    series_ids = list(
-        session.scalars(
-            select(Series.id).where(Series.library_id == library_id, Series.kind == "gallery")
-        )
-    )
+    series_ids = _library_series_order(session, library_id, kind="gallery")
     if not series_ids:
         report_work_units(0, "folder")
         return 0

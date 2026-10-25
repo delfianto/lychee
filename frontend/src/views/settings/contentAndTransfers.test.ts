@@ -142,6 +142,8 @@ it("renders download phases and sizes and performs individual queue actions", as
   ];
   api.db.sync.lastSync = new Date().toISOString();
   const { wrapper } = await renderView(DownloadsPanel);
+  const queuedRow = () =>
+    wrapper.findAll('[role="listitem"]').find((row) => row.find('img[alt="Story q"]').exists())!;
   expect(wrapper.text()).toContain("Fetching · 1/3 · 25%");
   expect(wrapper.text()).toContain("Encoding · 80%");
   expect(wrapper.text()).toContain("2.0 MB");
@@ -149,13 +151,13 @@ it("renders download phases and sizes and performs individual queue actions", as
   await wrapper.get('[aria-label="Pause"]').trigger("click");
   await flushPromises();
   expect(api.db.downloads[0]!.status).toBe("paused");
-  await wrapper.get('[aria-label="Resume"]').trigger("click");
+  await queuedRow().get('[aria-label="Resume"]').trigger("click");
   await flushPromises();
   expect(api.db.downloads[0]!.status).toBe("queued");
   await wrapper.get('[aria-label="Retry"]').trigger("click");
   await flushPromises();
   expect(messages()).toContain("Download queued");
-  await wrapper.get('[aria-label="Remove"]').trigger("click");
+  await queuedRow().get('[aria-label="Remove"]').trigger("click");
   await flushPromises();
   expect(api.db.downloads.some((d) => d.id === "q")).toBe(false);
   await click(wrapper, "Clear completed");
@@ -195,6 +197,62 @@ it("persists download auto-clear, retains failures, restores on navigation, and 
   expect(messages()).toContain("Rejected by server");
   await input(restored.wrapper, selector, false);
   expect(api.db.downloadConfig.autoClearCompleted).toBe(false);
+});
+
+it("shows active chapters first in ascending order and reorders as chapters complete", async () => {
+  const base = makeDownload("same");
+  api.db.downloads = [
+    { ...base, id: "history", chapter: "Ch. 0", status: "done" },
+    { ...base, id: "queued10", chapter: "Ch. 10", status: "queued" },
+    { ...base, id: "queued2", chapter: "Ch. 2", status: "queued" },
+    { ...base, id: "active9", chapter: "Ch. 9.5", status: "downloading" },
+    { ...base, id: "active2", chapter: "Ch. 2", status: "downloading" },
+  ];
+  const { wrapper } = await renderView(DownloadsPanel);
+  const rows = () => wrapper.findAll('[role="listitem"]').map((row) => row.text());
+  expect(rows()[0]).toContain("Ch. 2");
+  expect(rows()[1]).toContain("Ch. 9.5");
+  expect(rows()[2]).toContain("Ch. 2");
+  expect(rows()[3]).toContain("Ch. 10");
+  expect(rows()[4]).toContain("Done");
+  api.db.downloads.find((row) => row.id === "active2")!.status = "done";
+  api.db.downloads.find((row) => row.id === "queued10")!.status = "downloading";
+  taskEvent("download");
+  await flushPromises();
+  expect(rows()[0]).toContain("Ch. 9.5");
+  expect(rows()[1]).toContain("Ch. 10");
+  expect(rows()[2]).toContain("Queued");
+});
+
+it("shows active sync folders first with natural names and moves finished rows below the queue", async () => {
+  const job = (id: string, title: string, status: string) => ({
+    id,
+    title,
+    status,
+    kind: "scan",
+    source: "/gallery",
+    progress: 0,
+  });
+  api.db.sync.jobs = [
+    job("done", "Alpha", "done"),
+    job("q10", "Set 10", "queued"),
+    job("q2", "Set 2", "queued"),
+    job("r10", "Work 10", "running"),
+    job("r2", "Work 2", "running"),
+  ];
+  const { wrapper } = await renderView(SyncPanel);
+  const rows = () => wrapper.findAll('[role="listitem"]').map((row) => row.text());
+  expect(rows()[0]).toContain("Work 2");
+  expect(rows()[1]).toContain("Work 10");
+  expect(rows()[2]).toContain("Set 2");
+  expect(rows()[3]).toContain("Set 10");
+  api.db.sync.jobs.find((row) => row.id === "r2")!.status = "done";
+  api.db.sync.jobs.find((row) => row.id === "q2")!.status = "running";
+  taskEvent("scan");
+  await flushPromises();
+  expect(rows()[0]).toContain("Set 2");
+  expect(rows()[1]).toContain("Work 10");
+  expect(rows()[2]).toContain("Set 10");
 });
 
 it("keeps download auto-clear disabled when settings cannot load", async () => {

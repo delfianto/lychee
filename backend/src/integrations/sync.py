@@ -29,6 +29,7 @@ from src.tasks.concurrency import parallel_map
 from src.tasks.config import save_queue_workers
 from src.tasks.context import OperationCancelled, checkpoint, current_operation, report_phase
 from src.tasks.events import broker
+from src.tasks.ordering import natural_key, work_status_rank
 from src.tasks.queue import MAX_WORKERS, Work, queue
 from src.tasks.schema import TaskOut
 from src.tasks.tracker import tracker
@@ -273,6 +274,17 @@ class SyncJobManager:
     def list_jobs(self) -> list[SyncJobOut]:
         with self._cond:
             self._clear_successful()
+            positions = {jid: index for index, jid in enumerate(self._order)}
+            ordered = sorted(
+                self._order,
+                key=lambda jid: (
+                    work_status_rank(self._jobs[jid].status),
+                    natural_key(self._jobs[jid].title),
+                    natural_key(self._jobs[jid].source),
+                    positions[jid],
+                ),
+            )
+            phases_by_task = {task.id: task.phases for task in tracker.snapshot()}
             return [
                 SyncJobOut(
                     id=self._jobs[jid].id,
@@ -284,16 +296,9 @@ class SyncJobManager:
                     detail=self._jobs[jid].detail,
                     error=self._jobs[jid].error,
                     task_id=self._jobs[jid].task_id,
-                    phases=next(
-                        (
-                            task.phases
-                            for task in tracker.snapshot()
-                            if task.id == self._jobs[jid].task_id
-                        ),
-                        {},
-                    ),
+                    phases=phases_by_task.get(self._jobs[jid].task_id or "", {}),
                 )
-                for jid in reversed(self._order)
+                for jid in ordered
                 if jid in self._jobs
             ]
 
@@ -420,6 +425,7 @@ def _sync_work() -> Work:
                 )
             )
         )
+        matched.sort(key=lambda series: (natural_key(series.title), series.id))
         state = _sync_state(session)
         state.syncing = True
         session.commit()
