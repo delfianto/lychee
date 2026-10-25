@@ -1,8 +1,12 @@
 # Automated GitHub releases
 
 [The release workflow](../../.github/workflows/release.yml) publishes a GitHub
-Release when an existing tag is pushed. It uses the repository's automatic
-`GITHUB_TOKEN` with `contents: write`; no LLM, paid API, or extra secret is needed.
+Release when an existing tag is pushed. Version tags first build and smoke-test
+an image, then publish it as `ghcr.io/delfianto/lychee:<exact-tag>` before the
+GitHub release is published. It uses the repository's automatic `GITHUB_TOKEN`
+with `contents: write` and `packages: write`; no LLM, paid API, or extra secret
+is needed. See the [container guide](../../docker/README.md).
+
 The workflow must be included in the tagged commit, so automatic publishing starts
 with tags made after this change reaches the repository.
 
@@ -66,8 +70,9 @@ are marked as GitHub prereleases. Arbitrary non-version tags are also prerelease
 Stable version tags use GitHub's version-based latest-release selection; prereleases
 never replace the latest stable release.
 
-Rerunning the workflow preserves an existing release, including edited notes and
-draft state. Tag deletion does not publish a release. The workflow validates its
+Rerunning the workflow builds/publishes the image and preserves an existing
+GitHub release, including edited notes and draft state. This also lets an older
+release receive a container image without changing its description. Tag deletion does not publish a release. The workflow validates its
 release tooling on relevant main-branch pushes, pull requests, and before publishing.
 
 For an older tag or a missed event, use **Actions → release → Run workflow** on
@@ -84,7 +89,10 @@ use a GitHub App/PAT for such tag pushes or explicitly dispatch this workflow.
 `just release-check` runs formatting, lint, Python 3.12-compatible type checking,
 and offline tests against temporary Git repositories and intercepted API calls.
 It is included in `just check`. The GitHub workflow runs the same offline tests
-before creating releases, with publishing restricted to tag pushes/manual runs.
+before building containers. Main/PR builds smoke-test the image without registry
+credentials or publishing; tag pushes/manual runs smoke-test and publish the exact
+tagged application, followed by the GitHub release. Generic tags and tags that
+cannot be used as Docker tags still receive GitHub releases without an image.
 
 Reference: [GitHub automated release notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes),
 [workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
