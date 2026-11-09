@@ -6,14 +6,14 @@ requires-python = ">=3.14"
 
 dependencies = [
     # Web framework
-    "fastapi==0.161.1",
+    "fastapi==0.162.2",
     "uvicorn[standard]==0.54.0",
     # Persistence
-    "sqlalchemy==2.1.6",
+    "sqlalchemy==2.1.8",
     "alembic==1.20.1",
     # Validation / settings
-    "pydantic==2.14.1",
-    "pydantic-settings==2.16.1",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
     "python-dotenv==1.2.4",
     # Logging
     "structlog==26.1.0",
@@ -36,9 +36,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-cov==7.1.0",
-    "ruff==0.17.2",
+    "ruff==0.17.4",
     "basedpyright==1.40.2",
 ]
 

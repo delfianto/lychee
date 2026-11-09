@@ -11,15 +11,15 @@ dependencies = [
     # direct consumer of its ORM/service layer (see notes/plan.md PART J).
     "httpx==0.28.1",
     # Config (LYCHEE_API_URL, .env support).
-    "pydantic==2.14.1",
-    "pydantic-settings==2.16.1",
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.2",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.1.1",
-    "pytest-asyncio==1.4.0",
-    "ruff==0.17.2",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1.post1",
+    "ruff==0.17.4",
     "basedpyright==1.40.2",
     "pytest-cov==7.1.0",
 ]
